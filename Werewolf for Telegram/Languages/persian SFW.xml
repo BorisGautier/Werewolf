@@ -1,38 +1,38 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <strings>
-  <language name="Persian SFW" base="فارسی" variant="سانسور شده" owner="aimwins"/>
+  <language name="Persian SFW" base="فارسی" variant="سانسور شده" owner="aimwins" code="fa" isDefault="false"/>
   <string key="NotInGame">
-    <value>استاد تو که توی بازی نیستی!</value>
+    <value>گلم شما که توی بازی نیستی!</value>
   </string>
  <string key="PlayerStartedGame" isgif="true">
     <!-- 0 - Player name -->
-         <value>عزیز دل {0} یه بازی رو شروع کرده . جوین بشین دوستای گلم  </value>
-    <value>عزیزدل  {0}یه بازی رو شروع کرده برا دریافت مجوز ورود روی "وارد شوید " بزنین 📢 </value>
+         <value>ایول {0} یه بازی رو شروع کرده .  وارد بشین تا بازی شروع بشه </value>
+    <value>ایول {0}یه بازیو شروع کرده . وارد بشین تا بتونیم بازیو شروع کنیم 📢 </value>
   
   </string>
   <string key="PlayerStartedChaosGame" isgif="true">
     <!-- 0 - Player name -->
-   <value>یه بازی با حالت آشوب توسط عزیزدل {0} ساخته شده . واسه ورود رو دکمه پایینی کلیک کنین دوستای گلم  </value>
-    <value>عزیزدل  {0}یه بازی رو شروع کرده برا دریافت مجوز ورود روی "وارد شوید " بزنین 📢 </value>
+   <value>آخ جون {0} یه بازی با حالت شورشو ساخته وارد شوید رو بزنین تا بازی شروع بشه </value>
+    <value>آخ جون {0}یه بازی با حالت شورش ساخته . وارد بشین  تا بازی شروع بشه📢 </value>
 </string>
   <string key="NoJoinGameRunning">
-    <value>دیر اومدی خیلی دیره جای دیگه دل اسیره!</value>
+    <value>😅دیر اومدی خیلی دیره جای دیگه دل اسیره!</value>
   </string>
   <string key="AlreadyJoined">
     <value>تو که توی بازی ای <b>گل من</b>! 😑</value>
 	</string>
   <string key="MinuteLeftToJoin">
-   <value> فقط یه دقیقه تا شروع بازی مونده . عجله کنین </value>
+   <value> 😎دیر شدا!! فقط یه دقیقه مونده . وارد بشین </value>
   </string>
   <string key="SecondsLeftToJoin">
     <!-- 0 - remaining seconds (number) -->
-    <value>فقط {0} ثانیه تا شروع بازی ...</value>
+    <value>😬خب ، فقط {0}  ثانیه مونده زودتر وارد بشین...</value>
   </string>
   <string key="NotEnoughPlayers">
-    <value>اخه با این تعداد توقع چه نقشا و بازیی دارین کچلا . شرمندم 😢</value>
+    <value>کچلم کردین ، اخه با این تعداد چجوری میشه بازیو شروع کرد؟ جان؟😢</value>
   </string>
   <string key="StartingGameWait">
-    <value>ای جونم بازی شروع شد 😃 یه کم صبر کنین نقشاتونو بهتون بگم</value>
+    <value>😍جون جون وایستین بازی شروع شد. نقشتونو بهتون بگم ... ایول</value>
   </string>
   <string key="BannedForExploit">
     <!-- 0 - Player name -->
@@ -43,7 +43,7 @@
     <value>دوست عزیزم {0} جان! اسمتو عوض کن تا بتونی وارد بازی بشی</value>
   </string>
   <string key="PlayerLimitReached">
-    <value>خجالت زده روی ماهتم . ظرفیت تکمیله </value>
+    <value>😓شرمندم دوست گلم ،  ولی ظرفیت بازیکنام پر شده</value>
   </string>
   <string key="PlayerJoined">
     <!-- 0 - Player name -->
@@ -58,11 +58,11 @@
     <value>دوست عزیزم جناب {0} لطفا روی این {1} کلیک کن و شروع رو بزن وگرنه نمیتونم بهت بگم نقشت چیه</value>
   </string>
   <string key="DeadFlee">
-    <value>خیلی کچلیا ! آخه تو کشته شدی . بنظر خودت میتونی فرار کنی گلم ؟</value>
+    <value>گل من؟ تو مردی ! مرده که نمیتونه فرار کنه!بشین سر جات . هیس باش </value>
   </string>
   <string key="Flee">
     <!-- 0 - Player name -->
-    <value>واقعا که! {0} فرار کرد!  😝</value>
+    <value>واقعا که! {0} کچل فرار کرد!  😝</value>
   </string>
   <string key="PlayerRoleWas">
     <!-- 0 - Player name -->
@@ -98,10 +98,10 @@
   <string key="IdleKill">
     <!-- 0 - player name -->
     <!-- 1 - player role -->
-    <value>خب از اونجایی که {0} دو شب متوالی رای نداده به درد لای جرز میخوره و باید کشته بشه! یو ها ها ها {1}</value>
+    <value>خب از اونجایی که {0} دو شب متوالی رای نداده به درد لای جرز میخوره و باید کشته بشه ها ها ها {1}</value>
   </string>
   <string key="TraitorTurnWolf">
-    <value>ای خاثن کچل! الان گرگ شدی</value>
+    <value>ای خائن کچل! الان گرگ شدی😸</value>
   </string>
   <string key="ChoiceAccepted">
     <value>انتخاب پذیرفته شد</value>
@@ -117,7 +117,7 @@
   <string key="BeholderNewSeer">
     <!-- 0 - apprentice name -->
     <!-- 1 - seer name -->
-    <value>استاد {0} پیشگوی رزرو بود و الان به جای {1} پیشگویی میکنه</value>
+    <value>گل من  {0} پیشگوی رزرو بود و الان به جای {1} پیشگویی میکنه</value>
   </string>
   <string key="SeerSees">
     <!-- 0 - player name -->
@@ -135,7 +135,7 @@
     <value>به کی میخوای تیر بزنی؟ {0} گلوله داری</value>
   </string>
   <string key="AskVisit">
-    <value>خب استاد ، کجا  می خوای بری ؟</value>
+    <value>استاد ! میخوای بری خونه کی؟</value>
   </string>
   <string key="AskSee">
     <value>کیو میخوای ببینی؟</value>
@@ -172,7 +172,7 @@
   </string>
   <string key="RoleInfoDrunk">
     <value>واااااااااای چقد مستی تو، آخ ببین بدنتو راه رفتنتو قر کمرتو</value>
-	<value>الکلی بیچاره ! اگه گرگا بخورنت مسموم میشن. نخور اون زهرماری رو</value>
+	<value>الکلی بدبخت! اگه گرگا بخورنت مسموم میشن. نخور اون زهرماری رو</value>
   </string>
   <string key="RoleInfoGuardianAngel">
     <value>تو فرشته نگهبانی و هر شب میتونی جون یه نفر رو نجات بدی ولی اگه طرف گرگ باشه 50% ممکنه کشته بشی</value>
@@ -181,10 +181,10 @@
     <value>تو تفنگدار هستی و 2 تا گلوله داری. هر روز میتونی به یه نفر شلیک کنی ولی تابلو میشی. الکی شلیک نکن</value>
   </string>
   <string key="RoleInfoHarlot">
-    <value>تو معلمی🎓 هستی، هر روز میتونی بری به خونه یه نفر اگر گرگ یا قاتل باشه میخورتت ولی اگه روستایی باشه اتفاقی برات نمیوفته 😁مراقب باش!</value>
+     <value>تو معلمی  🎓، هر روز میتونی بری به خونه یه نفر اگر گرگ یا قاتل باشه کشته میشی ولی اگه روستایی باشه اتفاقی برات نمیوفته😜 مراقب باش! و درست تدریس کن </value>
   </string>
   <string key="RoleInfoTraitor">
-    <value>خائن کچل! فعلا روستایی هستی ولی اگه همه گرگا بمیرن گرگ میشی. پیشگو میتونه استعلامت کنه ولی معلوم نیست بهش راستشو بگم</value>
+    <value>خائن کچل ! فعلا روستایی هستی ولی اگه همه گرگا بمیرن گرگ میشی. پیشگو میتونه استعلامت کنه ولی معلوم نیست بهش راستشو بگم</value>
   </string>
   <string key="RoleInfoWolf">
     <value>تو الان آقا گرگه ای! هر شب یه نفرو بخور</value>
@@ -199,7 +199,7 @@
     <value >تو منافقی! اگه اعدامت کنن تو میبری و بازی تموم میشه</value>
   </string>
   <string key="RoleInfoWildChild" >
-    <value >تو بچه وحشی هستی. یه نفرو به عنوان الگوت انتخاب کن، اگه بمیره تو گرگ میشی حله؟</value>
+    <value >تو بچه وحشی هستی. یه نفرو به عنوان الگوت انتخاب کن، اگه بمیره تو گرگ میشی.ایول؟</value>
   </string>
   <string key="RoleInfoBeholder" >
     <value >تو ناظر هستی. یعنی بهت میگم کی پیشگوئه</value>
@@ -237,7 +237,7 @@
     <value >اهالی روستا نتونستن یه تصمیم قاطع بگیرن. در نتیجه کسی اعدام نشد و همه برگشتن خونه هاشون</value>
   </string>
   <string key="NoLynchVotes" >
-    <value >عجب اوضاعی! هیشکی رای نداد و برگشتن خونه هاشون</value>
+    <value >عجب اوضاعی! هیشکی رای نداد و برگشتن خونه هاشون کچلا!</value>
   </string>
   <string key="DetectiveEaten" >
     <!-- 0 - victim name -->
@@ -266,7 +266,7 @@
   <string key="DefaultEaten" >
     <!-- 0 - victim name -->
     <!-- 1 - victim role -->
-    <value>آخه این روستایی ساده بدبخت به شما چیکار داشت که خوردینش کثافتا! یه گوشه نشسته بود داشت پفکشو میخورد. خدا بیامرزتت {0} روستایی خوبی بودی 😢😢  {1}</value>
+    <value>آخه این روستایی ساده بدبخت به شما چیکار داشت که خوردینش گرگای بی رحم ! یه گوشه نشسته بود داشت بیسکوئیت مادرشو  میخورد. خدا بیامرزتت {0} روستایی خوبی بودی 😢😢  {1}</value>
   </string>
   <string key="HunterKilledCultist">
     <!-- 0 - victim name -->
@@ -294,7 +294,7 @@
     <value >اوه اوه {0} مست بود الکلش مسمومت کرد، فردا شب نمیتونی حمله بکنی</value>
   </string>
   <string key="GuardWolf" >
-    <value >نوچ نوچ نوچ😞خواستی از یه گرگ محافظت کنی و گرگه هم خوردت. یعنی تفکر که نباشد جان در عذاب است😢</value>
+    <value >ای کچل 😞خواستی از یه گرگ محافظت کنی و گرگه هم خوردت. یعنی تفکر که نباشد جان در عذاب است😢</value>
   </string>
   <string key="GuardSaved" >
     <!-- 0 - saved player name -->
@@ -313,31 +313,31 @@
   </string>
   <string key="HarlotEaten" >
     <!-- 0 - player name -->
-    <value >دیشب معلم {0} پیش یکی از روستایی ها رفت که بهش درس بده ولی گرگینه بود و کشتش😰</value>
+    <value >دیشب معلم {0} پیش یکی از روستایی ها رفت که یه درسی بهش بده ولی گرگینه بود و کشتش😰</value>
   </string>
   <string key="HarlotNotHome" >
     <!-- 0 - player name -->
-    <value >خب انگار! {0} رفته دنبال تدریس ، خونه نیست</value>
+    <value >خب انگار! {0} رفته دنبال کارای تدریسش ، خونه نیست</value>
   </string>
   <string key="HarlotFuckWolf" >
     <!-- 0 - player name -->
-    <value >رفتی خونه {0} که تدریس کنی  بکنی و یه پولی کاسب بشی ولی {0} گرگ بود دخلتو آورد</value>
+    <value >رفتی خونه {0} تدریسی بکنی  و یه پولی کاسب بشی ولی {0} گرگ بود دخلتو آورد</value>
   </string>
   <string key="HarlotFuckedWolfPublic" >
     <!-- 0 - player name -->
-    <value >معلم  {0} دیشب رفت پیش گرگ ها😳 اونا هم بهش حمله کردن و کشتنش😞</value>
+    <value > معلم  {0} دیشب رفت پیش گرگ ها😳 اونا هم بهش حمله کردن و کشتنش😞</value>
   </string>
   <string key="HarlotFuckedVictimPublic" >
     <!-- 0 - harlot name -->
     <!-- 1 - victim name -->
-    <value >معلم  {0} دیشب رفت خونه {1} که یه سری تحقیقات انجام بده ولی گرگ ها به خونه {1} حمله میکنن و هردوتاشون رو میکشن!</value>
+    <value >معلم {0} دیشب رفت خونه {1} که یه سری تحقیقات انجام بده ولی گرگ ها به خونه {1} حمله میکنن و هردوتاشون رو میکشن!</value>
   </string>
   <string key="HarlotVisitNonWolf" >
     <!-- 0 - target name -->
     <value >از اونجایی که دیشب پیش {0} تدریس خوبی داشتی ، تابلوئه که گرگ نیست وگرنه میخوردت</value>
   </string>
   <string key="HarlotVisitYou" >
-    <value >دیشب تاریک بود و معلم اومد یه درسی بهت داد و رفت!</value>
+    <value >دیشب معلم اومد درسی بهت داد و رفت!</value>
   </string>
   <string key="DetectiveCaught" >
     <!-- 0 - detective name -->
@@ -351,7 +351,7 @@
   <string key="HarlotShot" >
     <!-- 0 - gunner's name -->
     <!-- 1 - Harlot's name -->
-    <value >به نظر میرسه معلم  دیشب مهمون {0} بوده. تفنگدار بی اعصاب بود و معلم  یعنی {1} کشته شد</value>
+    <value >به نظر میرسه معلم  دیشب مهمون {0} بوده. تفنگدار بی اعصاب بود . و معلم  یعنی {1} کشته شد</value>
   </string>
   <string key="DefaultShot" >
     <!-- 0 - Gunner's name -->
@@ -369,7 +369,7 @@
     <value >هورا همه گرگا مردن و روستاییا برنده شدن!</value>
   </string>
   <string key="TannerWins" isgif="true" >
-    <value >ای کچلاااااا ! منافق رو کشتین و اون برنده شد همه باختن</value>
+    <value >خیلی کچلین ! منافق رو کشتین و اون برنده شد همه باختن</value>
   </string>
   <string key="RemainingPlayersEnd">
     <value>بازیکن های باقی مونده عبارت اند از: </value>
@@ -438,13 +438,13 @@
     <value>مست 🍻</value>
   </string>
   <string key="Harlot">
-      <value>معلم 🎓</value>
+    <value>معلم 🎓</value>
   </string>
   <string key="Seer">
     <value>پیشگو 👳</value>
   </string>
   <string key="Traitor">
-    <value>خائن 🖕</value>
+    <value>خائن 🤡</value>
   </string>
   <string key="GuardianAngel">
     <value>فرشته نگهبان 👼</value>
@@ -550,7 +550,7 @@
 
   <!-- new string May 16 2016-->
   <string key="FleeDisabled">
-    <value>شرمنده نمیتونی فرار کنی</value>
+    <value>شرمنده گلم ، نمیتونی فرار کنی</value>
   </string>
   <string key="IsDead">
     <!-- used when gunner shoots a player -->
@@ -644,7 +644,7 @@
 	<value>الهه عشق تیرش رو تو قلب تو و {0} زده. حالا اگه اون بمیره تو هم از غمش میمیری</value>
   </string>
   <string key="HunterLynchedChoice">
-    <value>روستاییای  کچلللل تصمیم گرفتن اعدامت کنن کلانتر جان! ولی تو میتونی قبل از مردنت یه نفر دیگه رو هم بکشی. کیو میخوای بکشی؟</value>
+    <value>روستاییای کچلللل تصمیم گرفتن اعدامت کنن کلانتر جان! ولی تو میتونی قبل از مردنت یه نفر دیگه رو هم بکشی. کیو میخوای بکشی؟</value>
   </string>
   <string key="HunterNoChoiceLynched">
     <value>کلانتر عزیزمون یعنی {0} میتونست یه نفر دیگه رو هم بکشه ولی وجدانش بهش اجازه نداد و مظلومانه اعدام شد</value>
@@ -659,7 +659,7 @@
     <value>کلانتر یعنی {0} لحظاتی قبل از مرگش اسلحه رو درآورد و به {1} شلیک کرد به امید اینکه یه گرگ رو هم با خودش کشته باشه. {2}</value>
   </string>
   <string key="HunterShotChoice">
-    <value>استاد  کشتنت ولی هنوز جون داری قبل از اینکه بمیری یه تیر بزن یه نفرو بکش</value>
+    <value> گلم ، کشتنت ولی هنوز جون داری قبل از اینکه بمیری یه تیر بزن یه نفرو بکش</value>
   </string>
   <string key="HunterNoChoiceShot">
     <!-- 0 - target's name -->
@@ -705,11 +705,11 @@
     <value>فرقه گرای عزیز یعنی {0} رفت که {1} رو به دینش دعوت کنه ولی {1} کلانتر بود و با تفنگش زد {0} رو کشت</value>
   </string>
   <string key="GuardKiller">
-    <value>خیییییلی کچلی گلم ! رفتی قاتل زنجیره ای رو نجات بدی ولی زد کشتت</value>
+    <value>خیلی کچلی ، خییییلی ، رفتی قاتل زنجیره ای رو نجات بدی ولی زد کشتت</value>
   </string>
   <string key="HarlotFuckKiller">
     <!-- 0 - target's name -->
-    <value>رفتی خونه {0} که بهش تدریس کنی ولی یهویی یه چاقو در آورد و کشتت. بعدشم ها ها ها ها خندید</value>
+    <value>رفتی خونه {0} که یه  درسی بهش بدی  ولی وسط تدریست  ، یه چاقو در آورد و کشتت. بعدشم ها ها ها  ها خندید</value>
   </string>
   <string key="HarlotFuckKillerPublic">
     <value>معلم  {0} رفت خونه قاتل زنجیره ای 🔫😭</value>
@@ -801,7 +801,7 @@
   </string>
   <string key="NotifyNewGame">
     <!-- 0 - target's name -->
-    <value>هورا یه بازی جدید توی گروه {0} شروع شده. بدو جوین رو بزن</value>
+    <value>جوووونم . یه بازی جدید توی گروه {0} شروع شده. بدو جوین رو بزن</value>
   </string>
   <string key="SerialKillerWinsOverpower">
     <!-- 0 - SK's name -->
@@ -809,7 +809,7 @@
     <value>صبح روز بعد فقط دو نفر از اهالی روستا زنده موندن. {0} چاقوشو در میاره و دخل {1} رو میاره</value>
   </string>
   <string key="NoWinner" isgif="true">
-    <value>کچلاااااااا این چه وضعشه! همه مردن و هیشکی برنده نشد</value>
+    <value>هوووف خیلی کچلین ! این چه وضعشه! همه مردن و هیشکی برنده نشد</value>
   </string>
   <string key="SKHunterEnd">
     <!-- 0 - SK's name -->
@@ -818,7 +818,7 @@
   </string>
   <string key="RoleModelChosen">
     <!-- 0 - target's name -->
-    <value>خیلی کچلی ! انتخابتو نکردی خودم واست انتخاب کردم {0}</value>
+    <value>کشتی خودتو کچل! انتخابتو نکردی خودم واست انتخاب کردم {0}</value>
   </string>
   <string key="Won">
     <value>برنده</value>
@@ -829,7 +829,7 @@
   <string key="IdleCount">
     <!-- 0 - player's name -->
     <!-- 1 - idle count -->
-    <value>خب {0}کشته خودشو  با این بازی کردنش! طی 24 ساعته گذشته {1} بار به خاطر رای ندادن کشته شده</value>
+    <value>ای بابا ! {0} کشته خودشو  با این بازی کردنش! طی 24 ساعته گذشته {1} بار به خاطر رای ندادن کشته شده</value>
   </string>
   <!--New strings 7th of July-->
   <!--If you are translating werewolf in a non-standard mode (eg. Mafia, Pokémon and similar) please put the role and the emoji in front of the string.
@@ -846,7 +846,7 @@
     <value>تو آقا گرگه ای! هرشب میتونی یک نفر بخوری ولی حواست باشه اگه مست رو بخوری شب بعدش نمیتونی کسی بخوری اگه نفرین شده رو بخوری اونم گرگ میشه! فقط حواست باشه سعی نکنی به قاتل حمله کنی که میکشتت😱</value>
   </string>
   <string key="AboutHarlot">
-    <value>تو معلمی🎓 هستی، هر روز میتونی بری به خونه یه نفر اگر گرگ یا قاتل باشه میخورتت ولی اگه روستایی باشه اتفاقی برات نمیوفته 😁مراقب باش!</value>
+   <value>تو معلمی🎓 هستی، هر روز میتونی بری به خونه یه نفر اگر گرگ یا قاتل باشه میخورتت ولی اگه روستایی باشه اتفاقی برات نمیوفته😜 مراقب باش!</value>
   </string>
   <string key="AboutDrunk">
     <value>تومستی مثل یه روستایی ساده هستی ولی اگه گرگا بخورنت مسموم میشن و شب بعد نمیتونن حمله کنند!</value>
@@ -870,7 +870,7 @@
     <value>هدف  منافق ساده است"اعدام شدن" اگه منافق اعدام بشه میبره و بقیه میباشد!</value>
   </string>
   <string key="AboutFool">
-    <value>به خنگول گفته میشه که پیشگوئه اما وقتی سعی میکنه نقش یه نفر رو بفهمه یه نقش به صورت تصادفی بهش گفته میشه</value>
+    <value>به احمق گفته میشه که پیشگوئه اما وقتی سعی میکنه نقش یه نفر رو بفهمه یه نقش به صورت تصادفی بهش گفته میشه</value>
   </string>
   <string key="AboutCult">
     <value>به عنوان رییس فرقه هدف شما آینه که همه ی بازیکن های باقی مونده به تو ایمان بیارند وقتی برنده میشی که همه ی روستایی های زنده عضو فرقه ی تو باشن.</value>
@@ -885,7 +885,7 @@
     <value>شما یک روستایی معمولی هستید البته تا قبل از اینکه پیشگو بمیره! وقتی پیشگو مرد پیشگوی رزرو جاشو میگیره</value>
   </string>
   <string key="AboutBH">
-    <value>به شما گفته میشه پیشگو کیه(پیشگوی واقعی نه خنگول )</value>
+    <value>به شما گفته میشه پیشگو کیه(پیشگوی واقعی نه احمق)</value>
   </string>
   <string key="AboutMason">
     <value>شما مثل یک روستایی معمولی هستی فقط بقیه ی فراماسونی هارو میشناسی</value>
@@ -927,7 +927,7 @@
     <value>بابا هر دکمه ای دم دستتون میاد نزنین فاتحشو خوندین  رباته ری استارت شد</value>
   </string>
   <string key="SentPrivate">
-    <value>استاد پی ویتو چک کن</value>
+    <value>گل من، پی ویتو چک کن</value>
   </string>
   <string key="StartPM">
     <value>یه پی ام بهم بده تا بتونم بهت پی ام بدم @werewolfbot</value>
@@ -969,10 +969,10 @@
     <value>باید این دستور رو توی گروه وارد کنی</value>
   </string>
   <string key="NotGlobalAdmin">
-    <value>گلم تو که ادمین ربات نیستی</value>
+    <value>گل من،  تو که ادمین ربات نیستی</value>
   </string>
   <string key="NotPara">
-    <value>گلم تو که ادمین اصلی نیستی</value>
+    <value>گل من ، تو که ادمین اصلی نیستی</value>
   </string>
   <string key="Yes">
     <value>آره</value>
@@ -1090,7 +1090,7 @@
     <value>به دنبال چه زبانی برای گروه خودتون هستید؟!</value>
   </string>
   <string key="HereIsList">
-    <value>Here are the groups for {0}:</value>
+    <value>اینجا لیست گروه های {0}:</value>
   </string>
   <string key="Members">
     <value>اعضا</value>
@@ -1112,7 +1112,7 @@
     <value>شما با موفقیت وارد بازی در گروه {0} شدید</value>
   </string>
   <string key="Ping2">
-    <value>Time to send ping message: {0}</value>
+    <value> زمان ارسال پیام پینگ : {0}</value>
   </string>
   
   <!-- Update 4.0-->
@@ -1281,7 +1281,7 @@
     <value>صبح روز بعد روستایی ها جنازه {0} رو پیدا کردن! دیگه توی روستا خبری از عشق نخواهد بود! الهه عشق مرده!</value>
   </string>
   <string key="DrunkKilled">
-    <value>دیگه خبری از بوی الکل توی روستا نیست! دیگه یه آدم مست توی روستا نیست زهرماری بخوره دیشب {0} به قتل رسید😞</value>
+    <value>دیگه خبری از بوی الکل توی روستا نیست! دیگه یه آدم مست توی روستا نیست که از صبح تا شب عرق بخوره! دیشب {0} به قتل رسید😞</value>
   </string>
   <string key="GuardianAngelKilled">
     <value>دیشب {0} از کسی محافظت نکرد و توی خونه خودش موند با این عقیده که قاتل زنجیره ای به کسی حمله نمیکنه! اما قاتل زنجیره ای دیشب به خونه {0} رفت و کشتش! </value>
@@ -1299,7 +1299,7 @@
     <value>صبح روز بعد روستایی ها به خونه {0} میرن که از پیشگویی های شب قبلش مطلع شن اما به پای چپ پیشگو برمیخورن! قاتل زنجیره ای جنازه پیشگو رو به کلکسیونش اضافه کرده!</value>
   </string>
   <string key="SorcererEaten">
-    <value>دیشب صدای زوزه گرگ ها آرامش رو از روستا گرفته بود! ترس تمام روستا رو فراگرفته بود! گله گرگ ها دیشب به {0} حمله کرد! جادوگر مرده😰</value>
+    <value>دیشب صدای زوزه گرگ ها آرامش رو از روستا گرفته بود! ترس تمام روستا رو فراگرفته بود! گله گرگ ها دیشب به {0} حمله کرد! جادوگر مرده چقدر کچلن آخه 😰</value>
   </string>
   <string key="WildChildEaten">
     <value>گرگ ها دیشب به {0} حمله کردن و جلوی خونش کشتنش، بچه وحشی مرده!</value>
@@ -1339,28 +1339,28 @@
   <string key="SecondsAdded">
     <!-- 0 - Seconds added by /extend command -->
     <!-- 1 - Total seconds remaining -->
-    <value> زمان جوین شدن در بازی {0} ثانیه افزوده شد
-   	 {1}  برای جوین شدن در بازی باقی مانده  </value>
+    <value> فرصت ورود به  بازی {0} ثانیه اضافه شد
+   	 {1}  واسه ورود به بازی مونده   </value>
   </string>
   <string key="SecondsRemoved">
     <!-- 0 - Seconds removed by /extend command -->
     <!-- 1 - Total seconds remaining -->
-     <value> زمان جوین شدن در بازی {0} ثانیه کاهش یافت
-	 {1}  برای جوین شدن در بازی باقی مانده  </value>
+     <value> فرصت ورود به بازی {0} ثانیه کاهش یافت
+	 {1}  واسه ورود به بازی مونده  </value>
   </string>
   <string key="CantExtend">
     <value>فقط ادمین های گروه قادر به تغییر زمان جوین در بازی هستند!</value>
   </string>
   <string key="AllowExtendQ">
     <!--{0} = "Allow" / "Disallow" string-->
-    <value>Allow players to extend join time?\nCurrent: {0} extending\nNote: Admins will always be able to extend</value>
+    <value>همه بازیکنا میتونن زمان بازیو افزایش بدن؟\nمقدار فعلی: {0} افزایش زمان\nنکته: ادمینها در هر حال میتونن زمانو تغییر بدن </value>
   </string>
   <string key="AllowExtendA">
     <!--{0} = "Allow" / "Disallow" string-->
     <value>بله {0} بازیکنان برای تمدید زمان عضویت</value>
   </string>
   <string key="MaxExtendQ">
-    <value>Choose maximum number of seconds which can be added to joining timer by a single /extend command.\nDefault setting: {0}\nCurrent:{1}</value>
+    <value>تعیین مقدار افزایش زمان با یک دستور افزایش زمان .\nپیش فرض:  تنظیمات: {0}\nمقدار فعلی:{1}</value>
   </string>
   <string key="MaxExtendA">
     <value>حداکثر زمان به روی {0} ست شد.</value>
@@ -1398,7 +1398,7 @@
   </string>
   <string key="HaveJoined">
     <!-- {0} = list of people who have joined -->
-    <value>{0} در 30 ثانیه اخر بازی جوین شدند </value>
+    <value>ایول {0} تو بازی وارد شد . دمش گرم </value>
   </string>
   <string key="AllowCult">
     <value>فرقه</value>
@@ -1429,7 +1429,7 @@
     <value>نمایش آی دی </value>
   </string>
   <string key="ShowIDsQ">
-    <value>دوست دارید آی دی ها در هنگام جوین شدن نمایش داده شوند؟\nCurrent: {0}</value>
+    <value>دوست دارید آی دی ها در هنگام جوین شدن نمایش داده شوند؟\nپیش فرض: {0}</value>
   </string>
   <string key="ShowIDsA">
     <value>{0} IDs</value>
@@ -1462,10 +1462,10 @@
     <value> {0} از خواب بلند میشه و احساس میکنه که روستا خیلی آروم تر از قبل شده ، متوجه میشه که همه توی روستا مردند به جز اون.... بعد از کلی نا امیدی تصمیم میگیره که باقی عمرشو توی یک کلبه جنگلی دور افتاده زندگی کنه! </value>
   </string>
   <string key="WhatVariantVets">
-    <value>چی زبانی؟\nCurrent: {0}\nاز اونجایی که 500 تا بازی انجام دادی میتونی عضو بشی در: </value>
+    <value>چه زبانی؟\nCurrent: {0}\nاز اونجایی که 500 تا بازی انجام دادی میتونی عضو بشی در: </value>
   </string>
   <string key="Skip">
-    <value>skip</value>
+    <value>نمیخوام، ردشو</value>
   </string>
   <!-- New Roles, April 2018 -->
   <string key="DGTransformToLycan">
@@ -1632,12 +1632,12 @@
     <string key="ThiefStoleRole">
     <!-- {0} - The name of the thief's target -->
     <!-- {1} - The new role -->
-      <value>😁تو با موفقیت نقش {0} دزدیدی. تو الان {1} هستی</value>
+      <value>😁تو با موفقیت نقش {0} دزدیدی. </value>
     </string>
     <string key="ThiefToMason">
       <!-- 0 - old mason's name -->
       <!-- 1 - new mason's name -->
-      <value> استاد {0} دیگه همتیمی شما نیست {1} الان شده فراماسون درست مثل شما ها</value>
+      <value>حاجی {0} دیگه همتیمی شما نیست {1} الان شده فراماسون درست مثل شما ها</value>
     </string>
     <string key="ThiefTransformToMason">
       <!-- 0 - mason collegues's name -->
@@ -1646,12 +1646,12 @@
     <string key="ThiefToCult">
       <!-- 0 - old cultist's name -->
       <!-- 1 - new cultist's name -->
-      <value>استاد {0} دیگه همتیمی شما نیست به جاش {1} فرقه شده دقیقا مثل شماها.</value>
+      <value>گلم  {0} دیگه همتیمی شما نیست به جاش {1} فرقه شده دقیقا مثل شماها.</value>
     </string>
     <string key="ThiefToWolf">
       <!-- 0 - old wolf's name -->
       <!-- 1 - new wolf's name -->
-      <value>استاد {0} دیگه همتیمی شما نیست به جاش {1} گرگ شده دقیقا مثل شماها.</value>
+      <value>گلم  {0} دیگه همتیمی شما نیست به جاش {1} گرگ شده دقیقا مثل شماها.</value>
     </string>
     <string key="ThiefTransformNewTeammates">
       <!-- 0 - teammates's name -->
@@ -1718,4 +1718,15 @@
     <!-- Used in PM if the pacifist uses his ability during lynch phase -->
       <value>به خاطر سخنرانی پر احساس و شور انگیز صلح گرا☮️ ، امروز رای گیری نداریم!</value>
     </string>
+    <string key="ThiefStoleYourRoleThief">
+       <value>😑متاسفانه نقش شما دزدیده شده.شما الان دزد😈 جدید هستی و میتونی شب بعد نقش یکی رو بدزدی😁</value>
+     </string>
+     <string key="ThiefStoleYourRoleVillager">
+       <value>😑متاسفانه نقش شما دزدیده شده.شما الان یه روستایی ساده👱 هستی. بیلت رو بردار برو تو مزرعه صفا کن</value>
+     </string>
+     
+     <string key="SerialKillerKilledYou" isgif="true">
+       <value>تق تق!😱پشت در کسی نیست جز قاتل سریالی که شما رو میکشه.</value>
+       <value>قاتل سریالی دستاتو میبنده و خنجر تیزشو تو قلبت فرو میکنه 🔪</value>
+     </string>
      </strings>
