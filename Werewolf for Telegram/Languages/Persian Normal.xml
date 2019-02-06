@@ -315,7 +315,7 @@
   </string>
   <string key="HarlotEaten" >
     <!-- 0 - player name -->
-    <value >دیشب فاحشه {0} پیش یکی از روستایی ها رفت که یه حالی بهش بده ولی گرگینه بود و کشتش😰</value>
+    <value >فاحشه {0} دیشب برای استراحت موند خونه😋 گرگا رفتن خونشو کشتنش😞</value>
   </string>
   <string key="HarlotNotHome" >
     <!-- 0 - player name -->
@@ -327,7 +327,7 @@
   </string>
   <string key="HarlotFuckedWolfPublic" >
     <!-- 0 - player name -->
-    <value >فاحشه {0} دیشب رفت پیش گرگ ها😳 اونا هم بهش حمله کردن و کشتنش😞</value>
+    <value >دیشب فاحشه {0} پیش یکی از روستایی ها رفت که یه حالی بهش بده ولی گرگینه بود و کشتش😰</value>
   </string>
   <string key="HarlotFuckedVictimPublic" >
     <!-- 0 - harlot name -->
@@ -1904,7 +1904,7 @@
   </string>
   <string key="SnowFrozeHunter">
     <!-- 0 - target's name -->
-    <value> گرگ برفی {0} شب گذشته تلاش کرد تا کلانتر رو منجمد کنه، اما کلانتر گیرش آورد و با تفنگ خودش تونست اون رو متوفق کنه</value>
+    <value> گرگ برفی {0} شب گذشته تلاش کرد تا کلانتر رو منجمد کنه، اما کلانتر گیرش آورد و با تفنگ خودش تونست اون رو متوقف کنه</value>
   </string>
      </strings>
 	 
