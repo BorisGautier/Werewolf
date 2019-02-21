@@ -1,6 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8" ?>
 <strings>
-  <language name="Persian Normal" base="فارسی" variant="[[نسخه اصلی]]" owner="CaptainDanio" code="fa" isDefault="true"/>
+  <language name="Persian Normal" base="فارسی" variant="[[نسخه اصلی]]" owner="mohandeshasan" code="fa" isDefault="true"/>
   <string key="NotInGame">
     <value>حاجی تو که توی بازی نیستی!</value>
   </string>
@@ -315,7 +315,7 @@
   </string>
   <string key="HarlotEaten" >
     <!-- 0 - player name -->
-    <value >دیشب فاحشه {0} پیش یکی از روستایی ها رفت که یه حالی بهش بده ولی گرگینه بود و کشتش😰</value>
+    <value >فاحشه {0} دیشب برای استراحت موند خونه😋 گرگا رفتن خونشو کشتنش😞</value>
   </string>
   <string key="HarlotNotHome" >
     <!-- 0 - player name -->
@@ -327,7 +327,7 @@
   </string>
   <string key="HarlotFuckedWolfPublic" >
     <!-- 0 - player name -->
-    <value >فاحشه {0} دیشب رفت پیش گرگ ها😳 اونا هم بهش حمله کردن و کشتنش😞</value>
+    <value >دیشب فاحشه {0} پیش یکی از روستایی ها رفت که یه حالی بهش بده ولی گرگینه بود و کشتش😰</value>
   </string>
   <string key="HarlotFuckedVictimPublic" >
     <!-- 0 - harlot name -->
@@ -1742,6 +1742,9 @@
         <!-- used when Thief steals SK -->
         <value>دزد محترم {0}، رفت در خونه یکی که نقششو بدزده اما ای دل غافل که به کاهدون زده  طرف قاتل زنجیری بود زد پانکراسشو از گلوش کشید بیرون😶</value>
       </string>
+      <string key="BeholderSeerStolen">
+         <value>آقای دزد نقش پیشگو رو دزدیده😶! {0} الان پیشگوی جدیده و {1} دیگه نمیتونه پیشگویی کنه.</value>
+       </string>
 	  
 	  <!-- New roles 28.12.2018 -->
 	  
@@ -1899,7 +1902,61 @@
   <string key="SnowWolfTurnWolf">
 	<value> حالا دیگه همه گرگا مردن و فقط تو موندی! دیگه لازم نیست کسی رو منجمد کنی، بجاش میتونی روستایی ها رو بخوری </value>
   </string>
-	  
+  <string key="SnowFrozeHunter">
+    <!-- 0 - target's name -->
+    <value> گرگ برفی {0} شب گذشته تلاش کرد تا کلانتر رو منجمد کنه، اما کلانتر گیرش آورد و با تفنگ خودش تونست اون رو متوقف کنه</value>
+  </string>
+  <string key="Lang">
+     <value>تغییر زبان بازی </value>
+   </string>
+   <string key="Mode">
+     <value>تغییر مود بازی</value>
+   </string>
+   <string key="MaxPlayer">
+     <value>تنظیم حد اکثر تعداد بازیکنان</value>
+   </string>
+   <string key="EndRoles">
+     <value>نمایش نقش ها در انتهای بازی</value>
+   </string>
+   <string key="MaxExtend">
+     <value>حداکثر زمان اضافه شده به بازی</value>
+   </string>
+   <string key="DayTimer">
+     <value>تنظیم مدت زمان روز</value>
+   </string>
+   <string key="NightTimer">
+     <value>تنظیم مدت زمان شب </value>
+   </string>
+   <string key="LynchTimer">
+     <value>تنظیم مدت زمان رای گیری</value>
+   </string>
+   <string key="RoleConfig">
+     <value>تنظیمات نقشها</value>
+   </string>
+   <string key="Mechanics">
+     <value>مکانیک بازی</value>
+   </string>
+   <string key="GroupSettings">
+     <value>تنظیمات گروه</value>
+   </string>
+   <string key="Timers">
+     <value>زمان های بازی</value>
+   </string>
+   <string key="Done">
+     <value>اتمام!</value>
+   </string>
+   <string key="Back">
+     <value>بازگشت</value>
+   </string>
+   <string key="ShufflePlayerList">
+     <value>لیست نامنظم بازیکنان</value>
+   </string>
+   <string key="ShufflePlayerListQ">
+     <value>در همه مواقع لیست بازیکنان تغییر کند؟ حالت فعلی  {0}</value>
+   </string>
+   <string key="ShufflePlayerListA">
+     <value>لیست بازیکنان باید همیشه تغییر کند {0}</value>
+   </string>
      </strings>
 	 
 	 
