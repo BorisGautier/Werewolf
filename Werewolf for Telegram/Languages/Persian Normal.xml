@@ -1077,7 +1077,7 @@
     <value>نقش منافق فعال باشه؟\n حالت فعلی: {0}</value>
   </string>
   <string key="AllowTannerA">
-    <value>نقش خائن: {0}</value>
+    <value>نقش منافق: {0}</value>
   </string>
   <string key="AllowCultQ">
     <value>نقش فرقه گرا فعال باشه؟\n حالت فعلی: {0}</value>
@@ -1579,7 +1579,7 @@
   </string>
 
   <string key="RoleInfoThief">
-    <value>تو دزدی😈. شب که میشه میتونی یکیو انتخاب کنی و نقششو بدزدی. کسی که نقششو دزدیدی تبدیل میشه به دزد و  میتونه شبه بعد نقش یه نفره دیگرو بدزده. اگه در پایان بازی دزد باقی بمونی میبازی.</value>
+    <value>تو دزدی😈. شب که میشه میتونی یکیو انتخاب کنی و نقششو بدزدی. کسی که نقششو دزدیدی تبدیل میشه به روستای ساده.</value>
   </string>
   <string key="RoleInfoThiefFull">
      <value>تو دزد😈 هستی.
@@ -2203,6 +2203,9 @@
   <string key="ArsonistWinsOverpower">
 	<value> فقط {0} و {1} باقی موندن... ناگهان {0} لبخندی میزنه، کبریتی روشن میکنه و روی {1} میندازه و در آتش سوختنش رو میبینه </value>
   </string>
+  <string key="ArsonistTeamEnd">
+	  <value>تیم آتش زن</value>
+	</string>
    
  </strings>
 	 
