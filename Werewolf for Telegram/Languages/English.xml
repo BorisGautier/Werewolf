@@ -2246,4 +2246,7 @@
   <string key="DisableAllRoles">
 	<value>Disable All</value>
   </string>
+  <string key="CHHuntedYou">
+    <value>The Cultist Hunter 💂‍♀️ visited you while you were praying at your altar. You were greeted with a sword, now you are dead.</value>
+  </string>
 </strings>
