@@ -662,9 +662,9 @@ namespace Werewolf_Control.Handler
             // Donations Re-enable preparation 2025-08-08
             if (message.Chat.Id == 106665913)
             {
-                var q = message.SuccessfulPayment;
-                var amt = q.TotalAmount;
-                Bot.Send($"Successfully received {amt} TON from you! YAY!\nTotal Donated: ${level}\nCurrent Badge (ingame): {badge}", message.From.Id);
+                var q2 = message.SuccessfulPayment;
+                var amt2 = q2.TotalAmount;
+                Bot.Send($"Successfully received {amt2} TON from you! YAY!", message.From.Id);
                 return;
             }
             var q = message.SuccessfulPayment;
