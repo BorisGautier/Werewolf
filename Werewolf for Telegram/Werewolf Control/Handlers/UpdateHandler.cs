@@ -460,6 +460,15 @@ namespace Werewolf_Control.Handler
                                 Bot.MessagesProcessed++;
                                 Commands.ValidateDonationAmount(update.Message);
                             }
+
+                            else if (update.Message.Chat.Type == ChatType.Private &&
+                                     (update.Message?.ReplyToMessage?.From?.Id ?? 0) == Bot.Me.Id &&
+                                     (update.Message?.ReplyToMessage?.Text?.Contains(
+                                          "Please enter a whole number, in TON (XTR)") ?? false))
+                            {
+                                Bot.MessagesProcessed++;
+                                Commands.ValidateDonationAmountNew(update.Message);
+                            }
                             break;
                         //case MessageType.Animation:
                             
@@ -650,6 +659,14 @@ namespace Werewolf_Control.Handler
 
         private static void HandleSuccessfulPayment(Message message)
         {
+            // Donations Re-enable preparation 2025-08-08
+            if (message.Chat.Id == 106665913)
+            {
+                var q = message.SuccessfulPayment;
+                var amt = q.TotalAmount;
+                Bot.Send($"Successfully received {amt} TON from you! YAY!\nTotal Donated: ${level}\nCurrent Badge (ingame): {badge}", message.From.Id);
+                return;
+            }
             var q = message.SuccessfulPayment;
             //get the amount paid
             var amt = q.TotalAmount / 100;
@@ -770,6 +787,12 @@ namespace Werewolf_Control.Handler
                     if (args[0] == "donatetg")
                     {
                         Commands.GetDonationInfo(query);
+                        return;
+                    }
+
+                    if (args[0] == "donatetgnew")
+                    {
+                        Commands.GetDonationInfoNew(query);
                         return;
                     }
 
