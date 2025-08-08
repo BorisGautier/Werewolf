@@ -545,7 +545,7 @@ namespace Werewolf_Control
 #elif RELEASE
                 var api = RegHelper.GetRegValue("MainStripeProdAPI");
 #endif
-                Bot.Api.SendInvoiceAsync(chatId: m.From.Id, title: "Werewolf Donation", description: "Make a donation to Werewolf to help keep us online", payload: "somepayloadtest", 
+                Bot.Api.SendInvoiceAsync(chatId: m.From.Id, title: "Werewolf Donation", description: "Make a donation to Werewolf to help keep us online", payload: "somepayloadtest", providerToken: "",
                     currency: "XTR", prices: new[] { new LabeledPrice("Donation", amt) }, startParameter: "donatetgnew").Wait();
             }
             else
