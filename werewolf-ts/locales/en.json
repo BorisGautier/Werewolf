@@ -37,6 +37,18 @@
     "LoversWin": ["Against all odds, the two lovers survived together. Lovers win!"],
     "NoWinner": ["The game ended with no winner."],
     "GameAlreadyRunning": ["A game is already running in this group."],
-    "NoGameRunning": ["There's no game running in this group right now."]
+    "NoGameRunning": ["There's no game running in this group right now."],
+    "JoinFromGroup": ["You can only /join from within a group chat."],
+    "YouJoined": ["You joined the game in {0}!"],
+    "PlayerLimitReached": ["This game is full - can't join right now."],
+    "NameExists": ["Someone in this game is already using the name \"{0}\" - change your Telegram name and try /join again."],
+    "NotPlaying": ["You're not currently in this game."],
+    "FledGame": ["{0} has fled the game!"],
+    "ForceStarted": ["An admin forced the game to start now!"],
+    "ForceStartNotAdmin": ["Only a group admin can force-start the game."],
+    "PlayersInGame": ["Players in this game ({0}):\n{1}"],
+    "YourRoleIs": ["Your role this game is: {0}"],
+    "PMFailed": ["I couldn't send a private message to: {0}. They need to start a chat with me first to receive their role and night menus."],
+    "GameStarting": ["Assigning roles and messaging every player - this can take a few seconds..."]
   }
 }
