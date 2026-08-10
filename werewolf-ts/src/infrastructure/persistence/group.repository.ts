@@ -23,6 +23,11 @@ export class GroupRepository {
     return this.prisma.group.findUnique({ where: { telegramId }, include: { disabledRoles: true } });
   }
 
+  /** Resolves the `@groupname` argument some DM commands (e.g. `/stopwaiting`) accept. */
+  async findByUsername(username: string): Promise<GroupWithConfig | null> {
+    return this.prisma.group.findFirst({ where: { username: { equals: username, mode: 'insensitive' } }, include: { disabledRoles: true } });
+  }
+
   async updateConfig(telegramId: bigint, data: Partial<Group>): Promise<void> {
     await this.prisma.group.update({ where: { telegramId }, data });
   }

@@ -19,6 +19,7 @@ import type { GameMode } from '../../domain/game/game-mode.js';
 import { ROLE_META, roleName } from '../../domain/roles/role.js';
 import { GameRepository } from '../persistence/game.repository.js';
 import { groupToGameOptions, GroupRepository, resolveGameMode } from '../persistence/group.repository.js';
+import { NotifyGameRepository } from '../persistence/notify-game.repository.js';
 import { PlayerRepository } from '../persistence/player.repository.js';
 import type { Translator } from '../i18n/translator.js';
 import type { Logger } from '../logging/logger.js';
@@ -50,6 +51,7 @@ export class GameLobbyManager {
     private readonly t: Translator,
     private readonly logger: Logger,
     private readonly gameLoop: GameLoop,
+    private readonly notifyGames: NotifyGameRepository,
     private readonly joinTimeSeconds = 180,
   ) {}
 
@@ -99,6 +101,8 @@ export class GameLobbyManager {
       reply_markup: keyboard,
     });
 
+    await this.notifyWaitingPlayers(chatId, group.title ?? '', language, starter.id);
+
     const session: LobbySession = {
       game,
       chatId,
@@ -109,6 +113,20 @@ export class GameLobbyManager {
       interval: setInterval(() => void this.tick(chatId), 1000),
     };
     this.sessions.set(chatId, session);
+  }
+
+  /**
+   * PMs everyone on this group's `/nextgame` waitlist that a new lobby just opened - mirrors
+   * `Helpers.cs`'s `notify` loop. Their waitlist row isn't cleared here (they might still be
+   * offline and miss the join window) - it's only cleared once a lobby actually locks in and
+   * deals roles, in `finishJoining()`, matching the original's `Werewolf.cs` cleanup point.
+   */
+  private async notifyWaitingPlayers(chatId: bigint, groupTitle: string, language: string, starterId: bigint): Promise<void> {
+    const waiting = await this.notifyGames.listWaiting(chatId);
+    for (const userId of waiting) {
+      if (userId === starterId) continue;
+      await this.sendToUser(userId, language, 'NotifyNewGame', groupTitle);
+    }
   }
 
   async join(chatId: bigint, telegramUser: { id: bigint; firstName: string; lastName?: string; username?: string }): Promise<void> {
@@ -264,6 +282,7 @@ export class GameLobbyManager {
     await this.send(session.chatId, session.language, 'GameStarting');
 
     session.game.start();
+    await this.notifyGames.clearForGroup(session.chatId);
 
     const group = await this.groups.getOrCreate(session.chatId, null, null);
     const gameId = await this.gameRepo.createGame(group.id, group.title, session.game.mode);
