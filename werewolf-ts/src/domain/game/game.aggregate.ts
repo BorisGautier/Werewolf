@@ -40,7 +40,7 @@ import { promoteToWolf } from './transform.js';
 import type { GameEvent } from './game-event.js';
 import type { GameMode } from './game-mode.js';
 import type { GamePhase } from './game-phase.js';
-import { createPlayer, type Player } from './player.js';
+import { ABSTAIN, createPlayer, type Player } from './player.js';
 import { ROLE_BIT, type Role, type RoleFlags } from '../roles/role.js';
 import { getTeamForRole, type Team } from './team.js';
 import { shuffle } from '../shared/shuffle.js';
@@ -94,6 +94,10 @@ export class Game {
   /** Mirrors `_doubleLynch` as captured by `startLynch()`: how many lynch attempts this Lynch phase gets. */
   lynchAttemptsPlanned = 1;
   private doubleLynchPending = false;
+
+  /** Mirrors `lastGrave`/`secondLastGrave`: when the Grave Digger last (and second-last) dug, across nights. */
+  private lastGraveDigAt: Date | null = null;
+  private secondLastGraveDigAt: Date | null = null;
 
   private readonly disabledRoleFlags: RoleFlags;
   private readonly burningOverkill: boolean;
@@ -291,9 +295,34 @@ export class Game {
       this.silverSpread = false;
       this.wolfCubKilled = false;
       for (const p of this.players) p.drunk = false;
+    } else {
+      events.push(...this.digGraves());
     }
 
     return events;
+  }
+
+  /**
+   * Mirrors the Grave Digger's automatic digging in `SendNightActions`: no menu, no choice - the
+   * instant night begins, they're told (and the game records) how many players have died since
+   * they last dug. Skipped entirely on a Sandman-slept night, same as every other night action.
+   */
+  private digGraves(): GameEvent[] {
+    const gravedigger = this.players.find((p) => p.role === ROLE_BIT.GraveDigger && !p.isDead && !p.drunk);
+    if (!gravedigger) return [];
+
+    const diedSinceLastDig = this.players.filter(
+      (p) =>
+        p.isDead &&
+        p.timeDied !== null &&
+        !p.diedByFleeOrIdle &&
+        (this.lastGraveDigAt === null || p.timeDied > this.lastGraveDigAt),
+    );
+    gravedigger.dugGravesLastNight = diedSinceLastDig.length;
+    gravedigger.choice = ABSTAIN;
+    this.secondLastGraveDigAt = this.lastGraveDigAt;
+    this.lastGraveDigAt = new Date();
+    return [{ type: 'GraveDug', playerId: gravedigger.id, graveCount: gravedigger.dugGravesLastNight }];
   }
 
   /**
@@ -364,11 +393,14 @@ export class Game {
 
     events.push(...validateSpecialRoleChoices(this.players, this.dayNumber, random));
 
-    const state = initialNightState();
+    const state = initialNightState(this.lastGraveDigAt, this.secondLastGraveDigAt);
     state.guardianAngel = findActingGuardianAngel(this.players);
     const visitCtx: VisitContext = { players: this.players, dayNumber: this.dayNumber, thiefFull: this.thiefFull, random };
 
     events.push(...resolveSnowWolfNight(this.players, state, visitCtx));
+    // A Snow Wolf freezing a Grave Digger who dug tonight rewinds the state's copy of `lastGraveDigAt`
+    // (see night-resolution.ts) - mirror that back onto the persisted timestamp used next night.
+    this.lastGraveDigAt = state.lastGraveDigAt;
     events.push(...resolveArsonistNight(this.players, state, visitCtx));
 
     this.wolfCubKilled = false; // mirrors `WolfCubKilled = false;` right before the Wolf Night block

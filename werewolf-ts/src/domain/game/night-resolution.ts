@@ -15,12 +15,14 @@
  * Augur live in `clairvoyance.ts` - they're almost entirely informational,
  * not really "night resolution" in the causal sense). Grave Digger's own
  * "how many graves did I dig" computation happens during menu-building in
- * the original (`SendNightActions`, an infra concern), not in `NightCycle`'s
- * resolution phase, so there's no separate Grave Digger resolver here - its
- * *interactions* with other roles (being frozen, spotted, visited) are
- * already covered above. What's left: the day-1-only/passive roles (Cupid,
- * Wild Child, Doppelganger, Mayor, ...) - tracked separately, see the
- * project's task list.
+ * the original (`SendNightActions`), so there's no separate Grave Digger
+ * resolver here - its *interactions* with other roles (being frozen,
+ * spotted, visited) are already covered above. The `lastGraveDigAt`/
+ * `secondLastGraveDigAt` timestamps that computation needs to persist
+ * across nights are threaded through via `NightState` (seeded by
+ * `Game.enterNight()`, read back by `Game.resolveNightActions()` - see
+ * `game.aggregate.ts`), even though the dig count itself is computed there,
+ * not here.
  */
 
 import { ROLE_BIT, type Role } from '../roles/role.js';
@@ -59,8 +61,11 @@ export interface NightState {
   wolvesThatActed: Player[];
 }
 
-export function initialNightState(): NightState {
-  return { guardianAngel: null, lastGraveDigAt: null, secondLastGraveDigAt: null, wolvesThatActed: [] };
+export function initialNightState(
+  lastGraveDigAt: Date | null = null,
+  secondLastGraveDigAt: Date | null = null,
+): NightState {
+  return { guardianAngel: null, lastGraveDigAt, secondLastGraveDigAt, wolvesThatActed: [] };
 }
 
 /** Mirrors the original's `var ga = Players.FirstOrDefault(x => x.PlayerRole == IRole.GuardianAngel & !x.IsDead && x.Choice != 0 && x.Choice != -1);` */
