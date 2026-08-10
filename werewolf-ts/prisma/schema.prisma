@@ -24,6 +24,15 @@ enum GameMode {
   CHAOS
 }
 
+/// A group's configured default mode: PLAYER_CHOICE (the default) lets /startgame vs /startchaos
+/// decide per game, same as leaving /config's mode untouched; NORMAL/CHAOS force that mode
+/// regardless of which command was used - mirrors the original's DbGroup.Mode == "Player" check.
+enum GroupModePreference {
+  PLAYER_CHOICE
+  NORMAL
+  CHAOS
+}
+
 enum GamePhase {
   DAY
   LYNCH
@@ -159,7 +168,7 @@ model Group {
   title     String?
   username  String?
   language  String   @default("en")
-  mode      GameMode @default(NORMAL)
+  mode      GroupModePreference @default(PLAYER_CHOICE)
 
   dayTimerSeconds     Int     @default(120)
   nightTimerSeconds   Int     @default(60)
@@ -307,6 +316,18 @@ model GlobalBan {
 
   @@index([telegramId])
   @@map("global_bans")
+}
+
+/// Waitlist for `/nextgame`: a player asking to be PM'd once a new game starts in a group that
+/// currently has none running. Cleared (and the player notified) by GameLobbyManager.startGame(),
+/// or directly by `/stopwaiting`.
+model NotifyGame {
+  id        Int    @id @default(autoincrement())
+  userId    BigInt
+  groupId   BigInt
+
+  @@unique([userId, groupId])
+  @@map("notify_games")
 }
 
 /// Daily rollup written by the stats-rotation cron job (replaces the

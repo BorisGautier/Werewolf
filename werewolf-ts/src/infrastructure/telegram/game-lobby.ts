@@ -18,7 +18,7 @@ import { Game, GameError } from '../../domain/game/game.aggregate.js';
 import type { GameMode } from '../../domain/game/game-mode.js';
 import { ROLE_META, roleName } from '../../domain/roles/role.js';
 import { GameRepository } from '../persistence/game.repository.js';
-import { groupToGameOptions, GroupRepository } from '../persistence/group.repository.js';
+import { groupToGameOptions, GroupRepository, resolveGameMode } from '../persistence/group.repository.js';
 import { PlayerRepository } from '../persistence/player.repository.js';
 import type { Translator } from '../i18n/translator.js';
 import type { Logger } from '../logging/logger.js';
@@ -61,7 +61,7 @@ export class GameLobbyManager {
     chatId: bigint,
     chatTitle: string | null,
     starter: { id: bigint; name: string },
-    mode: GameMode,
+    requestedMode: GameMode,
   ): Promise<void> {
     const group = await this.groups.getOrCreate(chatId, chatTitle, null);
     const language = group.language;
@@ -70,6 +70,10 @@ export class GameLobbyManager {
       await this.send(chatId, language, 'GameAlreadyRunning');
       return;
     }
+
+    // The group's /config mode preference (force Normal/Chaos, or pick randomly) overrides which
+    // of /startgame vs /startchaos was actually typed - mirrors the original's DbGroup.Mode check.
+    const mode = resolveGameMode(group, requestedMode);
 
     const options = groupToGameOptions(group);
     let game: Game;
