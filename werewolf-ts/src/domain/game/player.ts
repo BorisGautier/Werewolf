@@ -5,6 +5,9 @@ import type { KillMethod } from './kill-method.js';
 /** Sentinel for "explicitly chose to abstain / not act", mirroring the original's `Choice == -1`. `null` means "hasn't chosen yet" (mirrors `Choice == 0`). */
 export const ABSTAIN: bigint = -1n;
 
+/** Sentinel for the Arsonist's "spark" action (burn every doused player), mirroring `Choice == -2`. */
+export const SPARK: bigint = -2n;
+
 /**
  * Port of the gameplay-relevant fields of `Werewolf Node/Models/IPlayer.cs`.
  *
