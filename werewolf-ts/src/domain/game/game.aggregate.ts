@@ -386,9 +386,25 @@ export class Game {
     if (augur) augurSees(this.players, augur, this.possibleRoles);
 
     events.push(...resolveGuardianAngelNight(this.players, state, visitCtx));
+
+    // Mirrors the original's call order exactly: CheckRoleChanges() runs *before* Thief Night, not after.
+    events.push(...checkRoleChanges(this.players));
+
     events.push(...resolveThiefNight(this.players, this.dayNumber, this.thiefFull, visitCtx));
 
-    events.push(...checkRoleChanges(this.players));
+    // Mirrors the tail of NightCycle: `if (CheckForGameEnd()) return;` gates the final per-night
+    // reset - if the game just ended, there's no next night to reset state for.
+    const win = this.checkWinCondition({ checkBitten: false });
+    events.push(...win.events);
+    if (win.finished) return events;
+
+    for (const p of this.players) {
+      p.diedLastNight = false;
+      p.killedLastNight = 0;
+      p.wasSavedLastNight = false;
+      p.choice = null;
+      p.votes = 0;
+    }
 
     return events;
   }
