@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ROLE_BIT } from '../../src/domain/roles/role.js';
+import { ROLE_BIT, ROLE_VALID } from '../../src/domain/roles/role.js';
 import { Game } from '../../src/domain/game/game.aggregate.js';
 
 /**
@@ -286,6 +286,51 @@ describe('Game.enterNight / resolveNightActions', () => {
 
     expect(bitten.role).toBe(ROLE_BIT.Wolf);
     expect(events.some((e) => e.type === 'BittenPlayerTurnedWolf')).toBe(true);
+  });
+
+  it('automatically digs graves for a living Grave Digger, counting deaths since the last dig', () => {
+    // Disable Grave Digger for the initial balance() - if it randomly landed on some other player
+    // pre-override, that player's automatic dig during night 1's enterNight() would set the game's
+    // lastGraveDigAt to "start of night 1", *before* the wolf's kill that same night. Node's Date
+    // has only millisecond resolution, so that kill can land in the very same millisecond and get
+    // filtered out as "not after lastGraveDigAt" - flaky. Keeping the role out of the pool until we
+    // explicitly assign it below avoids the whole scenario.
+    const game = startedGame(
+      [
+        [1n, 'GD'],
+        [2n, 'Wolf'],
+        [3n, 'V3'],
+        [4n, 'V4'],
+        [5n, 'V5'],
+      ],
+      { chatId: 1n, mode: 'Normal', disabledRoleFlags: ROLE_VALID | ROLE_BIT.GraveDigger },
+    );
+    const gd = game.players[0]!;
+    gd.role = ROLE_BIT.GraveDigger;
+    gd.team = 'Village';
+    const wolf = game.players[1]!;
+    wolf.role = ROLE_BIT.Wolf;
+    wolf.team = 'Wolf';
+    const victim = game.players[2]!;
+
+    // Night 1 already ran as part of start(), before the Grave Digger role was pinned above, so it
+    // never counted - matches the original: a group with no configured Grave Digger never touches
+    // lastGrave either.
+    expect(gd.dugGravesLastNight).toBe(0);
+
+    wolf.choice = victim.id;
+    game.resolveNightActions();
+    expect(victim.isDead).toBe(true);
+
+    game.startDay();
+    game.startLynch();
+    game.resolveLynch();
+
+    const events = game.startNight(); // entering night 2 - this is where the dig actually gets counted
+
+    expect(gd.dugGravesLastNight).toBe(1);
+    expect(gd.choice).toBe(-1n);
+    expect(events.some((e) => e.type === 'GraveDug' && e.playerId === gd.id && e.graveCount === 1)).toBe(true);
   });
 });
 
