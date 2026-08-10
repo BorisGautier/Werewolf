@@ -4,7 +4,7 @@ import { ABSTAIN, createPlayer } from '../../src/domain/game/player.js';
 import { initialNightState, resolveCultNight } from '../../src/domain/game/night-resolution.js';
 
 function baseCtx(players: ReturnType<typeof createPlayer>[], dayNumber = 3, random?: () => number) {
-  return { players, dayNumber, thiefFull: false, random };
+  return { players, dayNumber, thiefFull: false, ...(random !== undefined ? { random } : {}) };
 }
 
 describe('resolveCultNight', () => {
