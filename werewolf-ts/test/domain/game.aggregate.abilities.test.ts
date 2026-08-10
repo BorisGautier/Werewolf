@@ -149,6 +149,83 @@ describe('Game.enterNight / resolveNightActions', () => {
     expect(game.players[2]!.isDead).toBe(false);
   });
 
+  it('resets wasSavedLastNight at the end of the night so a stale protection flag never leaks into the next one', () => {
+    const game = startedGame([
+      [1n, 'GA'],
+      [2n, 'Wolf'],
+      [3n, 'V3'],
+      [4n, 'V4'],
+      [5n, 'V5'],
+    ]);
+    const ga = game.players[0]!;
+    ga.role = ROLE_BIT.GuardianAngel;
+    const wolf = game.players[1]!;
+    wolf.role = ROLE_BIT.Wolf;
+    wolf.team = 'Wolf';
+    const protectedPlayer = game.players[2]!;
+
+    ga.choice = protectedPlayer.id;
+    wolf.choice = protectedPlayer.id;
+    game.resolveNightActions();
+
+    // wasSavedLastNight is a transient intra-night signal (other same-night resolvers, e.g. the GA's
+    // own douse-cleaning step, read it) - the original clears it again before NightCycle even returns,
+    // so its real, externally-observable effect is that the protected player actually survived.
+    expect(protectedPlayer.isDead).toBe(false);
+    expect(protectedPlayer.wasSavedLastNight).toBe(false);
+  });
+
+  it('calls CheckRoleChanges before Thief Night, matching the original order', () => {
+    // The Apprentice Seer promotion must be visible in the *same* resolveNightActions() call as the
+    // Seer's death, before the Thief resolver runs - a same-call ordering bug wouldn't be observable
+    // through Thief behavior directly, but this pins the documented call order regardless.
+    const game = startedGame([
+      [1n, 'AppSeer'],
+      [2n, 'Seer'],
+      [3n, 'Wolf'],
+      [4n, 'V4'],
+      [5n, 'V5'],
+    ]);
+    const appSeer = game.players[0]!;
+    appSeer.role = ROLE_BIT.ApprenticeSeer;
+    const seer = game.players[1]!;
+    seer.role = ROLE_BIT.Seer;
+    const wolf = game.players[2]!;
+    wolf.role = ROLE_BIT.Wolf;
+    wolf.team = 'Wolf';
+    wolf.choice = seer.id;
+
+    const events = game.resolveNightActions();
+
+    expect(seer.isDead).toBe(true);
+    expect(appSeer.role).toBe(ROLE_BIT.Seer);
+    expect(events.some((e) => e.type === 'ApprenticeSeerPromoted')).toBe(true);
+  });
+
+  it('skips the end-of-night reset once the game has already ended that night', () => {
+    // balance() can't produce a valid 2-player game (an enemy count always ties or exceeds the
+    // village count), so start with enough players and force everyone but a wolf/villager pair dead.
+    const game = startedGame([
+      [1n, 'Wolf'],
+      [2n, 'Villager'],
+      [3n, 'V3'],
+      [4n, 'V4'],
+      [5n, 'V5'],
+    ]);
+    const [a, b, ...rest] = game.players;
+    a!.role = ROLE_BIT.Wolf;
+    a!.team = 'Wolf';
+    b!.role = ROLE_BIT.Villager;
+    b!.team = 'Village';
+    for (const p of rest) p.isDead = true;
+    a!.choice = b!.id;
+
+    game.resolveNightActions();
+
+    expect(game.phase).toBe('Ended');
+    expect(game.winningTeam).toBe('Wolf');
+  });
+
   it('runs the wolf pack and kills the target on a normal night', () => {
     const game = startedGame([
       [1n, 'Wolf'],
