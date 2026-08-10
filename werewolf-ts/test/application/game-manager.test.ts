@@ -34,4 +34,16 @@ describe('GameManager', () => {
 
     expect(manager.activeChatIds().sort()).toEqual([1n, 2n]);
   });
+
+  it('finds the game a player is in, regardless of which chat it runs in', () => {
+    const manager = new GameManager();
+    const game1 = manager.create(1n, { mode: 'Normal' });
+    const game2 = manager.create(2n, { mode: 'Normal' });
+    game1.addPlayer(100n, 'Alice');
+    game2.addPlayer(200n, 'Bob');
+
+    expect(manager.findByPlayer(100n)).toBe(game1);
+    expect(manager.findByPlayer(200n)).toBe(game2);
+    expect(manager.findByPlayer(999n)).toBeUndefined();
+  });
 });

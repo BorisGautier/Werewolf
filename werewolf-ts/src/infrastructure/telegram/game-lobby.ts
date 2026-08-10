@@ -22,6 +22,7 @@ import { groupToGameOptions, GroupRepository } from '../persistence/group.reposi
 import { PlayerRepository } from '../persistence/player.repository.js';
 import type { Translator } from '../i18n/translator.js';
 import type { Logger } from '../logging/logger.js';
+import type { GameLoop } from './game-loop.js';
 
 const WARNING_SECONDS: readonly number[] = [60, 30, 10];
 const ANNOUNCE_JOINED_EVERY_SECONDS = 30;
@@ -48,6 +49,7 @@ export class GameLobbyManager {
     private readonly gameRepo: GameRepository,
     private readonly t: Translator,
     private readonly logger: Logger,
+    private readonly gameLoop: GameLoop,
     private readonly joinTimeSeconds = 180,
   ) {}
 
@@ -260,11 +262,13 @@ export class GameLobbyManager {
       await this.send(session.chatId, session.language, 'PMFailed', undelivered.join(', '));
     }
 
-    await this.send(session.chatId, session.language, 'NightFalls');
+    // The night/day loop sends its own richer "Night N falls, you have X seconds" message right
+    // as it takes over - no need to also announce a bare NightFalls here.
     this.logger.info(
       { chatId: session.chatId.toString(), gameId, players: session.game.players.length },
       'Game started, handing off to the night/day loop',
     );
+    this.gameLoop.start(session.game, gameId);
   }
 
   private async notifyRole(telegramId: bigint, language: string, role: bigint): Promise<boolean> {

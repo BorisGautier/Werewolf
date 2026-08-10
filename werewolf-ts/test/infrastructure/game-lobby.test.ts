@@ -102,9 +102,11 @@ function createHarness(joinTimeSeconds = 5) {
 
   const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as import('../../src/infrastructure/logging/logger.js').Logger;
 
-  const lobby = new GameLobbyManager(bot, gameManager, groups, players, gameRepo, translator, logger, joinTimeSeconds);
+  const gameLoop = { start: vi.fn() } as unknown as import('../../src/infrastructure/telegram/game-loop.js').GameLoop;
 
-  return { lobby, bot, sendMessage, gameManager, groups, players, gameRepo };
+  const lobby = new GameLobbyManager(bot, gameManager, groups, players, gameRepo, translator, logger, gameLoop, joinTimeSeconds);
+
+  return { lobby, bot, sendMessage, gameManager, groups, players, gameRepo, gameLoop };
 }
 
 function user(id: number, firstName: string) {

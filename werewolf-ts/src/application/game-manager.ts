@@ -36,6 +36,18 @@ export class GameManager {
     this.games.delete(chatId);
   }
 
+  /**
+   * Finds whichever active game a player is currently in - mirrors `GetPlayerNode`. Needed because
+   * a player's night/day menu callbacks arrive over their private chat, not the group's, so there's
+   * no chat id to look the game up by directly.
+   */
+  findByPlayer(playerId: bigint): Game | undefined {
+    for (const game of this.games.values()) {
+      if (game.players.some((p) => p.id === playerId)) return game;
+    }
+    return undefined;
+  }
+
   activeChatIds(): bigint[] {
     return [...this.games.keys()];
   }
