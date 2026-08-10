@@ -2,6 +2,9 @@ import type { Role } from '../roles/role.js';
 import type { Team } from './team.js';
 import type { KillMethod } from './kill-method.js';
 
+/** Sentinel for "explicitly chose to abstain / not act", mirroring the original's `Choice == -1`. `null` means "hasn't chosen yet" (mirrors `Choice == 0`). */
+export const ABSTAIN: bigint = -1n;
+
 /**
  * Port of the gameplay-relevant fields of `Werewolf Node/Models/IPlayer.cs`.
  *
@@ -54,6 +57,15 @@ export interface Player {
   won: boolean;
 
   changedRolesCount: number;
+
+  /** Arsonist mechanic: doused tonight, will burn to death next time the Arsonist sparks. */
+  doused: boolean;
+  /** Arsonist mechanic: doused and set alight - dies to anyone who visits them, except the Serial Killer. */
+  burning: boolean;
+  /** Grave Digger mechanic: how many graves they dug last night (0 = didn't dig / stayed home). */
+  dugGravesLastNight: number;
+  /** Serial Killer mechanic: the day number they last stumbled into a dug grave (0 = never). */
+  stumbledGrave: number;
 }
 
 export function createPlayer(id: bigint, name: string, role: Role, team: Team): Player {
@@ -89,6 +101,10 @@ export function createPlayer(id: bigint, name: string, role: Role, team: Team): 
     wasSavedLastNight: false,
     won: false,
     changedRolesCount: 0,
+    doused: false,
+    burning: false,
+    dugGravesLastNight: 0,
+    stumbledGrave: 0,
   };
 }
 
