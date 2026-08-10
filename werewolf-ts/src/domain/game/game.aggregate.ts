@@ -1,19 +1,42 @@
 /**
- * Aggregate root tying together role assignment, phase transitions, lynch
- * voting and win-condition checks - the parts of `Werewolf.cs`'s main loop
+ * Aggregate root tying together role assignment, phase transitions, night
+ * resolution, lynch voting, day abilities and win-condition checks - the
+ * parts of `Werewolf.cs`'s main loop
  * (`while (IsRunning) { GameDay++; NightCycle(); DayCycle(); LynchCycle(); }`)
- * that are pure state transitions.
+ * that are pure state, with no Telegram/menu/timer concerns.
  *
- * Deliberately NOT included here: resolving individual roles' night actions
- * (Seer looking, Wolves voting a victim, Guardian Angel protecting, ...) and
- * anything involving Telegram menus or timers - those belong to the
- * application/infrastructure layers, built on top of this aggregate.
+ * `enterNight()`/`resolveNightActions()` are deliberately two separate calls
+ * rather than one: in the original, choices get collected via Telegram menus
+ * over a ~90 second window that sits *between* "night begins" (the reset at
+ * the top of `NightCycle`) and "night resolves" (everything from Snow Wolf
+ * onward) - a real-world time gap a single function can't represent. The
+ * app/infrastructure layer is expected to call `start()`/`startNight()`,
+ * send its menus, wait, then call `resolveNightActions()`.
  */
 
-import { balance, type BalanceOptions } from './game-balancing.js';
+import { balance, WOLF_ROLES, type BalanceOptions } from './game-balancing.js';
 import { killPlayer, type KillOptions } from './kill.js';
 import { resetLynchState, resolveLynchVotes, type LynchOptions, type LynchResult } from './lynch.js';
 import { evaluateWinCondition, type WinConditionContext, type WinConditionResult } from './win-condition.js';
+import { augurSees } from './clairvoyance.js';
+import { resolveGunnerShot, resolveSpumpkinDetonate } from './day-actions.js';
+import {
+  findActingGuardianAngel,
+  initialNightState,
+  resolveArsonistNight,
+  resolveChemistNight,
+  resolveCultistHunterNight,
+  resolveCultNight,
+  resolveGuardianAngelNight,
+  resolveHarlotNight,
+  resolveSerialKillerNight,
+  resolveSnowWolfNight,
+  resolveThiefNight,
+  resolveWolfNight,
+} from './night-resolution.js';
+import type { VisitContext } from './night-visit.js';
+import { checkRoleChanges, validateSpecialRoleChoices } from './role-changes.js';
+import { promoteToWolf } from './transform.js';
 import type { GameEvent } from './game-event.js';
 import type { GameMode } from './game-mode.js';
 import type { GamePhase } from './game-phase.js';
@@ -47,6 +70,8 @@ export interface GameOptions {
   randomLynchOnTie?: boolean;
   minPlayers?: number;
   maxPlayers?: number;
+  /** Mirrors `ThiefFull`: lets the Thief steal every night instead of only night 1. */
+  thiefFull?: boolean;
 }
 
 export class Game {
@@ -60,11 +85,22 @@ export class Game {
   /** The full candidate role pool this game was balanced from (useful for Beholder-style "possible roles" hints). */
   possibleRoles: Role[] = [];
 
+  /** Mirrors `_silverSpread`: the Blacksmith protected the whole village from wolves tonight. */
+  silverSpread = false;
+  /** Mirrors `_sandmanSleep`: the Sandman put the whole village (and the night's events) to sleep. */
+  sandmanSleep = false;
+  /** Mirrors `_pacifistUsed`: the Pacifist has declared peace - the next lynch resolution is skipped. */
+  pacifistUsed = false;
+  /** Mirrors `_doubleLynch` as captured by `startLynch()`: how many lynch attempts this Lynch phase gets. */
+  lynchAttemptsPlanned = 1;
+  private doubleLynchPending = false;
+
   private readonly disabledRoleFlags: RoleFlags;
   private readonly burningOverkill: boolean;
   private readonly randomLynchOnTie: boolean;
   private readonly minPlayers: number;
   private readonly maxPlayers: number;
+  private readonly thiefFull: boolean;
   private lynchAttempt = 0;
 
   constructor(options: GameOptions) {
@@ -75,6 +111,7 @@ export class Game {
     this.randomLynchOnTie = options.randomLynchOnTie ?? true;
     this.minPlayers = options.minPlayers ?? 5;
     this.maxPlayers = options.maxPlayers ?? 35;
+    this.thiefFull = options.thiefFull ?? false;
   }
 
   addPlayer(id: bigint, name: string): Player {
@@ -115,7 +152,7 @@ export class Game {
    * Mirrors `AssignRoles()` + the `Time = GameTime.Night; GameDay++` that
    * kicks off the original's main loop.
    */
-  start(balanceOptions: Partial<Pick<BalanceOptions, 'chaos'>> = {}): void {
+  start(balanceOptions: Partial<Pick<BalanceOptions, 'chaos'>> = {}): GameEvent[] {
     if (this.phase !== 'Joining') throw new GameError('The game already started.', 'WRONG_PHASE');
     if (!this.canStart()) {
       throw new GameError(`Not enough players joined (need at least ${this.minPlayers}).`, 'NOT_ENOUGH_PLAYERS');
@@ -138,7 +175,7 @@ export class Game {
     });
     this.possibleRoles = possibleRoles;
 
-    this.enterNight();
+    return this.enterNight();
   }
 
   /** Mirrors the `Time = GameTime.Day` transition in `DayCycle()`. */
@@ -147,17 +184,44 @@ export class Game {
     this.phase = 'Day';
   }
 
-  /** Mirrors the `Time = GameTime.Lynch` transition + per-round reset at the top of `LynchCycle()`. */
+  /**
+   * Mirrors the `Time = GameTime.Lynch` transition + per-round reset at the
+   * top of `LynchCycle()`. Also captures whether the Troublemaker forced a
+   * double lynch today - mirrors `bool doubleLynch = _doubleLynch; _doubleLynch = false;`,
+   * captured once per Lynch phase, not re-checked per attempt.
+   */
   startLynch(): void {
     this.assertPhase('Day');
     this.phase = 'Lynch';
     this.lynchAttempt = 0;
+    this.lynchAttemptsPlanned = this.doubleLynchPending ? 2 : 1;
+    this.doubleLynchPending = false;
     resetLynchState(this.players);
   }
 
-  /** Tallies votes and resolves the lynch. Call again (after resetting choices) for a forced double lynch. */
+  /**
+   * Tallies votes and resolves the lynch. Call again (after
+   * `restartLynchVote()`) up to `lynchAttemptsPlanned` times.
+   *
+   * If the Pacifist has declared peace since the last resolution, this
+   * mirrors the original's `if (_pacifistUsed) { ...; _pacifistUsed = false; return; }`
+   * guard (checked both at the top of each attempt and mid-vote in the
+   * original's timer loop - since this function only runs once, at "the vote
+   * window has closed", either timing collapses to the same net effect: no
+   * lynch happens this attempt).
+   */
   resolveLynch(): LynchResult & WinConditionResult {
     this.assertPhase('Lynch');
+
+    if (this.pacifistUsed) {
+      this.pacifistUsed = false;
+      const win = this.checkWinCondition({ checkBitten: true });
+      return {
+        resolution: { outcome: 'PacifistPeace' },
+        ...win,
+      };
+    }
+
     this.lynchAttempt++;
     const lynchOptions: LynchOptions = {
       lynchAttempt: this.lynchAttempt,
@@ -176,14 +240,164 @@ export class Game {
   }
 
   /** Mirrors the `Time = GameTime.Night; GameDay++` at the top of each loop iteration. */
-  startNight(): void {
+  startNight(): GameEvent[] {
     this.assertPhase('Lynch');
-    this.enterNight();
+    return this.enterNight();
   }
 
-  private enterNight(): void {
+  /**
+   * Set by `enterNight()` when the Sandman put the village to sleep -
+   * callers should skip sending night menus and never call
+   * `resolveNightActions()` for a night where this is true (it's a no-op
+   * regardless, but skipping avoids pointless menu traffic).
+   */
+  nightSkipped = false;
+
+  /**
+   * Mirrors the very top of `NightCycle` - the part that always runs the
+   * instant Night begins, *before* any menus are sent: resetting per-night
+   * scratch state, resolving a pending Bitten -> Wolf transformation from
+   * the night before, and the Sandman-sleep gate (`if (_sandmanSleep) {...
+   * return;}`). Real per-role resolution (`resolveNightActions`) happens
+   * later, once the app layer's menu/timer window has actually collected
+   * everyone's choices - there's a real-world time gap between the two that
+   * a single function can't represent.
+   */
+  private enterNight(): GameEvent[] {
     this.dayNumber++;
     this.phase = 'Night';
+    const events: GameEvent[] = [];
+
+    for (const p of this.players) {
+      p.choice = null;
+      p.choice2 = null;
+      p.votes = 0;
+      p.diedLastNight = false;
+      p.killedLastNight = 0;
+    }
+    for (const p of this.players) {
+      if (!p.bitten) continue;
+      p.bitten = false;
+      if (!p.isDead && !WOLF_ROLES.includes(p.role) && p.role !== ROLE_BIT.SnowWolf) {
+        promoteToWolf(p);
+        events.push({ type: 'BittenPlayerTurnedWolf', playerId: p.id });
+      }
+    }
+    events.push(...checkRoleChanges(this.players));
+
+    this.nightSkipped = this.sandmanSleep;
+    if (this.sandmanSleep) {
+      this.sandmanSleep = false;
+      this.silverSpread = false;
+      this.wolfCubKilled = false;
+      for (const p of this.players) p.drunk = false;
+    }
+
+    return events;
+  }
+
+  /**
+   * The five "click a button, flip a flag" day abilities from `HandleReply`.
+   * Each returns whether the ability actually triggered (false if the
+   * player isn't who/what they claim, or already used it this game).
+   */
+
+  /** Mirrors the Mayor's "reveal" button: doubles their lynch vote from now on. */
+  useMayorReveal(playerId: bigint): boolean {
+    const mayor = this.players.find((p) => p.id === playerId && p.role === ROLE_BIT.Mayor && !p.isDead);
+    if (!mayor || mayor.hasUsedAbility) return false;
+    mayor.hasUsedAbility = true;
+    return true;
+  }
+
+  /** Mirrors the Pacifist's "peace" button: cancels the next lynch, overriding a pending Troublemaker double lynch. */
+  usePacifistPeace(playerId: bigint): boolean {
+    const pacifist = this.players.find((p) => p.id === playerId && p.role === ROLE_BIT.Pacifist && !p.isDead);
+    if (!pacifist || pacifist.hasUsedAbility) return false;
+    pacifist.hasUsedAbility = true;
+    this.pacifistUsed = true;
+    this.doubleLynchPending = false;
+    return true;
+  }
+
+  /** Mirrors the Blacksmith's "spread silver" button: protects the village from being eaten by wolves tonight. */
+  useBlacksmithSpreadSilver(playerId: bigint): boolean {
+    const blacksmith = this.players.find((p) => p.id === playerId && p.role === ROLE_BIT.Blacksmith && !p.isDead);
+    if (!blacksmith || blacksmith.hasUsedAbility) return false;
+    blacksmith.hasUsedAbility = true;
+    this.silverSpread = true;
+    return true;
+  }
+
+  /** Mirrors the Sandman's "sleep" button: the whole village (and every role's action) skips tonight. */
+  useSandmanSleep(playerId: bigint): boolean {
+    const sandman = this.players.find((p) => p.id === playerId && p.role === ROLE_BIT.Sandman && !p.isDead);
+    if (!sandman || sandman.hasUsedAbility) return false;
+    sandman.hasUsedAbility = true;
+    this.sandmanSleep = true;
+    return true;
+  }
+
+  /** Mirrors the Troublemaker's "double lynch" button: forces two lynch attempts today, overriding a pending Pacifist peace. */
+  useTroublemakerDoubleLynch(playerId: bigint): boolean {
+    const troublemaker = this.players.find((p) => p.id === playerId && p.role === ROLE_BIT.Troublemaker && !p.isDead);
+    if (!troublemaker || troublemaker.hasUsedAbility) return false;
+    troublemaker.hasUsedAbility = true;
+    this.doubleLynchPending = true;
+    this.pacifistUsed = false;
+    return true;
+  }
+
+  /**
+   * Runs the night's per-role resolution in the original's exact order,
+   * mirroring the body of `NightCycle` *after* `SendNightActions`'s menu/
+   * timer window closes. Call `startNight()`/`start()` first (which runs
+   * `enterNight()` and does the reset/Sandman-gate check), let the app layer
+   * collect choices via menus, then call this. No-op (besides returning
+   * `[]`) if `nightSkipped` is true.
+   */
+  resolveNightActions(options: { random?: () => number } = {}): GameEvent[] {
+    this.assertPhase('Night');
+    if (this.nightSkipped) return [];
+    const random = options.random ?? Math.random;
+    const events: GameEvent[] = [];
+
+    events.push(...validateSpecialRoleChoices(this.players, this.dayNumber, random));
+
+    const state = initialNightState();
+    state.guardianAngel = findActingGuardianAngel(this.players);
+    const visitCtx: VisitContext = { players: this.players, dayNumber: this.dayNumber, thiefFull: this.thiefFull, random };
+
+    events.push(...resolveSnowWolfNight(this.players, state, visitCtx));
+    events.push(...resolveArsonistNight(this.players, state, visitCtx));
+
+    this.wolfCubKilled = false; // mirrors `WolfCubKilled = false;` right before the Wolf Night block
+    const wolfEvents = resolveWolfNight(this.players, state, visitCtx);
+    if (wolfEvents.some((e) => e.type === 'WolfCubKilled')) this.wolfCubKilled = true;
+    events.push(...wolfEvents);
+
+    events.push(...resolveSerialKillerNight(this.players, state, visitCtx));
+    events.push(...resolveCultistHunterNight(this.players, visitCtx));
+    events.push(...resolveCultNight(this.players, state, visitCtx));
+    events.push(...resolveChemistNight(this.players, visitCtx));
+    events.push(...resolveHarlotNight(this.players, visitCtx));
+
+    const augur = this.players.find((p) => p.role === ROLE_BIT.Augur && !p.isDead && !p.frozen);
+    if (augur) augurSees(this.players, augur, this.possibleRoles);
+
+    events.push(...resolveGuardianAngelNight(this.players, state, visitCtx));
+    events.push(...resolveThiefNight(this.players, this.dayNumber, this.thiefFull, visitCtx));
+
+    events.push(...checkRoleChanges(this.players));
+
+    return events;
+  }
+
+  /** Mirrors the Gunner/Spumpkin day-action block at the end of `DayCycle`. */
+  resolveDayActions(options: { random?: () => number } = {}): GameEvent[] {
+    this.assertPhase('Day');
+    const random = options.random ?? Math.random;
+    return [...resolveGunnerShot(this.players), ...resolveSpumpkinDetonate(this.players, random)];
   }
 
   killPlayer(victimId: bigint, method: KillMethod, options: KillOptions = {}): GameEvent[] {
