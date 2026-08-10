@@ -11,6 +11,7 @@
 
 import { randomInt } from 'node:crypto';
 import { ROLE_NAMES, ROLE_BIT, type Role, type RoleFlags, getUniqueRoles, hasFlag } from '../roles/role.js';
+import { shuffle } from '../shared/shuffle.js';
 
 export const WOLF_ROLES: readonly Role[] = [
   ROLE_BIT.Wolf,
@@ -55,17 +56,6 @@ export class UnbalanceableGameError extends Error {
   constructor(playerCount: number) {
     super(`Unable to create a balanced game. Please try again.\nPlayer count: ${playerCount}`);
     this.name = 'UnbalanceableGameError';
-  }
-}
-
-/** Cryptographically-random Fisher-Yates shuffle (mirrors the RNGCryptoServiceProvider-based `Shuffle`). */
-function shuffle<T>(list: T[]): void {
-  for (let n = list.length; n > 1; ) {
-    const k = randomInt(n);
-    n--;
-    const tmp = list[k]!;
-    list[k] = list[n]!;
-    list[n] = tmp;
   }
 }
 

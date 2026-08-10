@@ -55,14 +55,20 @@ est le seul fichier qui "branche" les implémentations concrètes.
 | Docker (Dockerfile multi-stage + docker-compose) | ✅ |
 | i18n (FR/EN, formulations aléatoires, système extensible) | ✅ testé (jeu de clés de démarrage, pas encore la parité totale avec les ~1000 clés de `English.xml`) |
 | Bot Telegram : bootstrap (long polling, `/ping`, `/version`, gestion d'erreurs) | ✅ |
+| Moteur de jeu : state machine (Joining/Night/Day/Lynch/Ended), conditions de victoire, pipeline de mort (chaîne amoureux/chasseur), vote de lynchage | ✅ testé (56 tests) |
+| Moteur de jeu : résolveurs d'action de nuit rôle par rôle (43 rôles) | ⏳ à venir |
 | Bot Telegram : commandes de jeu/admin/dev complètes | ⏳ à venir |
-| Moteur de jeu (state machine jour/nuit/vote, 43 rôles) | ⏳ à venir |
 | Cron jobs (rotation de stats, purge des parties mortes, bans) | ⏳ à venir |
 | CI (GitHub Actions) | ⏳ à venir |
 
-Le moteur de jeu (~6000 lignes dans l'original) et le jeu complet de
-commandes sont volontairement traités comme des chantiers à part, pour être
-portés (et testés) morceau par morceau plutôt que d'un bloc.
+Le moteur de jeu de base (`src/domain/game/`) est un port fidèle et testé de
+`Werewolf.cs` pour tout ce qui est *règles génériques* : assignation des
+rôles, transitions de phase, conditions de victoire (`CheckForGameEnd`),
+pipeline de mort avec ses réactions en chaîne (`KillPlayer`/`KillLover`), et
+résolution du vote de lynchage (`LynchCycle`). Ce qui reste volontairement
+hors scope pour l'instant : la logique de nuit *spécifique à chaque rôle*
+(qui la Voyante voit, qui les Loups mangent, etc.) - un chantier à part
+entière, lié aux menus Telegram de la commande de nuit.
 
 ## Prérequis
 
@@ -116,11 +122,12 @@ passer en mode webhook plus tard si besoin de scaler.
 
 ## Prochaines étapes (roadmap)
 
-1. Porter le moteur de jeu (`Werewolf.cs`) : state machine Day/Lynch/Night,
-   logique de chacun des 43 rôles, conditions de victoire.
+1. Résolveurs d'action de nuit rôle par rôle (Voyante, Loups, Garde du corps,
+   Cupidon, Chasseur, Détective, ...), branchés sur `Game` (`src/domain/game/game.aggregate.ts`).
 2. Porter l'ensemble des commandes (`Werewolf Control/Commands/*.cs`) avec
    `grammy` : jeu (`/startgame`, `/join`, ...), admin de groupe (`/config`,
-   `/smite`, ...), modération globale (bans, dev commands).
+   `/smite`, ...), modération globale (bans, dev commands) - c'est cette
+   couche qui pilotera les timers et les menus Telegram par-dessus le moteur.
 3. Cron jobs : rotation des statistiques agrégées, purge des parties
    abandonnées, expiration des bans temporaires.
 4. Étendre le jeu de langues au-delà de FR/EN si besoin.
