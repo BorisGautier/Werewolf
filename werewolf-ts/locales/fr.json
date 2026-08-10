@@ -210,6 +210,126 @@
     "SetLinkMissingArg": ["Tu dois fournir le lien d'invitation du groupe : /setlink <lien>"],
     "SetLinkInvalid": ["Ce n'est pas un lien d'invitation Telegram valide."],
     "SetLinkConfirmed": ["Lien du groupe défini : {0}"],
-    "RemLinkConfirmed": ["Le lien de ton groupe a été retiré."]
+    "RemLinkConfirmed": ["Le lien de ton groupe a été retiré."],
+
+    "AboutVillager": ["Votre rôle est simple : tentez de survivre. Tous les jours, vous aurez une chance de lyncher le loup."],
+    "AboutWolf": [
+      "Que la fête commence ! Vous êtes un Loup Garou. Toutes les nuits vous pourrez choisir d'attaquer et dévorer un joueur. À noter que si vous attaquez l'Alcoolique, vous deviendrez ivre et devrez passer une nuit de repos avec un mal de crâne épouvantable. Si vous attaquez le Maudit, il deviendra Loup, et rejoindra votre meute. Youpi !"
+    ],
+    "AboutDrunk": [
+      "Espèce d'alcoolique ! Vous n'êtes qu'un villageois, totalement imbibé d'alcool. Si un loup vous dévore, il aura un sacré mal de crâne et ne pourra pas attaquer la nuit suivante."
+    ],
+    "AboutSeer": [
+      "Vous êtes la Voyante. Toutes les nuits, vous pouvez choisir de révéler le rôle d'un des joueurs. Mais prudence ! Si vous annoncez aux autres que vous êtes la Voyante, les loups voudront vous tuer !"
+    ],
+    "AboutCursed": [
+      "Vous êtes maudit ! Pour le moment vous n'êtes qu'un villageois ordinaire… mais si les loups vous dévorent, vous rejoindrez leurs rangs !"
+    ],
+    "AboutHarlot": [
+      "Vous êtes la Catin du village, toutes les nuits, vous pourrez rendre visite à un autre joueur pour lui vendre vos charmes. S'il s'agit d'un loup, vous serez tuée, sinon, vous serez prévenue de l'innocence de votre partenaire. Si votre client est pris pour cible par les loups, ils vous dévoreront également… À l'inverse, si vous êtes de sortie et que les loups ont décidé de se rendre chez vous, vous survivrez !"
+    ],
+    "AboutBeholder": [
+      "En tant que Tyrannœil, vous serez prévenu de l'identité de la véritable Voyante (mais pas de celle du Fou). Vous saurez également s'il n'y a pas de Voyante."
+    ],
+    "AboutGunner": [
+      "Vous êtes le Chasseur, vous possédez deux balles d'argent. Pendant la journée, vous pourrez choisir d'abattre un autre joueur. Cependant tous les joueurs vous entendront, et connaîtront votre rôle. Vous n'avez que deux balles… Faites-en bon usage !"
+    ],
+    "AboutTraitor": [
+      "Sale traître ! Si vous survivez assez longtemps et que tous les loups viennent à mourir, vous en deviendrez un et pourrez dévorer vos anciens camarades !"
+    ],
+    "AboutGuardianAngel": [
+      "Vous êtes l'Ange Gardien. Toutes les nuits, choisissez un être à protéger. Mais attention, si vous choisissez de protéger un loup, vous avez 50% de chances d'en mourir !"
+    ],
+    "AboutDetective": [
+      "Vous êtes le Détective… Durant la journée, vous aurez la chance de pouvoir enquêter sur un joueur. Soyez prudent… Il y a 40% de chances que les Loups Garous soient informés de votre rôle."
+    ],
+    "AboutApprenticeSeer": [
+      "Pour le moment, vous n'êtes qu'un simple villageois. Mais si la Voyante venait à mourir, vous prendriez sa place."
+    ],
+    "AboutCultist": [
+      "En tant que Cultiste, votre but est de convertir tous les autres joueurs (à part les loups) à votre culte. Si tous les joueurs vivants à la fin de la partie font partie du culte, les cultistes gagnent."
+    ],
+    "AboutCultistHunter": [
+      "Votre job est de traquer les Cultistes. S'ils tentent de vous convertir, leur membre le plus récent mourra. De plus, chaque nuit, vous pourrez traquer un joueur et s'il est Cultiste, vous le tuerez."
+    ],
+    "AboutWildChild": [
+      "L'Enfant Sauvage choisit un autre joueur en début de partie, qui sera son idole. S'il venait à mourir, l'Enfant Sauvage entrerait dans une rage incontrôlable et deviendrait un Loup Garou…"
+    ],
+    "AboutFool": [
+      "Le Fou pense être voyant. Mais lorsqu'il dévoile le rôle d'un joueur, il est informé d'un rôle au hasard."
+    ],
+    "AboutMason": [
+      "Le rôle des Francs-Maçons est très simple : ce sont de simples villageois à ceci près qu'ils savent qui est également Franc-Maçon."
+    ],
+    "AboutDoppelganger": [
+      "Vos ancêtres étaient capables de se métamorphoser en quelqu'un d'autre… Vous n'avez pas cette capacité, mais vous pouvez choisir un joueur en début de partie. S'il vient à mourir, vous prendrez son rôle.\\nRemarque : S'il était converti au culte, vous recevrez son rôle initial. Toutes les autres règles normales s'appliquent : si vous devenez l'Enfant Sauvage dont le modèle est mort, vous serez Loup. S'il n'est pas mort, vous aurez ce même modèle.\\nLes Cultistes ne peuvent convertir un Doppelgänger qui n'a pas encore repris un rôle. Si le Doppelgänger n'est pas devenu quelqu'un d'autre à la fin de la partie, il perd, sauf s'il est l'un des deux amoureux."
+    ],
+    "AboutCupid": [
+      "Il y a de l'amour dans l'air ! En tant que Cupidon, vous pouvez choisir deux joueurs en début de partie. Ils tomberont éperdument amoureux ! Si l'un des deux meurt, l'autre mourra de chagrin.\\nRemarque : Les amoureux savent qui est leur âme sœur mais pas son rôle. S'ils sont les deux derniers survivants, ils gagnent, mais si l'un des deux survit et qu'ils sont d'équipes différentes (ex : Loup et Franc-Maçon), ils gagneront également."
+    ],
+    "AboutHunter": [
+      "Vous êtes la gâchette folle ! Le Fusilier est un peu paranoïaque, et peut tuer ses visiteurs nocturnes. Si les loups vous attaquent, vous avez une chance d'en abattre un. Si vous mourez, vous aurez la possibilité de tuer un autre joueur.\\nRemarque : Contre un loup seul, le Fusilier a 30% de chance de l'abattre et survivre. Ajoutez 20% par loup supplémentaire, mais dans ce cas, vous ne survivrez pas.\\nSi les Cultistes tentent de vous convertir, ils auront 50% de chance de réussir. S'ils échouent, vous aurez 50% de chance de tuer l'un d'entre eux !"
+    ],
+    "AboutSerialKiller": [
+      "Cet asile était sympathique, mais rien ne vaut la liberté. Vous êtes à présent prêt à tuer de nouveau ! Le Céréales Killer est un joueur solitaire… et gagne s'il est le dernier en vie (sauf amoureux). Vous pouvez tuer tous les joueurs : loups, Chasseur, Fusilier, Ange Gardien… Si les loups vous attaquent vous en tuerez un au hasard et survivrez."
+    ],
+    "AboutTanner": [
+      "Le rôle du Tanneur est très simple : son but est d'être lynché. S'il y parvient, il gagne immédiatement et tous les autres joueurs perdent."
+    ],
+    "AboutMayor": [
+      "Le Maire est un simple villageois, jusqu'à ce qu'il révèle son rôle. Pendant le vote pour le lynchage, sa voix compte alors double. Il est bien entendu du côté des villageois."
+    ],
+    "AboutPrince": [
+      "Secrètement, pour combattre l'ennui et la routine, le Prince donne du piment à sa vie en passant la journée avec les paysans. S'ils essayent de le lyncher, ils se rendront compte de leur erreur, et reviendront sur leur décision. Personne ne sera lynché. Cependant, cela ne peut arriver qu'une seule fois : si le village souhaite vraiment le lyncher, il mourra."
+    ],
+    "AboutSorcerer": [
+      "Vous souvenez-vous de la Voyante ? Maintenant, elle a son équivalent du côté des loups. La Sorcière peut voir uniquement si quelqu'un est loup ou Voyante, et gagne avec les loups."
+    ],
+    "AboutClumsyGuy": [
+      "Vous êtes le Maladroit. Peut-être que vous n'auriez pas dû traîner avec l'Alcoolique hier soir. Ou bien regarder l'éclipse sans lunettes ? À moins que ce ne soit le jus de citron du rince-doigts que vous vous êtes mis dans les yeux, pensant que c'était un innocent mouchoir ? Bon, résultat, vous n'y voyez vraiment rien. Pas sûr que vous puissiez voter pour la personne que vous voulez réellement lyncher. (Vous avez 50% de chance de voter aléatoirement pour une autre personne)"
+    ],
+    "AboutBlacksmith": [
+      "Vous êtes le Forgeron. Au fil des ans, aucune lame, aucune épée, aucune arme de votre fabrication ne vous a apporté autant de satisfaction que les lames d'argent que vous avaient commandées les elfes.\\nVous pourriez bien avoir encore un peu de limaille d'argent en stock… Qui sait ? Cela pourrait peut-être *empêcher les loups d'attaquer cette nuit* ? 🤔"
+    ],
+    "AboutAlphaWolf": [
+      "Vous êtes le Loup Alpha, l'origine de la malédiction, le fléau initial. Tant que vous êtes en vie, le repas de la meute a 20% de chances de devenir l'un des vôtres."
+    ],
+    "AboutWolfCub": [
+      "Ooooooh quel adorable petit Louveteau ! Hum hum… Je disais donc. Vous êtes le Louveteau et vous… roh et puis zut, vous êtes trop mignon. Si vous mourez, le reste de la meute pourra zigouiller deux victimes au lieu d'une pour vous venger. Vous êtes trop chou pour mourir."
+    ],
+    "AboutSandman": [
+      "Une fois par partie, le Marchand de sable peut utiliser sa magie pour plonger tout le monde dans un sommeil profond, les empêchant d'agir pendant une nuit."
+    ],
+    "AboutOracle": [
+      "L'Oracle peut découvrir quel rôle un joueur n'a PAS, parmi les rôles des joueurs encore en vie."
+    ],
+    "AboutWolfMan": [
+      "Vous êtes l'Homoursporc. Simple villageois, vous passez tellement de temps dans la forêt que la Voyante vous confondra avec un Loup ! Mince…"
+    ],
+    "AboutLycan": ["Le Lycan est un loup, mais apparaît comme un villageois aux yeux de la Voyante."],
+    "AboutWiseElder": [
+      "Le Sage 📚 peut survivre à une — et une seule — attaque de loups. Si le Chasseur ou le Fusilier le tuent, le chagrin leur fera perdre leur pouvoir et ils deviendront de simples villageois."
+    ],
+    "AboutThief": [
+      "Par défaut, le Voleur 😈 peut voler le rôle d'un joueur lors de la première nuit et le transformer en Villageois. Si l'option [Voleur à chaque tour] est activée, il a chaque nuit 50% de chances de voler son rôle à un joueur, et s'il y parvient, ce joueur devient voleur à sa place !"
+    ],
+    "AboutTroublemaker": [
+      "Perturbé par son trop-plein d'hormones, le Trouble-Fête est un adolescent un peu bruyant. Ses cris incessants et sa propension à pousser n'importe quel instrument de musique à un volume déraisonnable sont difficiles à supporter pour le reste du village. Pour le pousser à s'arrêter, la population est prête à exécuter DEUX personnes !"
+    ],
+    "AboutChemist": [
+      "Le Chimiste est un ancien professeur un peu timbré, qui aime jouer avec ses mixtures. Sa passion ? Concocter deux potions dont une mortelle, et trouver quelqu'un avec qui boire… Bonne chance s'il s'invite chez vous !"
+    ],
+    "AboutSnowWolf": [
+      "Le Loup des Neiges 🐺☃️ est un loup originaire des montagnes enneigées près du village. C'est là-bas qu'il a appris à contrôler la neige et la glace. Solitaire, il préfère agir sans la meute, et peut choisir chaque nuit une proie pour la geler. Un personnage gelé ne peut pas agir la nuit, et ne peut pas être gelé à nouveau la nuit suivante."
+    ],
+    "AboutGraveDigger": [
+      "Vous êtes le fossoyeur ☠️. Chaque nuit, vous creusez la tombe des personnes mortes depuis la dernière fois que vous l'avez fait (oui, même les loups garous méritent une vraie sépulture). Puisque vous êtes loin toute la nuit, les loups et le culte ne vous trouveront pas, à moins que vous n'ayez rien à faire (pas de morts par ex.), dans ce cas-là vous restez chez vous. Tous ceux qui vous rendent visite ont une chance de tomber dans l'une de vos tombes fraîchement creusées, plus vous en avez creusées, plus il y a de chances qu'ils tombent dedans. Les chances sont réduites de moitié pour les gens dans l'équipe des villageois avec vous. Mais puisque vous êtes dehors la nuit, les loups ou le céréale killer risquent de vous repérer et de vous tuer et plus vous avez de tombes à creuser, plus cela a de chances de se produire. Le céréale killer pourra vous trouver que vous soyez chez vous ou pas apparemment, mais il risque de trébucher dans au moins une de vos tombes et de se blesser la jambe, ce qui pourrait lui faire perdre le contrôle de sa victime la nuit suivante..."
+    ],
+    "AboutArsonist": [
+      "Vous êtes le Pyromane 🔥. Comme le Céréale Killer, vous êtes seul dans votre équipe. Toutes les nuits, vous pouvez cibler une maison que vous aspergerez de kérosène. Lorsqu'une ou plusieurs maisons sont aspergées, vous pourrez choisir de provoquer une étincelle qui brûlera toutes les maisons ciblées et tuera toute personne à l'intérieur, incluant les potentiels visiteurs. Vous gagnez si vous êtes le dernier survivant."
+    ],
+    "AboutAugur": [
+      "Vous êtes l'Augure 🦅. Chaque matin, vous pouvez regarder le vol des oiseaux et deviner un rôle qui n'est pas présent dans le village. Les oiseaux ne vous montreront jamais deux fois le même rôle, usez bien de cette information !"
+    ]
   }
 }
