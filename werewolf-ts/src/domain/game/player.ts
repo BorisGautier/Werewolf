@@ -73,6 +73,8 @@ export interface Player {
   dayCult: number;
   /** Augur mechanic: roles they've already been shown, so they never see the same one twice. */
   sawRoles: Role[];
+  /** Thief/Doppelganger mechanic: id of the player whose role this one copied/stole, if any. */
+  roleModel: bigint | null;
 }
 
 export function createPlayer(id: bigint, name: string, role: Role, team: Team): Player {
@@ -114,6 +116,7 @@ export function createPlayer(id: bigint, name: string, role: Role, team: Team): 
     stumbledGrave: 0,
     dayCult: 0,
     sawRoles: [],
+    roleModel: null,
   };
 }
 

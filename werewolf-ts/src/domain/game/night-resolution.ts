@@ -11,11 +11,16 @@
  * state, threaded through each step in the same order the original uses.
  *
  * Ported so far: Snow Wolf, Arsonist, Wolves, Serial Killer, Cultist Hunter,
- * Cult, Chemist, Harlot, Guardian Angel (Seer/Sorcerer/Fool/Oracle/Augur live
- * in `clairvoyance.ts` - they're almost entirely informational, not really
- * "night resolution" in the causal sense). Everything else in the documented
- * priority order (Grave Digger, Thief, plus the day-1-only/passive roles) is
- * tracked separately and still to come - see the project's task list.
+ * Cult, Chemist, Harlot, Guardian Angel, Thief (Seer/Sorcerer/Fool/Oracle/
+ * Augur live in `clairvoyance.ts` - they're almost entirely informational,
+ * not really "night resolution" in the causal sense). Grave Digger's own
+ * "how many graves did I dig" computation happens during menu-building in
+ * the original (`SendNightActions`, an infra concern), not in `NightCycle`'s
+ * resolution phase, so there's no separate Grave Digger resolver here - its
+ * *interactions* with other roles (being frozen, spotted, visited) are
+ * already covered above. What's left: the day-1-only/passive roles (Cupid,
+ * Wild Child, Doppelganger, Mayor, ...) - tracked separately, see the
+ * project's task list.
  */
 
 import { ROLE_BIT, type Role } from '../roles/role.js';
@@ -24,6 +29,7 @@ import { killPlayer } from './kill.js';
 import { ABSTAIN, SPARK, type Player } from './player.js';
 import { visitPlayer, graveDiggerDetectionChance, type VisitContext } from './night-visit.js';
 import { promoteToCultist, promoteToWolf } from './transform.js';
+import { getTeamForRole } from './team.js';
 import type { GameEvent } from './game-event.js';
 
 /**
@@ -667,6 +673,110 @@ export function resolveGuardianAngelNight(
     } else if (save.doused) {
       save.doused = false;
       events.push({ type: 'GuardianAngelCleanedDouse', playerId: save.id });
+    }
+  }
+
+  return events;
+}
+
+/**
+ * Port of `StealRole`: swaps the Thief and their target's role (and the
+ * target-specific stats that ride along with a role: bullet count,
+ * hasUsedAbility, roleModel). The target becomes a Villager (or, in
+ * "ThiefFull" games, a plain Thief); the original Thief takes over
+ * everything about the stolen role.
+ *
+ * If the target turns out to be dead (only possible in the non-ThiefFull,
+ * night-1 path - `VisitPlayer` lets a non-full Thief's visit "succeed" even
+ * against a dead target), a random living player is picked instead, exactly
+ * like the original's `ChooseRandomPlayerId` fallback.
+ */
+function stealRole(
+  players: Player[],
+  thief: Player,
+  initialTarget: Player,
+  thiefFull: boolean,
+  visitCtx: VisitContext,
+  random: () => number,
+): GameEvent[] {
+  const events: GameEvent[] = [];
+  let target = initialTarget;
+
+  if (target.isDead) {
+    const alive = players.filter((p) => !p.isDead && p.id !== thief.id);
+    if (alive.length === 0) return events;
+    target = alive[Math.floor(random() * alive.length)]!;
+    thief.choice = target.id;
+  }
+
+  const { result, events: visitEvents } = visitPlayer(visitCtx, thief, target);
+  events.push(...visitEvents);
+  if (result !== 'Success') return events;
+
+  const stolenRole = target.role;
+  const stolenRoleModel = target.roleModel;
+  const stolenBullet = target.bullet;
+  const stolenHasUsedAbility = target.hasUsedAbility;
+
+  target.role = thiefFull ? ROLE_BIT.Thief : ROLE_BIT.Villager;
+  target.team = getTeamForRole(target.role);
+  target.changedRolesCount++;
+
+  thief.role = stolenRole;
+  thief.team = getTeamForRole(stolenRole);
+  thief.changedRolesCount++;
+  thief.roleModel = stolenRoleModel;
+  thief.bullet = stolenBullet;
+  thief.hasUsedAbility = stolenHasUsedAbility;
+
+  events.push({ type: 'RoleStolen', thiefId: thief.id, targetId: target.id, stolenRole });
+  return events;
+}
+
+/**
+ * Port of the `#region Thief Night` block. A non-"ThiefFull" Thief steals
+ * unconditionally, but only on the first night; a "ThiefFull" Thief can
+ * steal every night, gated by both `frozen` and a 50% roll, and can never
+ * target a wolf-team role, Cultist, or Snow Wolf.
+ */
+export function resolveThiefNight(
+  players: Player[],
+  dayNumber: number,
+  thiefFull: boolean,
+  visitCtx: VisitContext,
+): GameEvent[] {
+  const events: GameEvent[] = [];
+  const random = visitCtx.random ?? Math.random;
+
+  const thief = players.find((p) => p.role === ROLE_BIT.Thief && !p.isDead);
+  if (!thief) return events;
+
+  if (!thiefFull) {
+    if (dayNumber !== 1) return events;
+    const target = players.find((p) => p.id === thief.choice);
+    if (!target) return events;
+
+    const { result, events: visitEvents } = visitPlayer(visitCtx, thief, target);
+    events.push(...visitEvents);
+    if (result === 'Success') {
+      events.push(...stealRole(players, thief, target, thiefFull, visitCtx, random));
+    }
+    return events;
+  }
+
+  if (thief.frozen) return events;
+  const target = players.find((p) => p.id === thief.choice);
+  const { result, events: visitEvents } = visitPlayer(visitCtx, thief, target);
+  events.push(...visitEvents);
+
+  if (result === 'Success' && target) {
+    const canSteal =
+      Math.floor(random() * 100) < 50 && // Settings.ThiefStealChance
+      !WOLF_ROLES.includes(target.role) &&
+      target.role !== ROLE_BIT.Cultist &&
+      target.role !== ROLE_BIT.SnowWolf;
+    if (canSteal) {
+      events.push(...stealRole(players, thief, target, thiefFull, visitCtx, random));
     }
   }
 

@@ -1,4 +1,5 @@
 import type { KillMethod } from './kill-method.js';
+import type { Role } from '../roles/role.js';
 import type { Team } from './team.js';
 
 /**
@@ -35,4 +36,5 @@ export type GameEvent =
   | { type: 'GuardianAngelBlockedSerialKiller'; targetId: bigint }
   | { type: 'PlayerConvertedToCult'; playerId: bigint }
   | { type: 'CultConversionFailed'; targetId: bigint }
-  | { type: 'GuardianAngelCleanedDouse'; playerId: bigint };
+  | { type: 'GuardianAngelCleanedDouse'; playerId: bigint }
+  | { type: 'RoleStolen'; thiefId: bigint; targetId: bigint; stolenRole: Role };
