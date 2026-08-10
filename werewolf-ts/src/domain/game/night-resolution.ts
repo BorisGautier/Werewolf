@@ -10,19 +10,19 @@
  * GA itself gets frozen by the Snow Wolf). `NightState` below is that shared
  * state, threaded through each step in the same order the original uses.
  *
- * Ported so far: Snow Wolf, Arsonist, Wolves. Everything else in the
- * documented priority order (Grave Digger, Serial Killer, Cultist Hunter,
- * Cult, Chemist, Harlot, Seer, Sorcerer, Fool, Oracle, Augur, Guardian
- * Angel, Thief, plus the day-1-only/passive roles) is tracked separately and
- * still to come - see the project's task list.
+ * Ported so far: Snow Wolf, Arsonist, Wolves, Serial Killer, Cultist Hunter,
+ * Cult. Everything else in the documented priority order (Grave Digger,
+ * Chemist, Harlot, Seer, Sorcerer, Fool, Oracle, Augur, Guardian Angel,
+ * Thief, plus the day-1-only/passive roles) is tracked separately and still
+ * to come - see the project's task list.
  */
 
-import { ROLE_BIT } from '../roles/role.js';
+import { ROLE_BIT, type Role } from '../roles/role.js';
 import { WOLF_ROLES } from './game-balancing.js';
 import { killPlayer } from './kill.js';
 import { ABSTAIN, SPARK, type Player } from './player.js';
 import { visitPlayer, graveDiggerDetectionChance, type VisitContext } from './night-visit.js';
-import { promoteToWolf } from './transform.js';
+import { promoteToCultist, promoteToWolf } from './transform.js';
 import type { GameEvent } from './game-event.js';
 
 /**
@@ -413,6 +413,154 @@ export function resolveCultistHunterNight(players: Player[], visitCtx: VisitCont
     events.push(...killPlayer(players, hunted.id, 'Hunt', { killerIds: [hunter.id] }));
   }
   // Fail/AlreadyDead/a non-Cultist Success target: no state change, message-only in the original.
+
+  return events;
+}
+
+/** Conversion odds for target roles that don't have a bespoke mechanical branch (Settings.*ConversionChance). Anything absent defaults to 100 (guaranteed), matching the original's `ConvertToCult(target, voteCult)` default-argument fallback. */
+const CULT_CONVERSION_CHANCE = new Map<Role, number>([
+  [ROLE_BIT.Seer, 40],
+  [ROLE_BIT.GuardianAngel, 60],
+  [ROLE_BIT.Detective, 70],
+  [ROLE_BIT.Cursed, 60],
+  [ROLE_BIT.Harlot, 70],
+  [ROLE_BIT.Sorcerer, 40],
+  [ROLE_BIT.Blacksmith, 75],
+  [ROLE_BIT.Oracle, 50],
+  [ROLE_BIT.Sandman, 60],
+  [ROLE_BIT.WiseElder, 30],
+  [ROLE_BIT.Pacifist, 80],
+  [ROLE_BIT.GraveDigger, 30],
+  [ROLE_BIT.Augur, 40],
+  [ROLE_BIT.Doppelganger, 0],
+  [ROLE_BIT.Thief, 0],
+  [ROLE_BIT.Spumpkin, 0],
+]);
+
+/** Port of `ConvertToCult`. */
+function convertToCult(target: Player, chance: number, dayNumber: number, random: () => number): GameEvent[] {
+  if (Math.floor(random() * 100) < chance) {
+    promoteToCultist(target, dayNumber);
+    return [{ type: 'PlayerConvertedToCult', playerId: target.id }];
+  }
+  return [{ type: 'CultConversionFailed', targetId: target.id }];
+}
+
+/**
+ * Resolves what happens when the cult's "newbie" successfully visits their
+ * night's target. Mirrors the `switch (target.PlayerRole)` inside the Cult
+ * Night block's `case VisitResult.Success`.
+ */
+function resolveCultVictim(
+  players: Player[],
+  target: Player,
+  newbie: Player,
+  state: NightState,
+  dayNumber: number,
+  random: () => number,
+): GameEvent[] {
+  switch (target.role) {
+    case ROLE_BIT.Hunter: {
+      if (Math.floor(random() * 100) < 50) {
+        // Settings.HunterConversionChance
+        promoteToCultist(target, dayNumber);
+        return [{ type: 'PlayerConvertedToCult', playerId: target.id }];
+      }
+      if (Math.floor(random() * 100) < 50) {
+        // Settings.HunterKillCultChance
+        return killPlayer(players, newbie.id, 'HunterCult', { killerIds: [target.id], diedByVisitingKiller: true });
+      }
+      return [{ type: 'CultConversionFailed', targetId: target.id }];
+    }
+
+    case ROLE_BIT.CultistHunter:
+      return killPlayer(players, newbie.id, 'Hunt', { killerIds: [target.id], diedByVisitingKiller: true });
+
+    case ROLE_BIT.Wolf:
+    case ROLE_BIT.AlphaWolf:
+    case ROLE_BIT.WolfCub:
+    case ROLE_BIT.Lycan: {
+      const wolvesWentHunting = state.wolvesThatActed.some(
+        (w) => (w.choice !== null && w.choice !== ABSTAIN) || (w.choice2 !== null && w.choice2 !== ABSTAIN),
+      );
+      if (wolvesWentHunting) return [];
+      return killPlayer(players, newbie.id, 'VisitWolf', {
+        killerIds: [target.id],
+        diedByVisitingKiller: true,
+        killedByRole: ROLE_BIT.Wolf,
+      });
+    }
+
+    case ROLE_BIT.SnowWolf: {
+      const wentFreezing = target.choice !== null && target.choice !== ABSTAIN;
+      if (wentFreezing) return [];
+      return killPlayer(players, newbie.id, 'VisitWolf', {
+        killerIds: [target.id],
+        diedByVisitingKiller: true,
+        killedByRole: ROLE_BIT.Wolf,
+      });
+    }
+
+    case ROLE_BIT.Arsonist:
+      if (target.choice === ABSTAIN || target.frozen) {
+        return convertToCult(target, 0, dayNumber, random); // guaranteed to fail - matches the original's forced chance:0
+      }
+      return [];
+
+    default: {
+      const chance = CULT_CONVERSION_CHANCE.get(target.role) ?? 100;
+      return convertToCult(target, chance, dayNumber, random);
+    }
+  }
+}
+
+/** Port of the `#region Cult Night` block. */
+export function resolveCultNight(players: Player[], state: NightState, visitCtx: VisitContext): GameEvent[] {
+  const events: GameEvent[] = [];
+  const random = visitCtx.random ?? Math.random;
+
+  const voteCult = players.filter((p) => p.role === ROLE_BIT.Cultist && !p.isDead && !p.frozen);
+  if (voteCult.length === 0) return events;
+
+  const acted = voteCult.filter((c) => c.choice !== null && c.choice !== ABSTAIN);
+  if (acted.length === 0) return events;
+
+  // Most-voted target (mode). Ties go to whichever target was voted for first (mirrors the original's
+  // `GroupBy(x => x.Choice).OrderByDescending(x => x.Count()).First()`, a stable sort over a
+  // first-occurrence-ordered grouping).
+  const voteCounts = new Map<bigint, number>();
+  const firstSeenOrder: bigint[] = [];
+  for (const c of acted) {
+    const choice = c.choice!;
+    if (!voteCounts.has(choice)) {
+      voteCounts.set(choice, 0);
+      firstSeenOrder.push(choice);
+    }
+    voteCounts.set(choice, voteCounts.get(choice)! + 1);
+  }
+  let choiceId: bigint | null = null;
+  let bestCount = 0;
+  for (const id of firstSeenOrder) {
+    const count = voteCounts.get(id)!;
+    if (count > bestCount) {
+      bestCount = count;
+      choiceId = id;
+    }
+  }
+  if (choiceId === null) return events;
+
+  const target = players.find((p) => p.id === choiceId);
+  if (!target) return events;
+
+  // The "newbie" - most recently converted cultist, ties broken by original list order - is who visits.
+  const newbie = [...voteCult].sort((a, b) => b.dayCult - a.dayCult)[0]!;
+
+  const { result, events: visitEvents } = visitPlayer(visitCtx, newbie, target);
+  events.push(...visitEvents);
+
+  if (result === 'Success') {
+    events.push(...resolveCultVictim(players, target, newbie, state, visitCtx.dayNumber, random));
+  }
 
   return events;
 }
