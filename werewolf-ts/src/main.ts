@@ -10,6 +10,7 @@ import { GroupRepository } from './infrastructure/persistence/group.repository.j
 import { PlayerRepository } from './infrastructure/persistence/player.repository.js';
 import { createBot } from './infrastructure/telegram/bot.js';
 import { disconnectPrisma, getPrismaClient } from './infrastructure/persistence/prisma-client.js';
+import { startCronJobs } from './infrastructure/cron/scheduler.js';
 
 async function main(): Promise<void> {
   const env = loadEnv();
@@ -34,9 +35,11 @@ async function main(): Promise<void> {
   logger.info({ username: bot.botInfo.username }, 'Bot initialized');
 
   const runner = run(bot);
+  const stopCronJobs = startCronJobs(prisma, logger);
 
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'Shutting down...');
+    stopCronJobs();
     if (runner.isRunning()) await runner.stop();
     await disconnectPrisma();
     process.exit(0);
