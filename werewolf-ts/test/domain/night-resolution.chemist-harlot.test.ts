@@ -28,6 +28,20 @@ describe('resolveChemistNight', () => {
     );
   });
 
+  it('demotes the Chemist to Villager when their potion kills the Wise Elder', () => {
+    const chemist = createPlayer(1n, 'Ch', ROLE_BIT.Chemist, 'Village');
+    const target = createPlayer(2n, 'T', ROLE_BIT.WiseElder, 'Village');
+    chemist.choice = target.id;
+
+    const events = resolveChemistNight([chemist, target], baseCtx([chemist, target], () => 0));
+
+    expect(target.isDead).toBe(true);
+    expect(chemist.role).toBe(ROLE_BIT.Villager);
+    expect(chemist.team).toBe('Village');
+    expect(chemist.changedRolesCount).toBe(1);
+    expect(events.some((e) => e.type === 'ChemistLostPowerToWiseElder' && e.playerId === chemist.id)).toBe(true);
+  });
+
   it('kills the Chemist themselves on a failed roll', () => {
     const chemist = createPlayer(1n, 'Ch', ROLE_BIT.Chemist, 'Village');
     const target = createPlayer(2n, 'T', ROLE_BIT.Villager, 'Village');
