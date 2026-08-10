@@ -4,7 +4,7 @@ import { createPlayer } from '../../src/domain/game/player.js';
 import { initialNightState, resolveWolfNight } from '../../src/domain/game/night-resolution.js';
 
 function baseCtx(players: ReturnType<typeof createPlayer>[], random?: () => number) {
-  return { players, dayNumber: 1, thiefFull: false, random };
+  return { players, dayNumber: 1, thiefFull: false, ...(random !== undefined ? { random } : {}) };
 }
 
 describe('resolveWolfNight', () => {
