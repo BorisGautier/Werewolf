@@ -114,6 +114,105 @@
 
     "PlayerFoundDead": ["{0} was found dead this morning."],
     "PlayerFoundDeadWithRole": ["{0} was found dead this morning. They were a {1}."],
+
+    "DetectiveEaten": [
+      "The villagers gather in the morning, but do not see {0}. They wander over to the house, to find {0} disemboweled, an old badge shoved down their throat."
+    ],
+    "GuardianEaten": [
+      "Morning comes, and to everyone's dismay, impaled on top of the church's cross is {0}, the Guardian Angel."
+    ],
+    "GunnerEaten": [
+      "As everyone comes out of their houses, they find pieces of a shotgun strewn about... then legs... then fingers... then the body of {0}, floating in the fountain in the town square, dead from a werewolf attack. You have lost your gunner."
+    ],
+    "SeerEaten": [
+      "The villagers awake in the morning, to find the disemboweled remains of {0} hunched over a Ouija board and tarot cards. The Seer is dead."
+    ],
+    "DrunkEaten": [
+      "Everyone wakes to the smell of alcohol and blood... the pub is destroyed! After cleaning the blood out, the remains of {0} are found, torn apart."
+    ],
+    "FoolEaten": [
+      "As the sun rises above the village, the villagers find the corpse of {0} sitting over a Ouija board, but with a deck of... playing cards? WHAT A FOOL!"
+    ],
+    "HarlotEaten": ["The harlot chose the wrong night to stay home. {0} has been eaten by the wolves!"],
+    "MasonEaten": [
+      "As everyone rises, they find the body of {0} shoved into a pile of stone, blood splattered everywhere. One of your masons has died!"
+    ],
+    "ApprenticeSeerEaten": [
+      "The villagers awake to find {0} hunched over a second-hand Ouija board while practising fortune-telling, with head missing. The Apprentice Seer is dead."
+    ],
+    "SorcererEaten": [
+      "The sound of mournful howls can be heard across the village. A mistake has been made. The wolves have killed one of their own. The Sorcerer {0} is dead.",
+      "Cries of \"I'm your ally!\" were heard last night. All the villagers found next morning were an exhumed body and smashed mystical ball, belonging to {0}, the sorcerer. Hunger trumps comradeship..."
+    ],
+    "WildChildEaten": [
+      "The wolves were heard last night, eating up a tender Wild Child, {0}, leaving behind only a reduced-size skeleton! The village wondered if the wolves felt any guilt tearing apart the defenceless child."
+    ],
+    "DefaultEaten": [
+      "As everyone rises in the morning, they smell a terrible stink. They follow the smell to find {0} shredded apart in the pig pen, head missing.\\n{1}"
+    ],
+
+    "BlacksmithKilled": [
+      "Seems like {0}, the resident blacksmith, must have been extremely unlucky. Five knives, fresh from {0}'s armory, were found plunged into their hands, feet and head, and pinned to the craftsman's table last night. Maybe the serial killer was hoping to expand their weapon collection alongside their organ one..."
+    ],
+    "CultistKilled": [
+      "{0} was found stabbed to death with a candlestick by their altar. The serial killer has struck again, regardless of race, language or religion! {0} was a Cultist."
+    ],
+    "CupidKilled": [
+      "The next morning, the villagers were heartbroken to find {0} a.k.a. Cupid split from head to toe. Strangely the heart was missing..."
+    ],
+    "DrunkKilled": [
+      "The villagers had hoped to meet {0} to compliment their drink, but all they found in {0}'s home was a broken knife and liver. All those years of drinking led to a liver so hard that even the Serial Killer probably does not fancy it..."
+    ],
+    "GuardianAngelKilled": [
+      "{0} would normally have managed to fight off the serial killer, but it was an irony that the Guardian Angel's halo has extinguished. {0} is dead."
+    ],
+    "GunnerKilled": [
+      "Looks like {0} was caught napping last night! A gunshot was heard last night, but all there was was the remains of a gunner, with a bullet hole to the head and a stab to the torso. Clearly the serial killer has won."
+    ],
+    "MayorKilled": [
+      "Assassination! {0} the mayor was found pinned with a knife on the table while working overnight at the mayor office! Clearly it's the serial killer exacting revenge for the asylum robbing them of years of their life!"
+    ],
+    "PrinceKilled": [
+      "Bells ring across the village before the sunrise, as armed guards flood the streets investigating the disappearance of Prince {0}. No clues were discovered, but it is suspected that there is a Serial Killer on the loose...",
+      "{0}'s guards were caught napping last night. The royal remains of {0} were found, hung in various parts of the palace, having fallen prey to the knife. No amount of princely blood would deter a serial killer's blade."
+    ],
+    "SeerKilled": [
+      "The villagers wake up to a rotting corpse of {0}, split from head to toe, stabs all over. Strangely the brain was carefully extricated, as if it was a premonition that the village has lost their top brains. {0} was the Seer."
+    ],
+    "DefaultKilled": [
+      "It seemed a quiet enough night for {0}, but they were wrong. The villagers gather in the morning to find {0} split from head to toe, but oddly the liver was missing... The serial killer has struck again! {1}"
+    ],
+
+    "HarlotFellPublic": [
+      "As the harlot {0} went home after a night of fun they tried to take a shortcut through the local graveyard. They must have been still a bit dizzy that they didn't see the uncovered grave until they felt no ground under their next step. Maybe they should have taken that daytime job they got offered yesterday!"
+    ],
+    "CultistFellPublic": [
+      "The cult tried to burn the church, but as {0} led the group through the graveyard, a bear trap snapped around their ankle! They screamed when they fell into an open grave and the other cultists fled in terror..."
+    ],
+    "ThiefFellPublic": [
+      "Maybe {0} the thief was trying to steal from the dead. Maybe it was karma. All we know is that they lurked around the graveyard when the trap snapped their leg. While falling into the grave, they wondered whether they should have brought a partner in crime for this job. {0} won't be stealing any more for sure!"
+    ],
+    "WolfFellPublic": [
+      "As the wolf pack goes out for a hunt, {0} smells potential prey and doesn't notice the bear trap that snaps around their ankle! Surprised, {0} falls over into the grave, where the tip of a silver spear meets their head. Luckily the grave digger keeps their graves secured! {1}"
+    ],
+    "DefaultFellPublic": [
+      "One of the graves in the graveyard contained too many people tonight... Apparently {0} tried to visit the grave digger, fell into a grave and died! {1}"
+    ],
+
+    "WolfVisitBurn": [
+      "The wolves tried to eat someone tonight again, but the arsonist was quicker! {0} couldn't escape from the burning house in time... {1}"
+    ],
+    "DefaultVisitBurn": ["{0} should have stayed home tonight... They visited a burning house and died in the flames! {1}"],
+
+    "ChemistSuccessPublic": [
+      "The chemist has visited {0} tonight and they chose the poisonous potion! While the crazy chemist is still alive, {0} died. {1}"
+    ],
+    "ChemistFailPublic": [
+      "The chemist {0} was found dead! Apparently, {0} had bad luck and drank the poisonous potion during their nightly visit! Pray you never bought your medicines from them..."
+    ],
+    "ChemistKillWiseElder": [
+      "Even though you still don't really know who the chemist is, you are sure that they will never again make such a miserable mistake. The chemist gave up on their job and became a normal villager!"
+    ],
     "NoOneDiedLastNight": ["Miraculously, no one died last night!"],
 
     "AskHunterShot": ["As your final act, who would you like to take down with you?"],

@@ -114,6 +114,99 @@
 
     "PlayerFoundDead": ["{0} a été retrouvé(e) mort(e) ce matin."],
     "PlayerFoundDeadWithRole": ["{0} a été retrouvé(e) mort(e) ce matin. C'était un(e) {1}."],
+
+    "DetectiveEaten": [
+      "Les villageois se réunissent à l'aube, mais personne ne voit {0}. Tous se rendent chez lui, et découvrent {0} démembré, ses entrailles déchiquetées, une insigne en travers de la gorge."
+    ],
+    "GuardianEaten": [
+      "L'aube se lève, et au désespoir de tout le monde, un être ailé est empalé sur la girouette du clocher. {0}, l'Ange Gardien, est mort."
+    ],
+    "GunnerEaten": [
+      "Alors que tous les villageois sortent de chez eux, ils remarquent le canon d'un fusil... puis des jambes... puis des bras... puis, flottant dans la fontaine du village, le corps de votre Chasseur, {0}. La fontaine va être dure à laver..."
+    ],
+    "SeerEaten": ["Les villageois se réveillent, pour entrevoir les restes de {0} étalés sur un jeu de tarot. La Voyante est morte !"],
+    "DrunkEaten": [
+      "Une odeur d'alcool et de fumée réveille les villageois... Le bar est en feu... Le corps de {0} est retrouvé, à l'heure du déjeuner, cuit à point. Dommage que vous ayez mangé une tartine il y a peu..."
+    ],
+    "FoolEaten": [
+      "Les villageois se réveillent, pour entrevoir les restes de {0} étalés sur un jeu des... sept familles ?! Quel fou !"
+    ],
+    "HarlotEaten": ["La Catin a choisi le mauvais jour pour prendre une pause... {0} a servi de repas aux loups !"],
+    "MasonEaten": [
+      "Alors que le village se réveille, les restes d'un corps sans vie, étalés dans le sable et la boue, forment le symbole des Francs-Maçons... l'un d'entre eux vient de mourir ! -- {0}"
+    ],
+    "ApprenticeSeerEaten": [
+      "Les villageois se réveillent et découvrent {0}, tête manquante, tenant dans sa main un tarot de mauvaise facture et un manuel de voyance. L'Apprenti Voyant est mort."
+    ],
+    "SorcererEaten": [
+      "Une fanfare de cris de corbeaux retentit sur le village... Les loups ont fait une erreur, et tué une alliée. La Sorcière {0} est morte.",
+      "Des cris retentissent dans la nuit. \"Je suis votre alliée, bande de stupides sacs à puces !\" Au matin les villageois découvrent le corps sans vie de {0}, la Sorcière, à moitié dévoré."
+    ],
+    "WildChildEaten": [
+      "Miam miam miam ! Les loups se sont régalés de l'Enfant Sauvage {0}, dont il ne reste qu'un tout petit squelette. Les villageois se demandent tout de même si les loups ont eu un peu de scrupules..."
+    ],
+    "DefaultEaten": [
+      "Alors que le village se réveille, on retrouve les restes de {0} dispersés dans l'enclos à cochons... tête manquante... MIAMIAMIAMIAMIAM.\\n{1}"
+    ],
+
+    "BlacksmithKilled": [
+      "Il semblerait que {0}, le Forgeron, soit extrêmement malchanceux. Cinq couteaux de sa propre armurerie sont plantés dans son corps, le punaisant contre le mur... Le Céréales Killer semble avoir agrandi sa collection d'organes..."
+    ],
+    "CultistKilled": [
+      "{0} est retrouvé poignardé avec un chandelier... Le Céréales Killer semble n'avoir que faire de la religion ! {0} était un Cultiste."
+    ],
+    "CupidKilled": [
+      "Le jour se lève et les villageois découvrent le cœur brisé de {0} alias Cupidon, dépecé par un psychopathe collectionneur de doigts de pieds..."
+    ],
+    "DrunkKilled": [
+      "Les villageois se rendent chez {0} pour l'apéro, mais ne retrouvent chez lui qu'un grand couteau et un foie complètement cirrhosé. Il semblerait que des années d'alcoolisme aient sauvé son foie du Céréales Killer. Le reste en revanche..."
+    ],
+    "GuardianAngelKilled": ["{0} aurait en théorie pu vaincre le Céréales Killer, mais il semblerait qu'il en soit advenu autrement. {0} est mort."],
+    "GunnerKilled": [
+      "{0} devait dormir très profondément cette nuit ! Un coup de feu a été entendu, et on l'a retrouvé avec un trou dans la tête, et un doigt de pied manquant. Le Céréales Killer a encore frappé..."
+    ],
+    "MayorKilled": [
+      "Au meurtre ! {0} le Maire est retrouvé poignardé, gisant sur son bureau sur des documents officiels. Il s'agit clairement d'un coup du Céréales Killer."
+    ],
+    "PrinceKilled": [
+      "Les cloches sonnent ce matin, et les gardes enquêtent sur la disparition du Prince {0}. Aucun indice n'est retrouvé, on soupçonne un coup du Céréales Killer...",
+      "Les gardes royaux se sont permis une petite sieste... Les restes princiers de {0} sont retrouvés dispersés en plusieurs endroits du palais. Le Céréales Killer s'est bien amusé..."
+    ],
+    "SeerKilled": [
+      "Les villageois se réveillent et retrouvent le cadavre de {0}, criblé de coups de couteau. Bizarrement, il lui manque un doigt de pied... {0} était la Voyante."
+    ],
+    "DefaultKilled": [
+      "La nuit avait pourtant eu l'air bien calme... Les villageois se rassemblent à l'aube et découvrent le cadavre de {0}, presque intact. Il ne lui manque qu'un doigt de pied. Le Céréales Killer a encore frappé ! {1}"
+    ],
+
+    "HarlotFellPublic": [
+      "Lorsque la catin {0} rentrait chez elle après une nuit de folie, elle tenta de prendre un raccourci par le cimetière local. Elle devait encore être un peu étourdie car elle est tombée dans une tombe grande ouverte. Peut-être qu'elle aurait dû accepter l'offre d'emploi qu'elle avait reçue hier..."
+    ],
+    "CultistFellPublic": [
+      "Le culte a essayé de mettre le feu à l'église mais, alors que {0} menait le groupe à travers le cimetière, un piège à ours se referma autour de sa cheville ! Il a crié en tombant dans une tombe ouverte et les autres cultistes ont fui, terrorisés..."
+    ],
+    "ThiefFellPublic": [
+      "Peut-être que le voleur essayait de voler parmi les morts. Peut-être que c'était le karma. Tout ce que nous savons, c'est qu'il se cachait dans le cimetière lorsque le piège s'est refermé sur sa jambe. En tombant dans la tombe, il s'est demandé s'il n'aurait pas dû faire venir un partenaire pour ce travail. {0} ne volera plus à coup sûr !"
+    ],
+    "WolfFellPublic": [
+      "Alors que la meute de loups part à la chasse, {0} sent des proies potentielles, se met à courir mais ne remarque pas le piège à ours qui lui attrape la cheville ! Surpris, {0} dégringole dans une tombe, où la pointe d'une lance en argent rencontre sa tête. Heureusement, le fossoyeur garde ses tombes bien en sécurité ! {1}"
+    ],
+    "DefaultFellPublic": [
+      "Une des tombes du cimetière est beaucoup trop remplie ce soir... Apparemment {0} a essayé de rendre visite au fossoyeur, est tombé dans une tombe et est mort ! {1}"
+    ],
+
+    "WolfVisitBurn": [
+      "Les loups ont essayé de trouver une nouvelle victime, mais le pyromane les a devancés ! {0} n'a pu s'échapper des flammes à temps... {1}"
+    ],
+    "DefaultVisitBurn": ["{0} aurait dû rester chez soi ce soir... Sa visite s'est terminée dans les flammes d'une maison incendiée ! {1}"],
+
+    "ChemistSuccessPublic": [
+      "Le Chimiste a pris l'apéro chez {0} ! Il court encore, et {0} n'est plus qu'un cadavre. Avec une légère teinte verdâtre. {1}"
+    ],
+    "ChemistFailPublic": ["{0}, le Chimiste, est retrouvé mort ! C'était son dernier apéro."],
+    "ChemistKillWiseElder": [
+      "Bien que vous ne sachiez toujours pas qui est le chimiste, vous êtes certain qu'une telle erreur ne se reproduira pas. Le chimiste a abandonné sa vocation et est devenu un villageois !"
+    ],
     "NoOneDiedLastNight": ["Miraculeusement, personne n'est mort cette nuit !"],
 
     "AskHunterShot": ["Pour ton dernier acte, qui veux-tu emporter avec toi ?"],

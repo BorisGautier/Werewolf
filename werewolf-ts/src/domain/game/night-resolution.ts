@@ -599,6 +599,14 @@ export function resolveChemistNight(players: Player[], visitCtx: VisitContext): 
     chemist.hasUsedAbility = false; // the brewed potion is used up either way
     if (Math.floor(random() * 100) < 50) {
       // Settings.ChemistSuccessChance
+      if (target.role === ROLE_BIT.WiseElder) {
+        // Guilt over killing the Wise Elder costs the Chemist their role entirely, same as the
+        // Gunner/Spumpkin's day-action equivalent in day-actions.ts.
+        chemist.role = ROLE_BIT.Villager;
+        chemist.team = getTeamForRole(ROLE_BIT.Villager);
+        chemist.changedRolesCount++;
+        events.push({ type: 'ChemistLostPowerToWiseElder', playerId: chemist.id });
+      }
       events.push(...killPlayer(players, target.id, 'Chemistry', { killerIds: [chemist.id] }));
     } else {
       // Oops - the Chemist blew themselves up instead.

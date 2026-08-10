@@ -44,5 +44,6 @@ export type GameEvent =
   | { type: 'RoleModelChosen'; playerId: bigint; roleModelId: bigint }
   | { type: 'LoversCreated'; lover1Id: bigint; lover2Id: bigint }
   | { type: 'GunnerLostPowerToWiseElder'; playerId: bigint }
+  | { type: 'ChemistLostPowerToWiseElder'; playerId: bigint }
   | { type: 'BittenPlayerTurnedWolf'; playerId: bigint }
   | { type: 'GraveDug'; playerId: bigint; graveCount: number };

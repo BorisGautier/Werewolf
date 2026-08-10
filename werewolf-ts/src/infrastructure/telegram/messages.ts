@@ -14,6 +14,7 @@ import { ROLE_BIT, ROLE_META, roleName } from '../../domain/roles/role.js';
 import { findById, type Player } from '../../domain/game/player.js';
 import type { GameEvent } from '../../domain/game/game-event.js';
 import type { Team } from '../../domain/game/team.js';
+import { deathFlavorKey } from './death-messages.js';
 
 export interface OutgoingMessage {
   /** `'group'` broadcasts to the game's chat; a `bigint` PMs that one player. */
@@ -65,6 +66,22 @@ export function describeEvent(
           },
         ];
       }
+
+      if (showRolesOnDeath) {
+        const victim = findById(players, event.playerId);
+        const selfInflicted = event.killerIds.length === 1 && event.killerIds[0] === event.playerId;
+        const flavor = victim ? deathFlavorKey(event.method, roleName(victim.role), selfInflicted) : null;
+        if (flavor) {
+          return [
+            {
+              audience: 'group',
+              key: flavor.key,
+              args: flavor.includeRoleArg ? [name(event.playerId), role(event.playerId)] : [name(event.playerId)],
+            },
+          ];
+        }
+      }
+
       return [
         {
           audience: 'group',
@@ -151,6 +168,9 @@ export function describeEvent(
 
     case 'GunnerLostPowerToWiseElder':
       return [{ audience: event.playerId, key: 'GunnerLostPowerMsg', args: [] }];
+
+    case 'ChemistLostPowerToWiseElder':
+      return [{ audience: 'group', key: 'ChemistKillWiseElder', args: [] }];
 
     case 'WolvesGotDrunk':
       return event.wolfIds.map((id) => ({ audience: id, key: 'WolvesGotDrunkMsg', args: [] }));
