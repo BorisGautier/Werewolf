@@ -12,9 +12,10 @@ import { ROLE_BIT } from '../roles/role.js';
 import { killPlayer } from './kill.js';
 import { declareWinner } from './win-condition.js';
 import type { GameEvent } from './game-event.js';
-import { alivePlayers, type Player } from './player.js';
+import { ABSTAIN, alivePlayers, type Player } from './player.js';
 
-export const SKIP_VOTE = -1n;
+/** @deprecated use `ABSTAIN` from `player.ts` - kept as an alias so existing imports keep working. */
+export const SKIP_VOTE = ABSTAIN;
 
 export type LynchResolution =
   | { outcome: 'Lynched'; playerId: bigint }
@@ -54,7 +55,7 @@ export function resolveLynchVotes(players: Player[], options: LynchOptions): Lyn
   const random = options.random ?? Math.random;
 
   for (const voter of alivePlayers(players)) {
-    if (voter.choice !== null && voter.choice !== SKIP_VOTE) {
+    if (voter.choice !== null && voter.choice !== ABSTAIN) {
       const target = players.find((x) => x.id === voter.choice);
       if (target) {
         target.votes++;
