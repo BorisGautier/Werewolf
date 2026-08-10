@@ -1,0 +1,301 @@
+/**
+ * Port of the "joining" half of `Werewolf Node/Werewolf.cs` (the constructor,
+ * `GameTimer`'s join-countdown loop, `AddPlayer`, `RemovePlayer`, `ForceStart`)
+ * plus `Werewolf Control/Commands/GameCommands.cs`'s command handlers, minus
+ * the gif/image system (out of scope for this migration - see README) and the
+ * achievements/custom-gif-pack bookkeeping.
+ *
+ * What happens after roles are dealt (`AssignRoles()` onward - the actual
+ * night/day/lynch loop with its menus and timers) is deliberately not here -
+ * that's task #25. `finishJoining()` deals roles, persists the game, PMs
+ * everyone their role and then stops managing the chat; the `Game` stays
+ * registered in `GameManager` for the night/day loop to pick up.
+ */
+
+import { Bot, GrammyError, InlineKeyboard } from 'grammy';
+import { GameAlreadyRunningError, GameManager } from '../../application/game-manager.js';
+import { Game, GameError } from '../../domain/game/game.aggregate.js';
+import type { GameMode } from '../../domain/game/game-mode.js';
+import { ROLE_META, roleName } from '../../domain/roles/role.js';
+import { GameRepository } from '../persistence/game.repository.js';
+import { groupToGameOptions, GroupRepository } from '../persistence/group.repository.js';
+import { PlayerRepository } from '../persistence/player.repository.js';
+import type { Translator } from '../i18n/translator.js';
+import type { Logger } from '../logging/logger.js';
+
+const WARNING_SECONDS: readonly number[] = [60, 30, 10];
+const ANNOUNCE_JOINED_EVERY_SECONDS = 30;
+const JOIN_BUTTON_CALLBACK = 'werewolf:join';
+
+interface LobbySession {
+  game: Game;
+  chatId: bigint;
+  language: string;
+  secondsLeft: number;
+  forceStarted: boolean;
+  playersJoinedSinceAnnounce: string[];
+  interval: ReturnType<typeof setInterval>;
+}
+
+export class GameLobbyManager {
+  private readonly sessions = new Map<bigint, LobbySession>();
+
+  constructor(
+    private readonly bot: Bot,
+    private readonly games: GameManager,
+    private readonly groups: GroupRepository,
+    private readonly players: PlayerRepository,
+    private readonly gameRepo: GameRepository,
+    private readonly t: Translator,
+    private readonly logger: Logger,
+    private readonly joinTimeSeconds = 180,
+  ) {}
+
+  get joinButtonCallbackData(): string {
+    return JOIN_BUTTON_CALLBACK;
+  }
+
+  async startGame(
+    chatId: bigint,
+    chatTitle: string | null,
+    starter: { id: bigint; name: string },
+    mode: GameMode,
+  ): Promise<void> {
+    const group = await this.groups.getOrCreate(chatId, chatTitle, null);
+    const language = group.language;
+
+    if (this.games.has(chatId)) {
+      await this.send(chatId, language, 'GameAlreadyRunning');
+      return;
+    }
+
+    const options = groupToGameOptions(group);
+    let game: Game;
+    try {
+      game = this.games.create(chatId, {
+        mode,
+        disabledRoleFlags: options.disabledRoleFlags,
+        burningOverkill: options.burningOverkill,
+        thiefFull: options.thiefFull,
+        maxPlayers: options.maxPlayers,
+      });
+    } catch (err) {
+      if (err instanceof GameAlreadyRunningError) {
+        await this.send(chatId, language, 'GameAlreadyRunning');
+        return;
+      }
+      throw err;
+    }
+
+    const keyboard = new InlineKeyboard().text(this.t.translate(language, 'JoinButton'), JOIN_BUTTON_CALLBACK);
+    const messageKey = mode === 'Chaos' ? 'PlayerStartedChaosGame' : 'PlayerStartedGame';
+    await this.bot.api.sendMessage(chatNumber(chatId), this.t.translate(language, messageKey, starter.name), {
+      reply_markup: keyboard,
+    });
+
+    const session: LobbySession = {
+      game,
+      chatId,
+      language,
+      secondsLeft: this.joinTimeSeconds,
+      forceStarted: false,
+      playersJoinedSinceAnnounce: [],
+      interval: setInterval(() => void this.tick(chatId), 1000),
+    };
+    this.sessions.set(chatId, session);
+  }
+
+  async join(chatId: bigint, telegramUser: { id: bigint; firstName: string; lastName?: string; username?: string }): Promise<void> {
+    const session = this.sessions.get(chatId);
+    const group = await this.groups.getOrCreate(chatId, null, null);
+    const language = session?.language ?? group.language;
+
+    if (!session) {
+      await this.send(chatId, language, 'NoGameRunning');
+      return;
+    }
+
+    const name = `${telegramUser.firstName} ${telegramUser.lastName ?? ''}`.replace(/\n/g, '').trim();
+
+    if (session.game.players.some((p) => p.name === name)) {
+      await this.send(chatId, language, 'NameExists', name);
+      return;
+    }
+
+    await this.players.upsert(telegramUser.id, {
+      displayName: name,
+      username: telegramUser.username ?? null,
+    });
+    if (await this.players.isBanned(telegramUser.id)) return;
+
+    try {
+      session.game.addPlayer(telegramUser.id, name);
+    } catch (err) {
+      if (err instanceof GameError && err.code === 'ALREADY_JOINED') return;
+      if (err instanceof GameError && err.code === 'GROUP_FULL') {
+        await this.send(chatId, language, 'PlayerLimitReached');
+        return;
+      }
+      if (err instanceof GameError && err.code === 'NOT_JOINING') {
+        await this.send(chatId, language, 'NoGameRunning');
+        return;
+      }
+      throw err;
+    }
+
+    session.playersJoinedSinceAnnounce.push(name);
+    await this.sendToUser(telegramUser.id, language, 'YouJoined', group.title ?? '');
+  }
+
+  async forceStart(chatId: bigint, isAdmin: boolean): Promise<void> {
+    const session = this.sessions.get(chatId);
+    const group = await this.groups.getOrCreate(chatId, null, null);
+    const language = session?.language ?? group.language;
+
+    if (!session) {
+      await this.send(chatId, language, 'NoGameRunning');
+      return;
+    }
+    if (!isAdmin) {
+      await this.send(chatId, language, 'ForceStartNotAdmin');
+      return;
+    }
+
+    session.forceStarted = true;
+    await this.send(chatId, language, 'ForceStarted');
+  }
+
+  async showPlayers(chatId: bigint): Promise<void> {
+    const session = this.sessions.get(chatId);
+    const group = await this.groups.getOrCreate(chatId, null, null);
+    const language = session?.language ?? group.language;
+
+    const game = this.games.get(chatId);
+    if (!game) {
+      await this.send(chatId, language, 'NoGameRunning');
+      return;
+    }
+
+    const names = game.players.map((p) => p.name).join('\n') || '-';
+    await this.send(chatId, language, 'PlayersInGame', game.players.length, names);
+  }
+
+  /**
+   * Mirrors `/flee`: removes the player from the joining lobby, or - for a game already in
+   * progress - marks them fled (`Game.removePlayer` already implements both, mirroring
+   * `RemovePlayer`'s lover-death-chain-triggering kill). The night/day loop (task #25) still
+   * owns announcing the fled player's role/death to the group once it exists.
+   */
+  async flee(chatId: bigint, player: { id: bigint; name: string }): Promise<void> {
+    const group = await this.groups.getOrCreate(chatId, null, null);
+    const language = group.language;
+
+    const game = this.games.get(chatId);
+    if (!game) {
+      await this.send(chatId, language, 'NoGameRunning');
+      return;
+    }
+
+    const removed = game.removePlayer(player.id);
+    if (!removed) {
+      await this.send(chatId, language, 'NotPlaying');
+      return;
+    }
+    await this.send(chatId, language, 'FledGame', player.name);
+  }
+
+  private async tick(chatId: bigint): Promise<void> {
+    const session = this.sessions.get(chatId);
+    if (!session) return;
+
+    session.secondsLeft--;
+
+    if (session.forceStarted || session.secondsLeft <= 0) {
+      clearInterval(session.interval);
+      await this.finishJoining(session);
+      return;
+    }
+
+    if (session.secondsLeft % ANNOUNCE_JOINED_EVERY_SECONDS === 0 && session.playersJoinedSinceAnnounce.length > 0) {
+      await this.send(chatId, session.language, 'HaveJoined', session.playersJoinedSinceAnnounce.join(', '));
+      session.playersJoinedSinceAnnounce = [];
+    }
+
+    if (WARNING_SECONDS.includes(session.secondsLeft)) {
+      if (session.secondsLeft === 60) {
+        await this.send(chatId, session.language, 'MinuteLeftToJoin');
+      } else {
+        await this.send(chatId, session.language, 'SecondsLeftToJoin', session.secondsLeft);
+      }
+    }
+  }
+
+  private async finishJoining(session: LobbySession): Promise<void> {
+    this.sessions.delete(session.chatId);
+
+    if (!session.game.canStart()) {
+      await this.send(session.chatId, session.language, 'NotEnoughPlayers');
+      this.games.remove(session.chatId);
+      return;
+    }
+
+    await this.send(session.chatId, session.language, 'GameStarting');
+
+    session.game.start();
+
+    const group = await this.groups.getOrCreate(session.chatId, null, null);
+    const gameId = await this.gameRepo.createGame(group.id, group.title, session.game.mode);
+    const playerDbIdByTelegramId = new Map<bigint, number>();
+    for (const p of session.game.players) {
+      const dbPlayer = await this.players.findByTelegramId(p.id);
+      if (dbPlayer) playerDbIdByTelegramId.set(p.id, dbPlayer.id);
+    }
+    await this.gameRepo.recordPlayers(gameId, session.game.players, playerDbIdByTelegramId);
+
+    const delivered = await Promise.all(
+      session.game.players.map((p) => this.notifyRole(p.id, session.language, p.role)),
+    );
+    const undelivered = session.game.players.filter((_, index) => !delivered[index]).map((p) => p.name);
+    if (undelivered.length > 0) {
+      await this.send(session.chatId, session.language, 'PMFailed', undelivered.join(', '));
+    }
+
+    await this.send(session.chatId, session.language, 'NightFalls');
+    this.logger.info(
+      { chatId: session.chatId.toString(), gameId, players: session.game.players.length },
+      'Game started, handing off to the night/day loop',
+    );
+  }
+
+  private async notifyRole(telegramId: bigint, language: string, role: bigint): Promise<boolean> {
+    const name = roleName(role);
+    const emoji = ROLE_META[name].emoji;
+    try {
+      await this.bot.api.sendMessage(chatNumber(telegramId), this.t.translate(language, 'YourRoleIs', `${emoji} ${name}`));
+      return true;
+    } catch (err) {
+      if (err instanceof GrammyError) {
+        this.logger.warn({ telegramId: telegramId.toString(), err: err.message }, 'Could not PM role to player');
+        return false;
+      }
+      throw err;
+    }
+  }
+
+  private async send(chatId: bigint, language: string, key: string, ...args: unknown[]): Promise<void> {
+    await this.bot.api.sendMessage(chatNumber(chatId), this.t.translate(language, key, ...args));
+  }
+
+  private async sendToUser(telegramId: bigint, language: string, key: string, ...args: unknown[]): Promise<void> {
+    try {
+      await this.bot.api.sendMessage(chatNumber(telegramId), this.t.translate(language, key, ...args));
+    } catch (err) {
+      if (err instanceof GrammyError) return;
+      throw err;
+    }
+  }
+}
+
+function chatNumber(id: bigint): number {
+  return Number(id);
+}

@@ -1,7 +1,13 @@
 import 'dotenv/config';
 import { run } from '@grammyjs/runner';
+import { GameManager } from './application/game-manager.js';
 import { loadEnv } from './infrastructure/config/env.js';
+import { getDefaultLocale, loadLocales } from './infrastructure/i18n/locale-loader.js';
+import { Translator } from './infrastructure/i18n/translator.js';
 import { createLogger } from './infrastructure/logging/logger.js';
+import { GameRepository } from './infrastructure/persistence/game.repository.js';
+import { GroupRepository } from './infrastructure/persistence/group.repository.js';
+import { PlayerRepository } from './infrastructure/persistence/player.repository.js';
 import { createBot } from './infrastructure/telegram/bot.js';
 import { disconnectPrisma, getPrismaClient } from './infrastructure/persistence/prisma-client.js';
 
@@ -14,7 +20,16 @@ async function main(): Promise<void> {
   await prisma.$connect();
   logger.info('Connected to database');
 
-  const bot = createBot(env, logger);
+  const locales = await loadLocales();
+  const translator = new Translator(locales, getDefaultLocale(locales));
+
+  const bot = createBot(env, logger, {
+    translator,
+    gameManager: new GameManager(),
+    groupRepository: new GroupRepository(prisma),
+    playerRepository: new PlayerRepository(prisma),
+    gameRepository: new GameRepository(prisma),
+  });
   await bot.init();
   logger.info({ username: bot.botInfo.username }, 'Bot initialized');
 

@@ -37,6 +37,18 @@
     "LoversWin": ["Envers et contre tout, les deux amoureux ont survécu ensemble. Les amoureux gagnent !"],
     "NoWinner": ["La partie s'est terminée sans vainqueur."],
     "GameAlreadyRunning": ["Une partie est déjà en cours dans ce groupe."],
-    "NoGameRunning": ["Il n'y a pas de partie en cours dans ce groupe."]
+    "NoGameRunning": ["Il n'y a pas de partie en cours dans ce groupe."],
+    "JoinFromGroup": ["Tu ne peux utiliser /join que dans un groupe."],
+    "YouJoined": ["Tu as rejoint la partie dans {0} !"],
+    "PlayerLimitReached": ["Cette partie est complète - impossible de rejoindre maintenant."],
+    "NameExists": ["Quelqu'un dans cette partie utilise déjà le nom \"{0}\" - change ton nom Telegram et retape /join."],
+    "NotPlaying": ["Tu ne participes pas à cette partie."],
+    "FledGame": ["{0} a fui la partie !"],
+    "ForceStarted": ["Un admin a forcé le démarrage de la partie !"],
+    "ForceStartNotAdmin": ["Seul un admin du groupe peut forcer le démarrage."],
+    "PlayersInGame": ["Joueurs dans cette partie ({0}) :\n{1}"],
+    "YourRoleIs": ["Ton rôle pour cette partie est : {0}"],
+    "PMFailed": ["Je n'ai pas pu envoyer de message privé à : {0}. Ces joueurs doivent d'abord démarrer une conversation avec moi pour recevoir leur rôle et les menus de nuit."],
+    "GameStarting": ["Attribution des rôles et envoi des messages à chaque joueur, patiente quelques secondes..."]
   }
 }
