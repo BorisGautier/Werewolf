@@ -10,8 +10,8 @@
  * GA itself gets frozen by the Snow Wolf). `NightState` below is that shared
  * state, threaded through each step in the same order the original uses.
  *
- * Ported so far: Snow Wolf. Everything else in the documented priority order
- * (Grave Digger, Arsonist, Wolves, Serial Killer, Cultist Hunter, Cult,
+ * Ported so far: Snow Wolf, Arsonist. Everything else in the documented
+ * priority order (Grave Digger, Wolves, Serial Killer, Cultist Hunter, Cult,
  * Chemist, Harlot, Seer, Sorcerer, Fool, Oracle, Augur, Guardian Angel,
  * Thief, plus the day-1-only/passive roles) is tracked separately and still
  * to come - see the project's task list.
@@ -19,7 +19,7 @@
 
 import { ROLE_BIT } from '../roles/role.js';
 import { killPlayer } from './kill.js';
-import { ABSTAIN, type Player } from './player.js';
+import { ABSTAIN, SPARK, type Player } from './player.js';
 import { visitPlayer, type VisitContext } from './night-visit.js';
 import type { GameEvent } from './game-event.js';
 
@@ -111,5 +111,54 @@ export function resolveSnowWolfNight(
     state.guardianAngel = null;
   }
   events.push({ type: 'PlayerFrozen', playerId: target.id, cause: 'SnowWolf' });
+  return events;
+}
+
+/**
+ * Port of the `#region Arsonist Night` block. The Arsonist ignores `frozen`
+ * entirely ("fire beats ice") - there is no frozen-check here, matching the
+ * original exactly.
+ */
+export function resolveArsonistNight(players: Player[], state: NightState, visitCtx: VisitContext): GameEvent[] {
+  const events: GameEvent[] = [];
+
+  const arsonist = players.find((p) => p.role === ROLE_BIT.Arsonist && !p.isDead);
+  if (!arsonist) return events;
+
+  if (arsonist.choice === SPARK) {
+    const burning = players.filter((p) => !p.isDead && p.doused && p.role !== ROLE_BIT.Arsonist);
+    const unprotectedIds = new Set(
+      burning.filter((p) => state.guardianAngel?.choice !== p.id).map((p) => p.id),
+    );
+
+    for (const victim of burning) {
+      if (state.guardianAngel?.choice === victim.id) {
+        victim.wasSavedLastNight = true;
+        events.push({ type: 'GuardianAngelSavedFromBurning', playerId: victim.id });
+      } else {
+        events.push(
+          ...killPlayer(players, victim.id, 'Burn', {
+            killerIds: [arsonist.id],
+            triggerHunterShot: false,
+            dyingSimultaneously: unprotectedIds,
+          }),
+        );
+        victim.doused = false;
+        victim.burning = true;
+      }
+    }
+    return events;
+  }
+
+  const doused = players.find((p) => p.id === arsonist.choice);
+  if (doused) {
+    const { result, events: visitEvents } = visitPlayer(visitCtx, arsonist, doused);
+    events.push(...visitEvents);
+    if (result === 'Success') {
+      doused.doused = true;
+      events.push({ type: 'PlayerDoused', playerId: doused.id, arsonistId: arsonist.id });
+    }
+  }
+
   return events;
 }
