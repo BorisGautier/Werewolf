@@ -193,6 +193,13 @@
     "CheckYourPM": ["Check your private messages!"],
     "CantPMYou": ["I couldn't send you a private message - please start a chat with me first, then try again."],
 
+    "Cancel": ["Cancel"],
+    "GroupNotFound": ["I couldn't find that group."],
+    "AlreadyOnWaitList": ["You're already waiting for the next game in {0}."],
+    "AddedToWaitList": ["You'll be notified when a new game starts in {0}."],
+    "DeletedFromWaitList": ["You've been removed from the wait list for {0}."],
+    "NotifyNewGame": ["A new game has started in {0} - come play!"],
+
     "PlayerSmitten": ["{0} has been smitten!"],
     "ModTargetMissing": ["Reply to their message, @mention them, or pass their numeric id."],
     "BanConfirmed": ["{0} has been permanently banned."],

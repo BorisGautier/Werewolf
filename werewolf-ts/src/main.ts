@@ -8,6 +8,7 @@ import { createLogger } from './infrastructure/logging/logger.js';
 import { AdminRepository } from './infrastructure/persistence/admin.repository.js';
 import { GameRepository } from './infrastructure/persistence/game.repository.js';
 import { GroupRepository } from './infrastructure/persistence/group.repository.js';
+import { NotifyGameRepository } from './infrastructure/persistence/notify-game.repository.js';
 import { PlayerRepository } from './infrastructure/persistence/player.repository.js';
 import { createBot } from './infrastructure/telegram/bot.js';
 import { disconnectPrisma, getPrismaClient } from './infrastructure/persistence/prisma-client.js';
@@ -32,6 +33,7 @@ async function main(): Promise<void> {
     playerRepository: new PlayerRepository(prisma),
     gameRepository: new GameRepository(prisma),
     adminRepository: new AdminRepository(prisma),
+    notifyGameRepository: new NotifyGameRepository(prisma),
   });
   await bot.init();
   logger.info({ username: bot.botInfo.username }, 'Bot initialized');

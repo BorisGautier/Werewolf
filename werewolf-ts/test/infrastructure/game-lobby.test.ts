@@ -104,9 +104,16 @@ function createHarness(joinTimeSeconds = 5) {
 
   const gameLoop = { start: vi.fn() } as unknown as import('../../src/infrastructure/telegram/game-loop.js').GameLoop;
 
-  const lobby = new GameLobbyManager(bot, gameManager, groups, players, gameRepo, translator, logger, gameLoop, joinTimeSeconds);
+  const notifyGames = {
+    listWaiting: vi.fn(async () => []),
+    clearForGroup: vi.fn(async () => {}),
+    add: vi.fn(async () => true),
+    remove: vi.fn(async () => true),
+  } as unknown as import('../../src/infrastructure/persistence/notify-game.repository.js').NotifyGameRepository;
 
-  return { lobby, bot, sendMessage, gameManager, groups, players, gameRepo, gameLoop };
+  const lobby = new GameLobbyManager(bot, gameManager, groups, players, gameRepo, translator, logger, gameLoop, notifyGames, joinTimeSeconds);
+
+  return { lobby, bot, sendMessage, gameManager, groups, players, gameRepo, gameLoop, notifyGames };
 }
 
 function user(id: number, firstName: string) {
@@ -207,6 +214,34 @@ describe('GameLobbyManager', () => {
     expect(gameRepo.recordPlayers).toHaveBeenCalledTimes(1);
     // 5 role PMs + the "Night falls" group message.
     expect(sendMessage.mock.calls.length).toBeGreaterThanOrEqual(6);
+  });
+
+  it('PMs everyone on the /nextgame waitlist (except the starter) when a new lobby opens', async () => {
+    const { lobby, sendMessage, notifyGames } = createHarness();
+    const chatId = 109n;
+    notifyGames.listWaiting = vi.fn(async () => [1n, 99n]);
+
+    await lobby.startGame(chatId, 'Group', { id: 1n, name: 'Starter' }, 'Normal');
+
+    // The starter (1n) is on the waitlist too but shouldn't be PM'd about their own game.
+    expect(sendMessage).toHaveBeenCalledWith(99, expect.stringContaining('Group'));
+    expect(sendMessage).not.toHaveBeenCalledWith(1, expect.stringContaining('Group'));
+  });
+
+  it('clears the /nextgame waitlist once a lobby locks in and deals roles', async () => {
+    vi.useFakeTimers();
+    const { lobby, gameManager, notifyGames } = createHarness(100);
+    const chatId = 110n;
+
+    await lobby.startGame(chatId, 'Group', { id: 1n, name: 'Starter' }, 'Normal');
+    for (let i = 2; i <= 6; i++) {
+      await lobby.join(chatId, user(i, `Player${i}`));
+    }
+    await lobby.forceStart(chatId, true);
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(gameManager.get(chatId)!.phase).toBe('Night');
+    expect(notifyGames.clearForGroup).toHaveBeenCalledWith(chatId);
   });
 
   it('smite removes a player from the joining lobby', async () => {

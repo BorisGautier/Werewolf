@@ -193,6 +193,13 @@
     "CheckYourPM": ["Regarde tes messages privés !"],
     "CantPMYou": ["Je n'ai pas pu t'envoyer de message privé - démarre d'abord une conversation avec moi, puis réessaie."],
 
+    "Cancel": ["Annuler"],
+    "GroupNotFound": ["Je n'ai pas trouvé ce groupe."],
+    "AlreadyOnWaitList": ["Tu attends déjà la prochaine partie dans {0}."],
+    "AddedToWaitList": ["Tu seras prévenu(e) quand une nouvelle partie commencera dans {0}."],
+    "DeletedFromWaitList": ["Tu as été retiré(e) de la liste d'attente pour {0}."],
+    "NotifyNewGame": ["Une nouvelle partie a commencé dans {0} - viens jouer !"],
+
     "PlayerSmitten": ["{0} a été frappé par la foudre !"],
     "ModTargetMissing": ["Réponds à son message, mentionne-le avec @, ou passe son identifiant numérique."],
     "BanConfirmed": ["{0} a été banni définitivement."],

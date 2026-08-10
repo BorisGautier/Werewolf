@@ -6,6 +6,7 @@ import type { Translator } from '../i18n/translator.js';
 import { AdminRepository } from '../persistence/admin.repository.js';
 import { GameRepository } from '../persistence/game.repository.js';
 import { GroupRepository } from '../persistence/group.repository.js';
+import { NotifyGameRepository } from '../persistence/notify-game.repository.js';
 import { PlayerRepository } from '../persistence/player.repository.js';
 import { GameLobbyManager } from './game-lobby.js';
 import { GameLoop } from './game-loop.js';
@@ -21,6 +22,7 @@ export interface BotDependencies {
   playerRepository: PlayerRepository;
   gameRepository: GameRepository;
   adminRepository: AdminRepository;
+  notifyGameRepository: NotifyGameRepository;
 }
 
 const INVITE_LINK_PATTERN = /^(https?:\/\/)?t(elegram)?\.me\/(\+|joinchat\/)([a-zA-Z0-9_-]+)$/;
@@ -48,8 +50,13 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     deps.translator,
     logger,
     gameLoop,
+    deps.notifyGameRepository,
   );
   const configMenu = new ConfigMenu(deps.groupRepository, deps.translator);
+
+  // Registered before the generic `callback_query:data` catch-all further down (which doesn't
+  // call next()) so its own `stopwaiting:...` callback data actually gets a chance to match.
+  registerWaitlistCommands(bot, deps);
 
   bot.catch((error) => {
     const { ctx } = error;
@@ -235,6 +242,73 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
   registerRoleInfoCommands(bot, deps);
 
   return bot;
+}
+
+/**
+ * Port of `GeneralCommands.cs`'s `/nextgame` and `GameCommands.cs`'s `/stopwaiting`: a player
+ * asks to be PM'd once a new game starts in a group that currently has none running (`GameLoop`/
+ * `GameLobbyManager` deliver the actual notification and cleanup - see `notifyWaitingPlayers`).
+ */
+function registerWaitlistCommands(bot: Bot, deps: BotDependencies): void {
+  bot.command('nextgame', async (ctx) => {
+    if (!ctx.chat || ctx.chat.type === 'private' || !ctx.from) return;
+    const group = await deps.groupRepository.getOrCreate(BigInt(ctx.chat.id), ctx.chat.title ?? null, null);
+    const keyboard = new InlineKeyboard().text(
+      deps.translator.translate(group.language, 'Cancel'),
+      `stopwaiting:${ctx.chat.id}`,
+    );
+
+    const added = await deps.notifyGameRepository.add(BigInt(ctx.from.id), BigInt(ctx.chat.id));
+    const key = added ? 'AddedToWaitList' : 'AlreadyOnWaitList';
+    try {
+      await ctx.api.sendMessage(ctx.from.id, deps.translator.translate(group.language, key, group.title ?? ''), {
+        reply_markup: keyboard,
+      });
+    } catch (err) {
+      if (!(err instanceof GrammyError)) throw err;
+    }
+  });
+
+  bot.command('stopwaiting', async (ctx) => {
+    if (!ctx.from) return;
+    const language = (await deps.playerRepository.findByTelegramId(BigInt(ctx.from.id)))?.languageCode ?? 'en';
+
+    let groupId: bigint | null = null;
+    let groupTitle = '';
+    if (ctx.chat && ctx.chat.type !== 'private') {
+      groupId = BigInt(ctx.chat.id);
+      groupTitle = ctx.chat.title ?? '';
+    } else {
+      const arg = (ctx.match as string | undefined)?.trim();
+      const group = arg?.startsWith('@')
+        ? await deps.groupRepository.findByUsername(arg.slice(1))
+        : arg && /^-?\d+$/.test(arg)
+          ? await deps.groupRepository.findByTelegramId(BigInt(arg))
+          : null;
+      if (group) {
+        groupId = group.telegramId;
+        groupTitle = group.title ?? '';
+      }
+    }
+
+    if (groupId === null) {
+      await ctx.reply(deps.translator.translate(language, 'GroupNotFound'));
+      return;
+    }
+
+    await deps.notifyGameRepository.remove(BigInt(ctx.from.id), groupId);
+    await ctx.api.sendMessage(ctx.from.id, deps.translator.translate(language, 'DeletedFromWaitList', groupTitle));
+  });
+
+  bot.callbackQuery(/^stopwaiting:(-?\d+)$/, async (ctx) => {
+    if (!ctx.from) return;
+    const groupId = BigInt(ctx.match[1]!);
+    const group = await deps.groupRepository.findByTelegramId(groupId);
+    const language = group?.language ?? 'en';
+
+    await deps.notifyGameRepository.remove(BigInt(ctx.from.id), groupId);
+    await ctx.answerCallbackQuery({ text: deps.translator.translate(language, 'DeletedFromWaitList', group?.title ?? '') });
+  });
 }
 
 /** `/rolelist` (an index of every `/about<trigger>` command) and the `/about<trigger>` commands themselves. */
