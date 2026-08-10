@@ -2,10 +2,24 @@ import { describe, expect, it } from 'vitest';
 import { ROLE_BIT } from '../../src/domain/roles/role.js';
 import { Game } from '../../src/domain/game/game.aggregate.js';
 
+/**
+ * Starts a game and then pins every player to a plain Villager. balance()
+ * assigns roles randomly on start(), and leaving any player's role to
+ * chance (e.g. a stray Cupid, AlphaWolf, WiseElder, Hunter, ...) can
+ * interact with whatever scenario a test sets up - a random Cupid pairing
+ * two players as lovers, a random AlphaWolf giving the pack a bite chance
+ * instead of a kill, a random WiseElder surviving a wolf attack, and so on
+ * - making assertions flaky. Tests override whichever players' roles
+ * actually matter for their scenario after calling this helper.
+ */
 function startedGame(roles: Array<[bigint, string]>, options: ConstructorParameters<typeof Game>[0] = { chatId: 1n, mode: 'Normal' }) {
   const game = new Game({ ...options, minPlayers: roles.length });
   for (const [id, name] of roles) game.addPlayer(id, name);
   game.start();
+  for (const p of game.players) {
+    p.role = ROLE_BIT.Villager;
+    p.team = 'Village';
+  }
   return game;
 }
 
@@ -126,6 +140,7 @@ describe('Game.enterNight / resolveNightActions', () => {
     sandman.role = ROLE_BIT.Sandman;
     const wolf = game.players[1]!;
     wolf.role = ROLE_BIT.Wolf;
+    wolf.team = 'Wolf';
     wolf.drunk = true;
     game.wolfCubKilled = true;
 
@@ -215,8 +230,6 @@ describe('Game.enterNight / resolveNightActions', () => {
     const [a, b, ...rest] = game.players;
     a!.role = ROLE_BIT.Wolf;
     a!.team = 'Wolf';
-    b!.role = ROLE_BIT.Villager;
-    b!.team = 'Village';
     for (const p of rest) p.isDead = true;
     a!.choice = b!.id;
 
@@ -257,7 +270,10 @@ describe('Game.enterNight / resolveNightActions', () => {
       [5n, 'V5'],
     ]);
     const bitten = game.players[0]!;
-    bitten.role = ROLE_BIT.Villager;
+    // A live Wolf must remain in play, or Village would already win at the end of night 1 (no more
+    // threats), which would end the game before Day/Lynch/Night 2 ever happen.
+    game.players[1]!.role = ROLE_BIT.Wolf;
+    game.players[1]!.team = 'Wolf';
 
     // Resolve night 1 (nothing bites anyone here - this is just to reach Day/Lynch normally).
     game.resolveNightActions();
