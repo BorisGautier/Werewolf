@@ -1,0 +1,47 @@
+{
+  "name": "werewolf-ts",
+  "version": "0.1.0",
+  "description": "Werewolf/Mafia Telegram bot - clean architecture Node.js/TypeScript rewrite",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "lint": "eslint . --ext .ts",
+    "lint:fix": "eslint . --ext .ts --fix",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy",
+    "prisma:studio": "prisma studio"
+  },
+  "dependencies": {
+    "@grammyjs/runner": "^2.0.3",
+    "@prisma/client": "^5.20.0",
+    "dotenv": "^16.4.5",
+    "grammy": "^1.30.0",
+    "node-cron": "^3.0.3",
+    "pino": "^9.4.0",
+    "pino-pretty": "^11.2.2",
+    "prisma": "^5.20.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.16.5",
+    "@types/node-cron": "^3.0.11",
+    "@typescript-eslint/eslint-plugin": "^8.5.0",
+    "@typescript-eslint/parser": "^8.5.0",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.1.0",
+    "prettier": "^3.3.3",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.2",
+    "vitest": "^2.1.1"
+  }
+}

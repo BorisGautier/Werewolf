@@ -1,0 +1,324 @@
+// Prisma schema for werewolf-ts.
+//
+// This models the same domain as the original Database/*.cs (EF6) project,
+// with a few deliberate modernizations:
+//  - GroupConfig's 64-bit flag bitmask -> real boolean columns (type-safe,
+//    queryable, self-documenting).
+//  - Disabled roles bitmask -> an explicit GroupDisabledRole join table.
+//  - Achievements bitmask -> Achievement + PlayerAchievement join tables.
+//  - Hardcoded Devs/LangAdmins arrays + Admin table -> a single AdminUser
+//    table with a role enum, so admin grants can be managed without a
+//    redeploy.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum GameMode {
+  NORMAL
+  CHAOS
+}
+
+enum GamePhase {
+  DAY
+  LYNCH
+  NIGHT
+}
+
+enum Team {
+  VILLAGE
+  CULT
+  WOLF
+  TANNER
+  NEUTRAL
+  SERIAL_KILLER
+  LOVERS
+  ARSONIST
+  SK_HUNTER
+  NO_ONE
+  THIEF
+}
+
+enum KillMethod {
+  NONE
+  LYNCH
+  EAT
+  SHOOT
+  VISIT_WOLF
+  VISIT_VICTIM
+  GUARD_WOLF
+  DETECTED
+  FLEE
+  HUNT
+  HUNTER_SHOT
+  LOVER_DIED
+  SERIAL_KILLED
+  HUNTER_CULT
+  GUARD_KILLER
+  VISIT_KILLER
+  IDLE
+  SUICIDE
+  STEAL_KILLER
+  CHEMISTRY
+  FALL_GRAVE
+  SPOTTED
+  BURN
+  VISIT_BURNING
+}
+
+/// Mirrors `RoleName` in src/domain/roles/role.ts - keep both lists in sync.
+enum RoleName {
+  Villager
+  Drunk
+  Harlot
+  Seer
+  Traitor
+  GuardianAngel
+  Detective
+  Wolf
+  Cursed
+  Gunner
+  Tanner
+  Fool
+  WildChild
+  Beholder
+  ApprenticeSeer
+  Cultist
+  CultistHunter
+  Mason
+  Doppelganger
+  Cupid
+  Hunter
+  SerialKiller
+  Sorcerer
+  AlphaWolf
+  WolfCub
+  Blacksmith
+  ClumsyGuy
+  Mayor
+  Prince
+  Lycan
+  Pacifist
+  WiseElder
+  Oracle
+  Sandman
+  WolfMan
+  Thief
+  Troublemaker
+  Chemist
+  SnowWolf
+  GraveDigger
+  Augur
+  Arsonist
+  Spumpkin
+}
+
+enum AdminRole {
+  DEV
+  GLOBAL_ADMIN
+  LANG_ADMIN
+}
+
+enum BanScope {
+  SPAM
+  MANUAL
+}
+
+model Player {
+  id             Int      @id @default(autoincrement())
+  telegramId     BigInt   @unique
+  username       String?
+  displayName    String?
+  languageCode   String?
+  hasStartedPm   Boolean  @default(false)
+  isBanned       Boolean  @default(false)
+  banReason      String?
+  bannedBy       BigInt?
+  tempBanCount   Int      @default(0)
+  donationLevel  Int      @default(0)
+  isFounder      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  gamePlayers    GamePlayer[]
+  achievements   PlayerAchievement[]
+  globalBans     GlobalBan[]
+  adminGrants    AdminUser[]
+
+  @@map("players")
+}
+
+model Group {
+  id        Int      @id @default(autoincrement())
+  telegramId BigInt  @unique
+  title     String?
+  username  String?
+  language  String   @default("en")
+  mode      GameMode @default(NORMAL)
+
+  dayTimerSeconds     Int     @default(120)
+  nightTimerSeconds   Int     @default(60)
+  lynchTimerSeconds   Int     @default(60)
+  maxExtendSeconds    Int     @default(0)
+  maxPlayers          Int     @default(35)
+
+  allowExtend             Boolean @default(false)
+  allowFlee               Boolean @default(true)
+  allowNsfw                Boolean @default(false)
+  allowTanner              Boolean @default(true)
+  allowFool                Boolean @default(true)
+  allowCult                Boolean @default(true)
+  allowThief               Boolean @default(true)
+  allowArsonist            Boolean @default(true)
+  thiefFull                Boolean @default(false)
+  burningOverkill          Boolean @default(false)
+  showRolesOnDeath         Boolean @default(true)
+  showIds                  Boolean @default(false)
+  shufflePlayerList        Boolean @default(false)
+  randomMode               Boolean @default(false)
+  secretLynch              Boolean @default(false)
+  secretLynchShowVotes     Boolean @default(false)
+  secretLynchShowVoters    Boolean @default(false)
+
+  botInGroup   Boolean  @default(true)
+  memberCount  Int?
+  preferred    Boolean  @default(false)
+  inviteLink   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  disabledRoles GroupDisabledRole[]
+  games         Game[]
+  dailyStats    DailyStat[]
+
+  @@map("groups")
+}
+
+model GroupDisabledRole {
+  id      Int      @id @default(autoincrement())
+  groupId Int
+  group   Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  role    RoleName
+
+  @@unique([groupId, role])
+  @@map("group_disabled_roles")
+}
+
+model Game {
+  id         Int       @id @default(autoincrement())
+  groupId    Int
+  group      Group     @relation(fields: [groupId], references: [id])
+  groupTitleSnapshot String?
+  mode       GameMode  @default(NORMAL)
+  winnerTeam Team?
+  startedAt  DateTime  @default(now())
+  endedAt    DateTime?
+
+  players GamePlayer[]
+  kills   GameKill[]
+
+  @@index([groupId])
+  @@map("games")
+}
+
+model GamePlayer {
+  id        Int      @id @default(autoincrement())
+  gameId    Int
+  game      Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  playerId  Int
+  player    Player   @relation(fields: [playerId], references: [id])
+  role      RoleName
+  team      Team
+  survived  Boolean  @default(false)
+  won       Boolean  @default(false)
+
+  killedAs  GameKill[] @relation("victim")
+  killsMade GameKill[] @relation("killer")
+
+  @@index([gameId])
+  @@index([playerId])
+  @@map("game_players")
+}
+
+model GameKill {
+  id             Int         @id @default(autoincrement())
+  gameId         Int
+  game           Game        @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  victimId       Int
+  victim         GamePlayer  @relation("victim", fields: [victimId], references: [id])
+  killerId       Int?
+  killer         GamePlayer? @relation("killer", fields: [killerId], references: [id])
+  method         KillMethod
+  phase          GamePhase
+  dayNumber      Int
+  createdAt      DateTime    @default(now())
+
+  @@index([gameId])
+  @@map("game_kills")
+}
+
+model Achievement {
+  code        String   @id
+  name        String
+  description String
+
+  players PlayerAchievement[]
+
+  @@map("achievements")
+}
+
+model PlayerAchievement {
+  id              Int         @id @default(autoincrement())
+  playerId        Int
+  player          Player      @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  achievementCode String
+  achievement     Achievement @relation(fields: [achievementCode], references: [code])
+  unlockedAt      DateTime    @default(now())
+
+  @@unique([playerId, achievementCode])
+  @@map("player_achievements")
+}
+
+model AdminUser {
+  id         Int       @id @default(autoincrement())
+  telegramId BigInt
+  role       AdminRole
+  player     Player?   @relation(fields: [telegramId], references: [telegramId])
+
+  @@unique([telegramId, role])
+  @@map("admin_users")
+}
+
+model GlobalBan {
+  id         Int       @id @default(autoincrement())
+  telegramId BigInt
+  player     Player?   @relation(fields: [telegramId], references: [telegramId])
+  reason     String
+  scope      BanScope  @default(MANUAL)
+  bannedBy   BigInt?
+  bannedAt   DateTime  @default(now())
+  expiresAt  DateTime?
+
+  @@index([telegramId])
+  @@map("global_bans")
+}
+
+/// Daily rollup written by the stats-rotation cron job (replaces the
+/// original's GlobalStat/GroupStat/DailyCount tables with one flexible one).
+model DailyStat {
+  id          Int      @id @default(autoincrement())
+  date        DateTime @db.Date
+  groupId     Int?
+  group       Group?   @relation(fields: [groupId], references: [id])
+  gamesPlayed Int      @default(0)
+  playersSeen Int      @default(0)
+
+  @@unique([date, groupId])
+  @@map("daily_stats")
+}

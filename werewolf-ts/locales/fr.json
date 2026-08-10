@@ -1,0 +1,42 @@
+{
+  "code": "fr",
+  "name": "Français",
+  "base": "en",
+  "strings": {
+    "Pong": ["pong"],
+    "WelcomeMessage": [
+      "Bienvenue sur Loup-Garou ! Ajoute-moi à un groupe et utilise /startgame pour jouer.",
+      "Salut, je suis le bot Loup-Garou. Ajoute-moi à un groupe et tape /startgame pour commencer une partie."
+    ],
+    "PlayerStartedGame": [
+      "{0} a lancé une nouvelle partie de Loup-Garou ! Tape /join pour participer.",
+      "Une partie de Loup-Garou a été lancée par {0}. Envoie /join pour rejoindre !"
+    ],
+    "PlayerStartedChaosGame": [
+      "{0} a lancé une partie CHAOS ! Tout peut arriver. Tape /join pour participer.",
+      "Mode chaos activé par {0}. Tape /join si tu l'oses."
+    ],
+    "JoinButton": ["Rejoindre la partie !"],
+    "HaveJoined": ["Joueurs inscrits jusqu'ici : {0}"],
+    "MinuteLeftToJoin": ["Il reste 1 minute pour rejoindre !"],
+    "SecondsLeftToJoin": ["Il reste {0} secondes pour rejoindre !"],
+    "NotEnoughPlayers": ["Pas assez de joueurs. La partie a été annulée."],
+    "StartingGameWait": ["Tout le monde est là ! Attribution des rôles en cours..."],
+    "DayTime": ["Le soleil se lève. C'est le jour {0}. Discutez pour trouver les loups-garous."],
+    "NightFalls": ["La nuit tombe sur le village. Consultez vos messages privés."],
+    "LynchTime": ["C'est l'heure du vote ! Vous avez {0} pour décider qui pendre."],
+    "PacifistNoLynchNow": ["Le Pacifiste a convaincu le village de ne pendre personne aujourd'hui."],
+    "TroubleDoubleLynchNow": ["Quelque chose cloche... le village va voter deux fois aujourd'hui."],
+    "NoOneCastLynch": ["Personne n'a été pendu aujourd'hui - les votes étaient trop partagés."],
+    "VillagersWin": ["Le village a éliminé toutes les menaces. Les villageois gagnent !"],
+    "WolvesWin": ["Les loups ont dévoré le village. Les loups-garous gagnent !"],
+    "TannerWin": ["Le Tanneur a obtenu exactement ce qu'il voulait : être pendu. Le Tanneur gagne !"],
+    "CultWins": ["Le culte a converti tout le village. Le culte gagne !"],
+    "SerialKillerWins": ["Le Tueur en série est le dernier survivant. Le Tueur en série gagne !"],
+    "ArsonistWins": ["L'Incendiaire a brûlé tout le village. L'Incendiaire gagne !"],
+    "LoversWin": ["Envers et contre tout, les deux amoureux ont survécu ensemble. Les amoureux gagnent !"],
+    "NoWinner": ["La partie s'est terminée sans vainqueur."],
+    "GameAlreadyRunning": ["Une partie est déjà en cours dans ce groupe."],
+    "NoGameRunning": ["Il n'y a pas de partie en cours dans ce groupe."]
+  }
+}
