@@ -11,6 +11,8 @@ import { GameLobbyManager } from './game-lobby.js';
 import { GameLoop } from './game-loop.js';
 import { ConfigMenu } from './config-menu.js';
 import { nonNumericWords, numericIdTargets, replyTarget, resolveEntityTargets } from './moderation-targets.js';
+import { ABOUT_ROLE_BY_TRIGGER, aboutLocaleKey } from './role-info.js';
+import { ROLE_META } from '../../domain/roles/role.js';
 
 export interface BotDependencies {
   translator: Translator;
@@ -230,8 +232,51 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
   });
 
   registerModerationCommands(bot, env, deps, lobby);
+  registerRoleInfoCommands(bot, deps);
 
   return bot;
+}
+
+/** `/rolelist` (an index of every `/about<trigger>` command) and the `/about<trigger>` commands themselves. */
+function registerRoleInfoCommands(bot: Bot, deps: BotDependencies): void {
+  bot.command('rolelist', async (ctx) => {
+    if (!ctx.from) return;
+    const player = await deps.playerRepository.findByTelegramId(BigInt(ctx.from.id));
+    const language = player?.languageCode ?? 'en';
+    const lines = Object.entries(ABOUT_ROLE_BY_TRIGGER).map(
+      ([trigger, role]) => `/about${trigger} - ${ROLE_META[role].emoji} ${role}`,
+    );
+    try {
+      await ctx.api.sendMessage(ctx.from.id, lines.join('\n'));
+      if (ctx.chat && ctx.chat.type !== 'private') await ctx.reply(deps.translator.translate(language, 'CheckYourPM'));
+    } catch (err) {
+      if (err instanceof GrammyError) {
+        await ctx.reply(deps.translator.translate(language, 'CantPMYou'));
+        return;
+      }
+      throw err;
+    }
+  });
+
+  bot.command(Object.keys(ABOUT_ROLE_BY_TRIGGER), async (ctx) => {
+    if (!ctx.from || !ctx.message?.text) return;
+    const trigger = ctx.message.text.slice(1).split(/[ @]/)[0]!.toLowerCase();
+    const role = ABOUT_ROLE_BY_TRIGGER[trigger];
+    if (!role) return;
+
+    const player = await deps.playerRepository.findByTelegramId(BigInt(ctx.from.id));
+    const language = player?.languageCode ?? 'en';
+    try {
+      await ctx.api.sendMessage(ctx.from.id, deps.translator.translate(language, aboutLocaleKey(role)));
+      if (ctx.chat && ctx.chat.type !== 'private') await ctx.reply(deps.translator.translate(language, 'CheckYourPM'));
+    } catch (err) {
+      if (err instanceof GrammyError) {
+        await ctx.reply(deps.translator.translate(language, 'CantPMYou'));
+        return;
+      }
+      throw err;
+    }
+  });
 }
 
 /**

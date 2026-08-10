@@ -210,6 +210,127 @@
     "SetLinkMissingArg": ["You must provide the group's invite link: /setlink <link>"],
     "SetLinkInvalid": ["This is not a valid Telegram invite link."],
     "SetLinkConfirmed": ["Group link set: {0}"],
-    "RemLinkConfirmed": ["Your group link has been removed."]
+    "RemLinkConfirmed": ["Your group link has been removed."],
+
+    "AboutVillager": ["Your role is simple - try to survive. Each day, you will have a chance to lynch the werewolf."],
+    "AboutWolf": [
+      "You get to have fun! Each day, you will attempt to decieve your fellow players. However, each night, you will get to pick a player to kill!\\nNote: If you attack the cursed, they will become a wolf like yourself! Hooray friends!\\nIf you attack the drunk, you yourself will become drunk, and will be unable to do the next attack as you sleep off your hangover! (Usually, this means you can't attack the following night, but if the Wolf Cub was killed and the Drunk was your first choice, you won't be able to kill the second player, and you will still be able to attack the following night.)"
+    ],
+    "AboutDrunk": [
+      "You drunken bastard! As the drunk, you are still just a villager. BUT! If the wolves kill you, they will become disabled for the next kill, as they are drunk off your insanely high BAC."
+    ],
+    "AboutSeer": [
+      "You are the Seer. Each night, you may choose a player, and have their role revealed to you. Admit to your role wisely: If you reveal you are the seer, the wolves will try to kill you!"
+    ],
+    "AboutCursed": [
+      "As the cursed, you are a normal villager... until the wolves kill you. Once they do, you will become a wolf as well! Free to hunt in the night..."
+    ],
+    "AboutHarlot": [
+      "As the harlot, you will be given the chance to 'visit' another player each night. If they are not the wolf, you will be told so (because you live!). If you visit a wolf, you will be killed. If you visit the player the wolves have chosen to kill, you will be killed as well. However - if you are visiting a player, and the wolves choose to kill you, you will survive (you weren't home)."
+    ],
+    "AboutBeholder": ["You will be told who the seer is (the real one, not the fool)."],
+    "AboutGunner": [
+      "A bit trigger happy are we? As the gunner, you are given 2 silver bullets at the beginning of the game. Each day, you will have the chance to shoot another player. Once you do, everyone will know you are the gunner! Be careful though, you only have 2 bullets!"
+    ],
+    "AboutTraitor": [
+      "You are a traitorous bastard. If you survive long enough for all the wolves to die, you will become a werewolf, ready to kill your former teammates in the night!"
+    ],
+    "AboutGuardianAngel": [
+      "You are the Guardian Angel! Each night, you may choose a player to watch over. Be careful however - if you choose to watch over a wolf, there is a 50% chance you will be killed."
+    ],
+    "AboutDetective": [
+      "You old sleuth. Each day, you will have the chance to investigate another player. Use this carefully however, for there is a 40% chance the werewolves will detect you!"
+    ],
+    "AboutApprenticeSeer": [
+      "For now, you are a normal villager. However, if the seer dies, you will become the new seer."
+    ],
+    "AboutCultist": [
+      "As a cultist, it is your goal to convert all other players (except wolves) to your cult. If at the end of the game, all living players are cultist - the cult wins."
+    ],
+    "AboutCultistHunter": [
+      "Your job is to hunt the Cult. If the cult attacks you, their newest member will die. Each night you may pick a player to 'hunt' - if they are a cultist, they will die."
+    ],
+    "AboutWildChild": [
+      "At the beginning of the game, you will choose someone to be your 'role model'. If they die, you become a werewolf."
+    ],
+    "AboutFool": [
+      "The fool is told they are the seer... when they choose to see someone's role at night, they are told a random role."
+    ],
+    "AboutMason": [
+      "A mason's job is simple - they automatically know who the other masons are. Otherwise, they are a simple villager."
+    ],
+    "AboutDoppelganger": [
+      "Your ancestors had the ability to metamorph into others... while you don't have their full abilities, you can pick a player at the start of the game. If that player dies, you will become what they were.\\nNote: If the player was converted to cult, you will take on their original role. All other normal rules apply: If they were Wild Child and their role model died, you will become a wolf. Otherwise, you will inherit their role model.\\nThe cult cannot convert the Doppelgänger (but can after the doppelganger switches roles). Also - the Doppelgänger can NOT win unless they have transformed. If at the end of the game, the Doppelgänger is still the same, they lose (exception: lover)."
+    ],
+    "AboutCupid": [
+      "Love is in the air. As Cupid, you will choose two players at the start of the game. These two players will become madly in love! If one of them dies, the other will die of sorrow :(\\nNote: Lovers will know who each other are, but not be told their roles. If the lovers are the last two alive, they win, regardless of teams. If the lovers are on different teams (villager + wolf), and one team wins (wolf), the lover (villager) wins as well. TL;DR if at least one of the lovers was on the winning team, they both win together."
+    ],
+    "AboutHunter": [
+      "A trigger happy, vindictive player. As the hunter, you try to keep to yourself. However, when others come to visit you, they may find themselves dead, as your paranoia takes hold and you shoot. If the wolves attack you, you have a chance to take one of them with you. Otherwise, if you die, you will get a chance to shoot someone as you die.\\nNote: For wolf attacks, the chance starts at 30%. If there is one wolf, the hunter has a 30% chance to kill the wolf (and survive). For each additional wolf, add 20% (2 wolves = 50%, 3 = 70%, etc). However - if there are multiple wolves, while you may kill one of them, you will still be outnumbered and killed.\\nIf the cult tries to convert you, they have a 50% chance to fail. If they fail, you have a 50% chance to kill one of them!"
+    ],
+    "AboutSerialKiller": [
+      "That asylum was silly anyways. What a joke. You are free now however, back to business as usual - killing! The serial killer is a lone player, on their own team. They can win only if they are the last player alive (exception: lovers). As the serial killer, you can kill ANYONE - wolves, hunters, gunners, guardian angels, whatever. If the wolves try to attack you, you will kill one of them (random), and live."
+    ],
+    "AboutTanner": [
+      "The Tanner's goal is simple: Get Lynched. If the Tanner gets lynched, they win, period. Everyone else loses."
+    ],
+    "AboutMayor": [
+      "As mayor, you are a lowly villager, until you reveal yourself. Then you are given twice the vote count for lynching (meaning that your vote is twice as powerful as everyone else's). Use that power wisely to help the Village Team."
+    ],
+    "AboutPrince": [
+      "The prince is a key role in the Village Team's strategy. Once the prince gets lynched, their role as Prince is revealed, and they survive. However, this can only happen once: if the village insists on lynching them, they will die."
+    ],
+    "AboutSorcerer": [
+      "Do you remember the good old seer? Well now, it has its Wolf Team counterpart. The sorcerer is the Wolves' Seer. They can only see if someone is Wolf or Seer, and they win with the Wolves."
+    ],
+    "AboutClumsyGuy": [
+      "You are the Clumsy Guy. Maybe you should not have had so much alcohol for breakfast. You can't see a damn thing. Can you even vote for the person you want to? (You have a 50% chance to vote for someone random.)"
+    ],
+    "AboutBlacksmith": [
+      "You are the Blacksmith. Through the years, no blades nor swords gave you as much satisfaction as the Silver Blades the elves ordered.\\nYou might have some silverdust left. Who knows? It might *prevent Wolves from eating tonight* 🤔"
+    ],
+    "AboutAlphaWolf": [
+      "You are the Alpha Wolf, the origin of the curse, the bane of banes. Every night, there's a 20% chance that you will bite your pack's meal, and they will join your ranks instead of dying!"
+    ],
+    "AboutWolfCub": [
+      "What a cuuuute little wuff. (tickles tickles) -cough cough- As I was saying, you are the Wolf Cub, and if anyone kills you, the rest of the pack gets to make two kills instead of one to avenge you. You're too cute to die."
+    ],
+    "AboutSandman": [
+      "Once per game, the sandman can make all players sleep so deeply that nobody can use their night actions."
+    ],
+    "AboutOracle": [
+      "The oracle will be told what role someone is NOT, choosing from roles that are still alive in the game."
+    ],
+    "AboutWolfMan": [
+      "You are a lowly villager, but since you spend most of your time in the woods where there are real wolves, the Seer will get confused and think you are a werewolf! Oh no...."
+    ],
+    "AboutLycan": ["The lycan is a wolf, but will appear to be a villager to the seer."],
+    "AboutPacifist": [
+      "The Pacifist can choose to convince everyone in your village not to lynch anyone. This can only be done once."
+    ],
+    "AboutWiseElder": [
+      "The Wise Elder can survive a werewolf attack once - the second time they can eat you up. If the Gunner or Hunter kill you with their abilities, they will lose their powers out of sorrow and will be converted to a normal villager."
+    ],
+    "AboutThief": [
+      "By default, the Thief can steal a player's role on the first night and turn that player into a villager.\\nIf the [Full Thief] mode is turned on, they get 50% chance to steal a player's role every night, if successful, that player will become the new thief and continues with the theft!"
+    ],
+    "AboutTroublemaker": [
+      "The Troublemaker is the raging teenager in town. When they start yelling, the whole village gets out of control. To gain silence, they will lynch twice that day!"
+    ],
+    "AboutChemist": [
+      "The chemist is a quite crazy person who likes to brew potions and mess up with them. They mix two potions and force other people to choose one to drink, while the chemist will drink the other. However, while one potion just tastes like rosebuds, the other one is going to kill you instantly. Good luck when they visit you!"
+    ],
+    "AboutSnowWolf": [
+      "The Snow Wolf is a wolf that was native to the snowcapped mountains near the village. As such, they have mastered the art of controlling ice and snow. Having lived alone for a long time, the Snow Wolf prefers to operate alone. Instead of hunting with their pack at night, they can pick a separate victim to freeze, which causes them to be unable to use their night actions. However, they will still have some residue of the Snow Wolf's magic the next night, causing them to be immune to the Snow Wolf for one night."
+    ],
+    "AboutGraveDigger": [
+      "You are the Grave Digger. Every night, you dig the graves for all the people who died since the last time you did (yes, even werewolves deserve a proper burial). Since you are out all night, wolves and the cult can't find you, unless you actually have nothing to do (i.e. no one died), in that case you'll just stay home. Everyone who visits you has a chance of falling into your newly dug graves, depending on how many graves you dug. Also, the chance is halved for everyone who is on the village team with you. But since you are out at night, the wolves or the serial killer might spot and kill you, and the more graves you have to dig, the more likely it is. Also, apparently the serial killer can find you whether you're at home or not, but they might at least stumble into one of your graves and hurt their leg, causing them to maybe lose control over who is their victim the next night..."
+    ],
+    "AboutArsonist": [
+      "You are the arsonist. Like the serial killer, you are alone on your team. Every night, you may douse one target's house with kerosene. Once one or more houses are doused, you may choose to spark instead, burning all doused houses and killing everyone that is inside, including potential visitors. You win if you're the only one left."
+    ],
+    "AboutAugur": [
+      "You are the Augur. Every morning, you watch the birds and deduce a role that certainly is not in the game right now from their flight. They also will never tell you a role twice, so be sure you make use of that information!"
+    ]
   }
 }
