@@ -210,6 +210,22 @@ export class GameLobbyManager {
     await this.send(chatId, language, 'FledGame', player.name);
   }
 
+  /**
+   * Mirrors `/smite` (`SmitePlayer` in the original): a group admin forcibly removing someone
+   * else, reusing the same `Game.removePlayer` path as `/flee` (lobby removal, or a mid-game
+   * kill for a running game) - unlike `/flee` this isn't gated by `AllowFlee`, since it's a
+   * moderation action rather than a player's own choice to leave.
+   */
+  async smite(chatId: bigint, target: { id: bigint; name: string }): Promise<boolean> {
+    const group = await this.groups.getOrCreate(chatId, null, null);
+    const game = this.games.get(chatId);
+    if (!game) return false;
+
+    const removed = game.removePlayer(target.id);
+    if (removed) await this.send(chatId, group.language, 'PlayerSmitten', target.name);
+    return removed;
+  }
+
   private async tick(chatId: bigint): Promise<void> {
     const session = this.sessions.get(chatId);
     if (!session) return;

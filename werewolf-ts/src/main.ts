@@ -5,6 +5,7 @@ import { loadEnv } from './infrastructure/config/env.js';
 import { getDefaultLocale, loadLocales } from './infrastructure/i18n/locale-loader.js';
 import { Translator } from './infrastructure/i18n/translator.js';
 import { createLogger } from './infrastructure/logging/logger.js';
+import { AdminRepository } from './infrastructure/persistence/admin.repository.js';
 import { GameRepository } from './infrastructure/persistence/game.repository.js';
 import { GroupRepository } from './infrastructure/persistence/group.repository.js';
 import { PlayerRepository } from './infrastructure/persistence/player.repository.js';
@@ -30,6 +31,7 @@ async function main(): Promise<void> {
     groupRepository: new GroupRepository(prisma),
     playerRepository: new PlayerRepository(prisma),
     gameRepository: new GameRepository(prisma),
+    adminRepository: new AdminRepository(prisma),
   });
   await bot.init();
   logger.info({ username: bot.botInfo.username }, 'Bot initialized');

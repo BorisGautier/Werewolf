@@ -74,8 +74,8 @@ export class GameLoop {
     }
 
     const events = game.resolveNightActions();
-    await this.broadcast(game, group, events);
-    if (await this.handleHunterShots(game, group, events)) return;
+    await this.broadcast(game, group, events, 'Night');
+    if (await this.handleHunterShots(game, group, events, 'Night')) return;
     if (game.phase === 'Ended') return this.finish(game);
 
     await this.runDay(game);
@@ -155,8 +155,8 @@ export class GameLoop {
     await sleep(seconds * 1000);
 
     const events = game.resolveDayActions();
-    await this.broadcast(game, group, events);
-    if (await this.handleHunterShots(game, group, events)) return;
+    await this.broadcast(game, group, events, 'Day');
+    if (await this.handleHunterShots(game, group, events, 'Day')) return;
     if (game.phase === 'Ended') return this.finish(game);
 
     await this.runLynch(game);
@@ -194,8 +194,8 @@ export class GameLoop {
 
       const result = game.resolveLynch();
       await this.broadcastLynchOutcome(game, group.language, result.resolution);
-      await this.broadcast(game, group, result.events);
-      if (await this.handleHunterShots(game, group, result.events)) return;
+      await this.broadcast(game, group, result.events, 'Lynch');
+      if (await this.handleHunterShots(game, group, result.events, 'Lynch')) return;
       if (game.phase === 'Ended') return this.finish(game);
     }
 
@@ -239,7 +239,12 @@ export class GameLoop {
   // --------------------------------------------------------- Hunter shots
 
   /** Returns true if the game ended while resolving a pending shot (caller should stop the loop). */
-  private async handleHunterShots(game: Game, group: GroupWithConfig, events: readonly GameEvent[]): Promise<boolean> {
+  private async handleHunterShots(
+    game: Game,
+    group: GroupWithConfig,
+    events: readonly GameEvent[],
+    phase: 'Night' | 'Day' | 'Lynch',
+  ): Promise<boolean> {
     const shooters = events.filter(
       (e): e is Extract<GameEvent, { type: 'HunterMustShoot' }> => e.type === 'HunterMustShoot',
     );
@@ -262,7 +267,7 @@ export class GameLoop {
 
       const killEvents = game.killPlayer(targetId, shot.method, { killerIds: [hunter.id] });
       await this.send(game.chatId, group.language, 'HunterShotFired', hunter.name, target.name);
-      await this.broadcast(game, group, killEvents);
+      await this.broadcast(game, group, killEvents, phase);
 
       if (game.phase === 'Ended') {
         await this.finish(game);
@@ -413,7 +418,12 @@ export class GameLoop {
 
   // --------------------------------------------------------------- Sending
 
-  private async broadcast(game: Game, group: GroupWithConfig, events: readonly GameEvent[]): Promise<void> {
+  private async broadcast(
+    game: Game,
+    group: GroupWithConfig,
+    events: readonly GameEvent[],
+    phase: 'Night' | 'Day' | 'Lynch',
+  ): Promise<void> {
     for (const event of events) {
       for (const msg of describeEvent(event, game.players, group.showRolesOnDeath)) {
         if (msg.audience === 'group') {
@@ -422,6 +432,19 @@ export class GameLoop {
           await this.send(msg.audience, group.language, msg.key, ...msg.args);
         }
       }
+      await this.recordKillEvent(game, phase, event);
+    }
+  }
+
+  /** Persists `PlayerDied`/`LoverDiedOfGrief` events as `GameKill` rows - see `GameRepository.recordKill`. */
+  private async recordKillEvent(game: Game, phase: 'Night' | 'Day' | 'Lynch', event: GameEvent): Promise<void> {
+    const gameId = this.gameIds.get(game.chatId);
+    if (gameId === undefined) return;
+
+    if (event.type === 'PlayerDied') {
+      await this.gameRepo.recordKill(gameId, event.playerId, event.killerIds, event.method, phase, game.dayNumber);
+    } else if (event.type === 'LoverDiedOfGrief') {
+      await this.gameRepo.recordKill(gameId, event.playerId, [], 'LoverDied', phase, game.dayNumber);
     }
   }
 

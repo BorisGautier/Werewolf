@@ -209,6 +209,26 @@ describe('GameLobbyManager', () => {
     expect(sendMessage.mock.calls.length).toBeGreaterThanOrEqual(6);
   });
 
+  it('smite removes a player from the joining lobby', async () => {
+    const { lobby, gameManager } = createHarness();
+    const chatId = 107n;
+
+    await lobby.startGame(chatId, 'Group', { id: 1n, name: 'Starter' }, 'Normal');
+    await lobby.join(chatId, user(2, 'Alice'));
+    expect(gameManager.get(chatId)!.players).toHaveLength(1);
+
+    const removed = await lobby.smite(chatId, { id: 2n, name: 'Alice' });
+    expect(removed).toBe(true);
+    expect(gameManager.get(chatId)!.players).toHaveLength(0);
+  });
+
+  it('smite reports false when there is no game running or the target is not playing', async () => {
+    const { lobby } = createHarness();
+    const chatId = 108n;
+
+    expect(await lobby.smite(chatId, { id: 1n, name: 'Nobody' })).toBe(false);
+  });
+
   it("a non-admin can't force-start the game", async () => {
     vi.useFakeTimers();
     const { lobby, sendMessage, gameManager } = createHarness(100);

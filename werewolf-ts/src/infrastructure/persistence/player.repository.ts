@@ -22,6 +22,11 @@ export class PlayerRepository {
     return this.prisma.player.findUnique({ where: { telegramId } });
   }
 
+  /** Resolves an `@mention` entity (which only gives a username, not an id) to a known player. */
+  async findByUsername(username: string) {
+    return this.prisma.player.findFirst({ where: { username: { equals: username, mode: 'insensitive' } } });
+  }
+
   async markHasStartedPm(telegramId: bigint): Promise<void> {
     await this.prisma.player.update({ where: { telegramId }, data: { hasStartedPm: true } });
   }

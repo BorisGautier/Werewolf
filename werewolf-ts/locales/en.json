@@ -191,6 +191,25 @@
     "CfgAllowArsonist": ["Allow the Arsonist role"],
 
     "CheckYourPM": ["Check your private messages!"],
-    "CantPMYou": ["I couldn't send you a private message - please start a chat with me first, then try again."]
+    "CantPMYou": ["I couldn't send you a private message - please start a chat with me first, then try again."],
+
+    "PlayerSmitten": ["{0} has been smitten!"],
+    "ModTargetMissing": ["Reply to their message, @mention them, or pass their numeric id."],
+    "BanConfirmed": ["{0} has been permanently banned."],
+    "UnbanConfirmed": ["{0} has been unbanned."],
+    "UnbanNotFound": ["{0} wasn't banned."],
+    "GetBansHeader": ["Active global bans:"],
+    "GetBansEmpty": ["No active global bans."],
+    "GetBansLine": ["{0} ({1}) - {2}"],
+    "GetBanNotBanned": ["{0} is not banned."],
+    "GetBanStatus": ["{0} is banned.\\nReason: {1}\\nBanned by: {2}\\nExpires: {3}"],
+    "GetBanPermanent": ["never (permanent ban)"],
+    "IdleCount": ["{0}: {1} idle kills (all groups, last 24h)"],
+    "GroupIdleCount": ["{0} in this group"],
+    "SetLinkAlreadySet": ["Your group link is already set to https://t.me/{0}"],
+    "SetLinkMissingArg": ["You must provide the group's invite link: /setlink <link>"],
+    "SetLinkInvalid": ["This is not a valid Telegram invite link."],
+    "SetLinkConfirmed": ["Group link set: {0}"],
+    "RemLinkConfirmed": ["Your group link has been removed."]
   }
 }
