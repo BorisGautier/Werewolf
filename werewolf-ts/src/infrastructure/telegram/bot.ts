@@ -238,6 +238,22 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     await lobby.flee(BigInt(ctx.chat.id), { id: BigInt(ctx.from.id), name });
   });
 
+  bot.command('extend', async (ctx) => {
+    if (!ctx.chat || ctx.chat.type === 'private' || !ctx.from) return;
+    const member = await ctx.getAuthor();
+    const isAdmin = member.status === 'creator' || member.status === 'administrator';
+    const parsed = parseInt((ctx.match as string | undefined) ?? '', 10);
+    const seconds = Number.isFinite(parsed) ? parsed : 30;
+
+    if (seconds < 0 && !isAdmin) {
+      const group = await deps.groupRepository.getOrCreate(BigInt(ctx.chat.id), ctx.chat.title ?? null, null);
+      await ctx.reply(deps.translator.translate(group.language, 'GroupAdminOnly'));
+      return;
+    }
+
+    await lobby.extend(BigInt(ctx.chat.id), BigInt(ctx.from.id), isAdmin, seconds);
+  });
+
   registerModerationCommands(bot, env, deps, lobby);
   registerRoleInfoCommands(bot, deps);
 

@@ -19,7 +19,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-function fakeGroup(telegramId: bigint, title: string | null): GroupWithConfig {
+function fakeGroup(telegramId: bigint, title: string | null, overrides: Partial<GroupWithConfig> = {}): GroupWithConfig {
   return {
     id: Number(telegramId),
     telegramId,
@@ -56,6 +56,7 @@ function fakeGroup(telegramId: bigint, title: string | null): GroupWithConfig {
     createdAt: new Date(),
     updatedAt: new Date(),
     disabledRoles: [],
+    ...overrides,
   };
 }
 
@@ -113,7 +114,7 @@ function createHarness(joinTimeSeconds = 5) {
 
   const lobby = new GameLobbyManager(bot, gameManager, groups, players, gameRepo, translator, logger, gameLoop, notifyGames, joinTimeSeconds);
 
-  return { lobby, bot, sendMessage, gameManager, groups, players, gameRepo, gameLoop, notifyGames };
+  return { lobby, bot, sendMessage, gameManager, groups, groupsStore, players, gameRepo, gameLoop, notifyGames };
 }
 
 function user(id: number, firstName: string) {
@@ -242,6 +243,89 @@ describe('GameLobbyManager', () => {
 
     expect(gameManager.get(chatId)!.phase).toBe('Night');
     expect(notifyGames.clearForGroup).toHaveBeenCalledWith(chatId);
+  });
+
+  it('extend pushes the join countdown out for a player in the lobby, up to MaxExtend', async () => {
+    vi.useFakeTimers();
+    const { lobby, gameManager, groupsStore } = createHarness(60);
+    const chatId = 111n;
+    groupsStore.set(chatId.toString(), fakeGroup(chatId, 'Group', { allowExtend: true, maxExtendSeconds: 20 }));
+
+    await lobby.startGame(chatId, 'Group', { id: 1n, name: 'Starter' }, 'Normal');
+    for (let i = 2; i <= 6; i++) {
+      await lobby.join(chatId, user(i, `Player${i}`));
+    }
+
+    await vi.advanceTimersByTimeAsync(10000); // 50s left
+    await lobby.extend(chatId, 2n, false, 100); // clamped to +20
+
+    await vi.advanceTimersByTimeAsync(65000); // would've finished the lobby without the extension
+    expect(gameManager.get(chatId)!.phase).toBe('Joining');
+  });
+
+  it("extend rejects a second request from the same non-admin player", async () => {
+    vi.useFakeTimers();
+    const { lobby, sendMessage, groupsStore } = createHarness(60);
+    const chatId = 112n;
+    groupsStore.set(chatId.toString(), fakeGroup(chatId, 'Group', { allowExtend: true, maxExtendSeconds: 20 }));
+
+    await lobby.startGame(chatId, 'Group', { id: 1n, name: 'Starter' }, 'Normal');
+    await lobby.join(chatId, user(2, 'Alice'));
+
+    await lobby.extend(chatId, 2n, false, 10);
+    sendMessage.mockClear();
+    await lobby.extend(chatId, 2n, false, 10);
+
+    expect(sendMessage).toHaveBeenCalledWith(112, expect.stringContaining('extended'));
+  });
+
+  it('extend refuses a non-admin when AllowExtend is off', async () => {
+    vi.useFakeTimers();
+    const { lobby, sendMessage, groupsStore } = createHarness(60);
+    const chatId = 113n;
+    groupsStore.set(chatId.toString(), fakeGroup(chatId, 'Group', { allowExtend: false }));
+
+    await lobby.startGame(chatId, 'Group', { id: 1n, name: 'Starter' }, 'Normal');
+    await lobby.join(chatId, user(2, 'Alice'));
+    sendMessage.mockClear();
+
+    await lobby.extend(chatId, 2n, false, 10);
+
+    expect(sendMessage).toHaveBeenCalledWith(113, expect.stringContaining('admin'));
+  });
+
+  it('flee is always allowed while still in the joining lobby, even with AllowFlee off', async () => {
+    const { lobby, gameManager, groupsStore } = createHarness();
+    const chatId = 114n;
+    groupsStore.set(chatId.toString(), fakeGroup(chatId, 'Group', { allowFlee: false }));
+
+    await lobby.startGame(chatId, 'Group', { id: 1n, name: 'Starter' }, 'Normal');
+    await lobby.join(chatId, user(2, 'Alice'));
+
+    await lobby.flee(chatId, { id: 2n, name: 'Alice' });
+    expect(gameManager.get(chatId)!.players).toHaveLength(0);
+  });
+
+  it('flee refuses to leave a running game when AllowFlee is off', async () => {
+    vi.useFakeTimers();
+    const { lobby, gameManager, sendMessage, groupsStore } = createHarness(100);
+    const chatId = 115n;
+    groupsStore.set(chatId.toString(), fakeGroup(chatId, 'Group', { allowFlee: false }));
+
+    await lobby.startGame(chatId, 'Group', { id: 1n, name: 'Starter' }, 'Normal');
+    for (let i = 2; i <= 6; i++) {
+      await lobby.join(chatId, user(i, `Player${i}`));
+    }
+    await lobby.forceStart(chatId, true);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(gameManager.get(chatId)!.phase).toBe('Night');
+
+    const playersBefore = gameManager.get(chatId)!.players.length;
+    sendMessage.mockClear();
+    await lobby.flee(chatId, { id: 2n, name: 'Player2' });
+
+    expect(gameManager.get(chatId)!.players).toHaveLength(playersBefore);
+    expect(sendMessage).toHaveBeenCalledWith(115, expect.stringContaining('disabled'));
   });
 
   it('smite removes a player from the joining lobby', async () => {
