@@ -12,6 +12,7 @@ import { killPlayer } from './kill.js';
 import type { GameEvent } from './game-event.js';
 import { alivePlayers, type Player } from './player.js';
 import { getTeamForRole, type Team } from './team.js';
+import { promoteToWolf } from './transform.js';
 
 const CLASSIC_WOLF_ROLES: readonly Role[] = [
   ROLE_BIT.Wolf,
@@ -58,9 +59,7 @@ export function evaluateWinCondition(players: Player[], context: WinConditionCon
     const snowWolf = alive.find((p) => p.role === ROLE_BIT.SnowWolf);
     if (snowWolf) {
       if (!checkBitten || alive.every((p) => !p.bitten)) {
-        snowWolf.role = ROLE_BIT.Wolf;
-        snowWolf.team = getTeamForRole(ROLE_BIT.Wolf);
-        snowWolf.changedRolesCount++;
+        promoteToWolf(snowWolf);
         events.push({ type: 'SnowWolfBecameWolf', playerId: snowWolf.id });
       } else {
         return { finished: false, events };
@@ -69,9 +68,7 @@ export function evaluateWinCondition(players: Player[], context: WinConditionCon
       const traitor = alive.find((p) => p.role === ROLE_BIT.Traitor);
       if (traitor) {
         if (!checkBitten || alive.every((p) => !p.bitten)) {
-          traitor.role = ROLE_BIT.Wolf;
-          traitor.team = getTeamForRole(ROLE_BIT.Wolf);
-          traitor.changedRolesCount++;
+          promoteToWolf(traitor);
           events.push({ type: 'TraitorBecameWolf', playerId: traitor.id });
         } else {
           return { finished: false, events };
