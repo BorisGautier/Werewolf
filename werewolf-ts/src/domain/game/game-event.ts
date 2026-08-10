@@ -20,4 +20,6 @@ export type GameEvent =
   | { type: 'HunterKilledWolfInStandoff'; hunterId: bigint; wolfId: bigint }
   | { type: 'WolfKilledHunterInStandoff'; wolfId: bigint; hunterId: bigint }
   | { type: 'GunnerPreventsWolfWin' }
-  | { type: 'GameEnded'; winningTeam: Team };
+  | { type: 'GameEnded'; winningTeam: Team }
+  | { type: 'PlayerFrozen'; playerId: bigint; cause: 'SnowWolf' }
+  | { type: 'GuardianAngelBlockedFreeze'; targetId: bigint; snowWolfId: bigint };
