@@ -11,10 +11,10 @@
  * state, threaded through each step in the same order the original uses.
  *
  * Ported so far: Snow Wolf, Arsonist, Wolves, Serial Killer, Cultist Hunter,
- * Cult. Everything else in the documented priority order (Grave Digger,
- * Chemist, Harlot, Seer, Sorcerer, Fool, Oracle, Augur, Guardian Angel,
- * Thief, plus the day-1-only/passive roles) is tracked separately and still
- * to come - see the project's task list.
+ * Cult, Chemist, Harlot. Everything else in the documented priority order
+ * (Grave Digger, Seer, Sorcerer, Fool, Oracle, Augur, Guardian Angel, Thief,
+ * plus the day-1-only/passive roles) is tracked separately and still to come
+ * - see the project's task list.
  */
 
 import { ROLE_BIT, type Role } from '../roles/role.js';
@@ -560,6 +560,73 @@ export function resolveCultNight(players: Player[], state: NightState, visitCtx:
 
   if (result === 'Success') {
     events.push(...resolveCultVictim(players, target, newbie, state, visitCtx.dayNumber, random));
+  }
+
+  return events;
+}
+
+/**
+ * Port of the `#region Chemist Night` block. `Player.ChemistFailed` from the
+ * original isn't tracked here - it only ever picked which death message to
+ * show (self-kill vs. killed-their-target), and that's already fully
+ * derivable from the emitted `PlayerDied` event (`killerIds` containing the
+ * victim's own id).
+ */
+export function resolveChemistNight(players: Player[], visitCtx: VisitContext): GameEvent[] {
+  const events: GameEvent[] = [];
+  const random = visitCtx.random ?? Math.random;
+
+  const chemist = players.find((p) => p.role === ROLE_BIT.Chemist && !p.isDead);
+  if (!chemist || chemist.frozen) return events;
+
+  const target = players.find((p) => p.id === chemist.choice);
+  const { result, events: visitEvents } = visitPlayer(visitCtx, chemist, target);
+  events.push(...visitEvents);
+
+  if (result === 'Success' && target) {
+    chemist.hasUsedAbility = false; // the brewed potion is used up either way
+    if (Math.floor(random() * 100) < 50) {
+      // Settings.ChemistSuccessChance
+      events.push(...killPlayer(players, target.id, 'Chemistry', { killerIds: [chemist.id] }));
+    } else {
+      // Oops - the Chemist blew themselves up instead.
+      events.push(...killPlayer(players, chemist.id, 'Chemistry', { killerIds: [chemist.id] }));
+    }
+  }
+
+  return events;
+}
+
+/**
+ * Port of the `#region Harlot Night` block. The one non-obvious mechanical
+ * branch: visiting someone who turns out to already be dead *this same
+ * night* at a wolf's or the Serial Killer's hands gets the Harlot killed too
+ * (she stumbled onto the murder) - everything else in this block is
+ * message-only.
+ */
+export function resolveHarlotNight(players: Player[], visitCtx: VisitContext): GameEvent[] {
+  const events: GameEvent[] = [];
+
+  const harlot = players.find((p) => p.role === ROLE_BIT.Harlot && !p.isDead);
+  if (!harlot || harlot.frozen) return events;
+
+  const target = players.find((p) => p.id === harlot.choice);
+  const { result, events: visitEvents } = visitPlayer(visitCtx, harlot, target);
+  events.push(...visitEvents);
+
+  if (result === 'AlreadyDead' && target) {
+    const killerRole = target.killedByRole;
+    const diedToWolfOrSerialKiller =
+      killerRole !== null && (WOLF_ROLES.includes(killerRole) || killerRole === ROLE_BIT.SerialKiller);
+    if (target.diedLastNight && diedToWolfOrSerialKiller && !target.diedByVisitingKiller && !target.diedByVisitingVictim) {
+      events.push(
+        ...killPlayer(players, harlot.id, 'VisitVictim', {
+          killerIds: [target.id],
+          diedByVisitingVictim: true,
+          killedByRole: killerRole,
+        }),
+      );
+    }
   }
 
   return events;
