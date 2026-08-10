@@ -44,6 +44,20 @@ function isWolf(role: Role): boolean {
   return WOLF_ROLES.includes(role);
 }
 
+/**
+ * The id of whoever this game's first lynch resolved on, or `null` if nobody was ever lynched.
+ * Shared by the single-game `LackOfTrust` check below and `AchievementRepository`'s cross-game
+ * `BlackSheep` streak (which needs the same signal but persisted across games).
+ */
+export function firstLynchVictimId(eventBatches: readonly (readonly GameEvent[])[]): bigint | null {
+  for (const batch of eventBatches) {
+    for (const event of batch) {
+      if (event.type === 'PlayerDied' && event.method === 'Lynch') return event.playerId;
+    }
+  }
+  return null;
+}
+
 class UnlockCollector {
   private readonly unlocks = new Map<bigint, Set<AchievementCode>>();
 
@@ -135,11 +149,9 @@ export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigin
   }
   // #29 LackOfTrust - the Seer is the game's first lynch victim.
   {
-    const firstLynch = deaths.find((d) => d.method === 'Lynch');
-    if (firstLynch) {
-      const victim = findPlayer(firstLynch.playerId);
-      if (victim?.role === ROLE_BIT.Seer) out.grant(victim.id, 'LackOfTrust');
-    }
+    const firstVictimId = firstLynchVictimId(ctx.eventBatches);
+    const victim = firstVictimId !== null ? findPlayer(firstVictimId) : undefined;
+    if (victim?.role === ROLE_BIT.Seer) out.grant(victim.id, 'LackOfTrust');
   }
   // #30 BloodyNight - 4+ people die in the same night (i.e. within one resolution batch).
   for (const batch of ctx.eventBatches) {

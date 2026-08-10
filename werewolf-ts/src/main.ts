@@ -5,6 +5,7 @@ import { loadEnv } from './infrastructure/config/env.js';
 import { getDefaultLocale, loadLocales } from './infrastructure/i18n/locale-loader.js';
 import { Translator } from './infrastructure/i18n/translator.js';
 import { createLogger } from './infrastructure/logging/logger.js';
+import { AchievementRepository } from './infrastructure/persistence/achievement.repository.js';
 import { AdminRepository } from './infrastructure/persistence/admin.repository.js';
 import { GameRepository } from './infrastructure/persistence/game.repository.js';
 import { GroupRepository } from './infrastructure/persistence/group.repository.js';
@@ -26,6 +27,10 @@ async function main(): Promise<void> {
   const locales = await loadLocales();
   const translator = new Translator(locales, getDefaultLocale(locales));
 
+  const achievementRepository = new AchievementRepository(prisma);
+  await achievementRepository.seed();
+  logger.info('Achievement catalog seeded');
+
   const bot = createBot(env, logger, {
     translator,
     gameManager: new GameManager(),
@@ -34,6 +39,7 @@ async function main(): Promise<void> {
     gameRepository: new GameRepository(prisma),
     adminRepository: new AdminRepository(prisma),
     notifyGameRepository: new NotifyGameRepository(prisma),
+    achievementRepository,
   });
   await bot.init();
   logger.info({ username: bot.botInfo.username }, 'Bot initialized');

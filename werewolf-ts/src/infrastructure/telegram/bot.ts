@@ -3,6 +3,7 @@ import { GameManager } from '../../application/game-manager.js';
 import type { Env } from '../config/env.js';
 import type { Logger } from '../logging/logger.js';
 import type { Translator } from '../i18n/translator.js';
+import { AchievementRepository } from '../persistence/achievement.repository.js';
 import { AdminRepository } from '../persistence/admin.repository.js';
 import { GameRepository } from '../persistence/game.repository.js';
 import { GroupRepository } from '../persistence/group.repository.js';
@@ -14,6 +15,7 @@ import { ConfigMenu } from './config-menu.js';
 import { nonNumericWords, numericIdTargets, replyTarget, resolveEntityTargets } from './moderation-targets.js';
 import { ABOUT_ROLE_BY_TRIGGER, aboutLocaleKey } from './role-info.js';
 import { ROLE_META } from '../../domain/roles/role.js';
+import { ACHIEVEMENT_CODES, ACHIEVEMENTS } from '../../domain/achievements/catalog.js';
 
 export interface BotDependencies {
   translator: Translator;
@@ -23,6 +25,7 @@ export interface BotDependencies {
   gameRepository: GameRepository;
   adminRepository: AdminRepository;
   notifyGameRepository: NotifyGameRepository;
+  achievementRepository: AchievementRepository;
 }
 
 const INVITE_LINK_PATTERN = /^(https?:\/\/)?t(elegram)?\.me\/(\+|joinchat\/)([a-zA-Z0-9_-]+)$/;
@@ -40,7 +43,15 @@ const INVITE_LINK_PATTERN = /^(https?:\/\/)?t(elegram)?\.me\/(\+|joinchat\/)([a-
  */
 export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot {
   const bot = new Bot(env.botToken);
-  const gameLoop = new GameLoop(bot, deps.gameManager, deps.groupRepository, deps.gameRepository, deps.translator, logger);
+  const gameLoop = new GameLoop(
+    bot,
+    deps.gameManager,
+    deps.groupRepository,
+    deps.gameRepository,
+    deps.achievementRepository,
+    deps.translator,
+    logger,
+  );
   const lobby = new GameLobbyManager(
     bot,
     deps.gameManager,
@@ -256,6 +267,7 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
 
   registerModerationCommands(bot, env, deps, lobby);
   registerRoleInfoCommands(bot, deps);
+  registerAchievementCommands(bot, env, deps);
 
   return bot;
 }
@@ -382,11 +394,7 @@ function registerModerationCommands(bot: Bot, env: Env, deps: BotDependencies, l
     const member = await ctx.getAuthor();
     return member.status === 'creator' || member.status === 'administrator';
   }
-
-  async function isGlobalAdmin(telegramId: bigint): Promise<boolean> {
-    if (env.devUserIds.includes(telegramId)) return true;
-    return deps.adminRepository.isGlobalAdmin(telegramId);
-  }
+  const isGlobalAdmin = (telegramId: bigint) => isGlobalAdminCheck(env, deps, telegramId);
 
   bot.command('smite', async (ctx) => {
     if (!ctx.chat || ctx.chat.type === 'private' || !ctx.from) return;
@@ -564,5 +572,81 @@ function registerModerationCommands(bot: Bot, env: Env, deps: BotDependencies, l
     await ctx.reply(
       deps.translator.translate(group.language, 'GetBanStatus', target.name, ban.reason, ban.bannedBy?.toString() ?? '?', expires),
     );
+  });
+}
+
+async function isGlobalAdminCheck(env: Env, deps: BotDependencies, telegramId: bigint): Promise<boolean> {
+  if (env.devUserIds.includes(telegramId)) return true;
+  return deps.adminRepository.isGlobalAdmin(telegramId);
+}
+
+/**
+ * `/achv` (list your own unlocked achievements) and the `DevOnly` `/addach`/`/remach` overrides.
+ * The original's own `/achv` was a disabled stub that just said "Please use /stats" - achievements
+ * were only ever browsable on the companion website, which is out of scope for this migration
+ * (see README). Since the website isn't coming, `/achv` is a real, working command here instead -
+ * otherwise the whole achievement system would be invisible to players beyond the unlock PM.
+ */
+function registerAchievementCommands(bot: Bot, env: Env, deps: BotDependencies): void {
+  bot.command('achv', async (ctx) => {
+    if (!ctx.from) return;
+    const language = (await deps.playerRepository.findByTelegramId(BigInt(ctx.from.id)))?.languageCode ?? 'en';
+    const unlocked = await deps.achievementRepository.listForPlayer(BigInt(ctx.from.id));
+
+    if (unlocked.length === 0) {
+      await ctx.reply(deps.translator.translate(language, 'AchvEmpty'));
+      return;
+    }
+
+    const lines = [deps.translator.translate(language, 'AchvHeader', unlocked.length, ACHIEVEMENT_CODES.length)];
+    for (const a of unlocked) lines.push(deps.translator.translate(language, 'AchvLine', a.name, a.description));
+
+    try {
+      await ctx.api.sendMessage(ctx.from.id, lines.join('\n'));
+      if (ctx.chat && ctx.chat.type !== 'private') await ctx.reply(deps.translator.translate(language, 'CheckYourPM'));
+    } catch (err) {
+      if (err instanceof GrammyError) {
+        await ctx.reply(deps.translator.translate(language, 'CantPMYou'));
+        return;
+      }
+      throw err;
+    }
+  });
+
+  bot.command(['addach', 'remach'], async (ctx) => {
+    if (!ctx.from) return;
+    if (!(await isGlobalAdminCheck(env, deps, BigInt(ctx.from.id)))) return;
+    const isAdd = ctx.message?.text?.startsWith('/addach') ?? true;
+
+    const language = (await deps.playerRepository.findByTelegramId(BigInt(ctx.from.id)))?.languageCode ?? 'en';
+    const words = ((ctx.match as string | undefined) ?? '').trim().split(/\s+/).filter(Boolean);
+    const codeWord = words[words.length - 1] ?? '';
+    const idArgText = words.slice(0, -1).join(' ');
+
+    const targets = await resolveEntityTargets(ctx, deps.playerRepository);
+    const reply = replyTarget(ctx);
+    if (reply) targets.push(reply);
+    for (const id of numericIdTargets(idArgText)) targets.push({ id, name: id.toString() });
+    const target = targets[0];
+    if (!target) {
+      await ctx.reply(deps.translator.translate(language, 'ModTargetMissing'));
+      return;
+    }
+
+    const code = ACHIEVEMENT_CODES.find((c) => c.toLowerCase() === codeWord.toLowerCase());
+    if (!code) {
+      await ctx.reply(deps.translator.translate(language, 'AchUnknownCode', codeWord || '?'));
+      return;
+    }
+
+    if (isAdd) {
+      const added = await deps.achievementRepository.unlock(target.id, code);
+      const key = added ? 'AchAdded' : 'AchAlreadyHad';
+      await ctx.reply(deps.translator.translate(language, key, ACHIEVEMENTS[code].name, target.name));
+    } else {
+      const removed = await deps.achievementRepository.remove(target.id, code);
+      const key = removed ? 'AchRemoved' : 'AchDidntHave';
+      await ctx.reply(deps.translator.translate(language, key, ACHIEVEMENTS[code].name, target.name));
+    }
   });
 }
