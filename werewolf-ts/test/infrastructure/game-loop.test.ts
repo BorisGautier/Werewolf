@@ -77,6 +77,7 @@ function createHarness() {
     createGame: vi.fn(async () => 42),
     recordPlayers: vi.fn(async () => {}),
     finalizeGame: vi.fn(async () => {}),
+    recordKill: vi.fn(async () => {}),
   } as unknown as GameRepository;
 
   const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as import('../../src/infrastructure/logging/logger.js').Logger;

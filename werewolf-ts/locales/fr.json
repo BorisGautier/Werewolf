@@ -191,6 +191,25 @@
     "CfgAllowArsonist": ["Autoriser le rôle Incendiaire"],
 
     "CheckYourPM": ["Regarde tes messages privés !"],
-    "CantPMYou": ["Je n'ai pas pu t'envoyer de message privé - démarre d'abord une conversation avec moi, puis réessaie."]
+    "CantPMYou": ["Je n'ai pas pu t'envoyer de message privé - démarre d'abord une conversation avec moi, puis réessaie."],
+
+    "PlayerSmitten": ["{0} a été frappé par la foudre !"],
+    "ModTargetMissing": ["Réponds à son message, mentionne-le avec @, ou passe son identifiant numérique."],
+    "BanConfirmed": ["{0} a été banni définitivement."],
+    "UnbanConfirmed": ["{0} a été débanni."],
+    "UnbanNotFound": ["{0} n'était pas banni."],
+    "GetBansHeader": ["Bannissements globaux actifs :"],
+    "GetBansEmpty": ["Aucun bannissement global actif."],
+    "GetBansLine": ["{0} ({1}) - {2}"],
+    "GetBanNotBanned": ["{0} n'est pas banni."],
+    "GetBanStatus": ["{0} est banni.\\nRaison : {1}\\nBanni par : {2}\\nExpire : {3}"],
+    "GetBanPermanent": ["jamais (bannissement permanent)"],
+    "IdleCount": ["{0} : {1} exclusions pour inactivité (tous groupes, 24 dernières heures)"],
+    "GroupIdleCount": ["{0} dans ce groupe"],
+    "SetLinkAlreadySet": ["Le lien de ton groupe est déjà défini sur https://t.me/{0}"],
+    "SetLinkMissingArg": ["Tu dois fournir le lien d'invitation du groupe : /setlink <lien>"],
+    "SetLinkInvalid": ["Ce n'est pas un lien d'invitation Telegram valide."],
+    "SetLinkConfirmed": ["Lien du groupe défini : {0}"],
+    "RemLinkConfirmed": ["Le lien de ton groupe a été retiré."]
   }
 }

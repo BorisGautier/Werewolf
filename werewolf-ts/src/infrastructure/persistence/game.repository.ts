@@ -2,9 +2,10 @@ import type { PrismaClient } from '@prisma/client';
 import type { Player } from '../../domain/game/player.js';
 import type { Team } from '../../domain/game/team.js';
 import type { GameMode } from '../../domain/game/game-mode.js';
-import { roleToPrisma, teamToPrisma } from './mappers.js';
+import type { KillMethod } from '../../domain/game/kill-method.js';
+import { killMethodToPrisma, killPhaseToPrisma, roleToPrisma, teamToPrisma } from './mappers.js';
 
-/** Wraps the `games`/`game_players` tables - a lightweight history/stats record, written once at game start and once at game end (per-kill history isn't tracked yet, see README). */
+/** Wraps the `games`/`game_players`/`game_kills` tables - the history/stats record written as a game plays out. */
 export class GameRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
@@ -45,6 +46,54 @@ export class GameRepository {
         data: { survived: !p.isDead, won: p.won },
       });
     }
+  }
+
+  /**
+   * One row per death, matched to the game's already-recorded `GamePlayer` rows via telegramId.
+   * Powers `/getidles` (idle kills in the last 24h) and any future per-kill history/stats.
+   * Silently no-ops if the victim (or, for a multi-killer death, none of the killers) was never
+   * recorded via `recordPlayers` - shouldn't happen in practice, but a missing history row is far
+   * better than crashing the game loop over it.
+   */
+  async recordKill(
+    gameId: number,
+    victimTelegramId: bigint,
+    killerTelegramIds: readonly bigint[],
+    method: KillMethod,
+    phase: 'Night' | 'Day' | 'Lynch',
+    dayNumber: number,
+  ): Promise<void> {
+    const relevantIds = [victimTelegramId, ...killerTelegramIds];
+    const gamePlayers = await this.prisma.gamePlayer.findMany({
+      where: { gameId, player: { telegramId: { in: relevantIds } } },
+      include: { player: true },
+    });
+    const victim = gamePlayers.find((gp) => gp.player.telegramId === victimTelegramId);
+    if (!victim) return;
+    const killer = gamePlayers.find((gp) => killerTelegramIds.includes(gp.player.telegramId));
+
+    await this.prisma.gameKill.create({
+      data: {
+        gameId,
+        victimId: victim.id,
+        killerId: killer?.id ?? null,
+        method: killMethodToPrisma(method),
+        phase: killPhaseToPrisma(phase),
+        dayNumber,
+      },
+    });
+  }
+
+  /** Powers `/getidles`: how many times this player has been killed for idling (not voting) recently. */
+  async getIdleKills24Hours(telegramId: bigint, groupDbId?: number): Promise<number> {
+    return this.prisma.gameKill.count({
+      where: {
+        method: 'IDLE',
+        victim: { player: { telegramId } },
+        createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+        ...(groupDbId !== undefined ? { game: { groupId: groupDbId } } : {}),
+      },
+    });
   }
 
   /** Powers `/stats`: how many finished games this player has been in, and how many they won. */

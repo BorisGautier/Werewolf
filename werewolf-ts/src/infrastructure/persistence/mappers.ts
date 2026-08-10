@@ -1,6 +1,6 @@
 /** Conversions between the pure domain types and Prisma's generated enums. */
 
-import { Team as PrismaTeam, KillMethod as PrismaKillMethod, RoleName as PrismaRoleName } from '@prisma/client';
+import { Team as PrismaTeam, KillMethod as PrismaKillMethod, RoleName as PrismaRoleName, GamePhase as PrismaGamePhase } from '@prisma/client';
 import { roleName, type Role } from '../../domain/roles/role.js';
 import type { Team } from '../../domain/game/team.js';
 import type { KillMethod } from '../../domain/game/kill-method.js';
@@ -57,4 +57,15 @@ export function killMethodToPrisma(method: KillMethod): PrismaKillMethod {
 /** The domain's RoleName strings (from `roleName(bit)`) already match Prisma's RoleName enum values 1:1. */
 export function roleToPrisma(role: Role): PrismaRoleName {
   return roleName(role) as PrismaRoleName;
+}
+
+const KILL_PHASE_TO_PRISMA: Record<'Night' | 'Day' | 'Lynch', PrismaGamePhase> = {
+  Night: PrismaGamePhase.NIGHT,
+  Day: PrismaGamePhase.DAY,
+  Lynch: PrismaGamePhase.LYNCH,
+};
+
+/** A kill can only ever happen during Night/Day/Lynch, never Joining/Ended - see `GameKill.phase`. */
+export function killPhaseToPrisma(phase: 'Night' | 'Day' | 'Lynch'): PrismaGamePhase {
+  return KILL_PHASE_TO_PRISMA[phase];
 }

@@ -1,14 +1,16 @@
-import { Bot, GrammyError, HttpError, InlineKeyboard } from 'grammy';
+import { Bot, GrammyError, HttpError, InlineKeyboard, type Context } from 'grammy';
 import { GameManager } from '../../application/game-manager.js';
 import type { Env } from '../config/env.js';
 import type { Logger } from '../logging/logger.js';
 import type { Translator } from '../i18n/translator.js';
+import { AdminRepository } from '../persistence/admin.repository.js';
 import { GameRepository } from '../persistence/game.repository.js';
 import { GroupRepository } from '../persistence/group.repository.js';
 import { PlayerRepository } from '../persistence/player.repository.js';
 import { GameLobbyManager } from './game-lobby.js';
 import { GameLoop } from './game-loop.js';
 import { ConfigMenu } from './config-menu.js';
+import { nonNumericWords, numericIdTargets, replyTarget, resolveEntityTargets } from './moderation-targets.js';
 
 export interface BotDependencies {
   translator: Translator;
@@ -16,7 +18,10 @@ export interface BotDependencies {
   groupRepository: GroupRepository;
   playerRepository: PlayerRepository;
   gameRepository: GameRepository;
+  adminRepository: AdminRepository;
 }
+
+const INVITE_LINK_PATTERN = /^(https?:\/\/)?t(elegram)?\.me\/(\+|joinchat\/)([a-zA-Z0-9_-]+)$/;
 
 /**
  * Composition root for the Telegram bot itself.
@@ -224,5 +229,205 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     await lobby.flee(BigInt(ctx.chat.id), { id: BigInt(ctx.from.id), name });
   });
 
+  registerModerationCommands(bot, env, deps, lobby);
+
   return bot;
+}
+
+/**
+ * Port of `AdminCommands.cs`/`DevCommands.cs`'s moderation surface: `/smite` (group-admin,
+ * removes a disruptive player from the running game), `/permban`/`/remban`/`/getbans`/`/getban`
+ * (global-admin, the cross-group `GlobalBan` blocklist), and `/setlink`/`/remlink` (group-admin,
+ * the group's invite link shown by `/players` etc.). Deliberately not ported: the gif-pack
+ * review/approval commands and the multi-node `/updatestatus` (both out of scope - see README).
+ */
+function registerModerationCommands(bot: Bot, env: Env, deps: BotDependencies, lobby: GameLobbyManager): void {
+  async function isGroupAdmin(ctx: Context): Promise<boolean> {
+    if (!ctx.chat || ctx.chat.type === 'private') return false;
+    const member = await ctx.getAuthor();
+    return member.status === 'creator' || member.status === 'administrator';
+  }
+
+  async function isGlobalAdmin(telegramId: bigint): Promise<boolean> {
+    if (env.devUserIds.includes(telegramId)) return true;
+    return deps.adminRepository.isGlobalAdmin(telegramId);
+  }
+
+  bot.command('smite', async (ctx) => {
+    if (!ctx.chat || ctx.chat.type === 'private' || !ctx.from) return;
+    if (!(await isGroupAdmin(ctx))) return;
+
+    const targets = await resolveEntityTargets(ctx, deps.playerRepository);
+    const reply = replyTarget(ctx);
+    if (reply) targets.push(reply);
+    for (const id of numericIdTargets(ctx.match as string | undefined)) {
+      targets.push({ id, name: id.toString() });
+    }
+
+    const group = await deps.groupRepository.getOrCreate(BigInt(ctx.chat.id), ctx.chat.title ?? null, null);
+    if (targets.length === 0) {
+      await ctx.reply(deps.translator.translate(group.language, 'ModTargetMissing'));
+      return;
+    }
+    for (const target of targets) {
+      await lobby.smite(BigInt(ctx.chat.id), target);
+    }
+  });
+
+  bot.command('setlink', async (ctx) => {
+    if (!ctx.chat || ctx.chat.type === 'private' || !ctx.from) return;
+    if (!(await isGroupAdmin(ctx))) return;
+
+    const group = await deps.groupRepository.getOrCreate(BigInt(ctx.chat.id), ctx.chat.title ?? null, null);
+    if (ctx.chat.username) {
+      await ctx.reply(deps.translator.translate(group.language, 'SetLinkAlreadySet', ctx.chat.username));
+      return;
+    }
+
+    const link = (ctx.match as string | undefined)?.trim();
+    if (!link) {
+      await ctx.reply(deps.translator.translate(group.language, 'SetLinkMissingArg'));
+      return;
+    }
+    if (!INVITE_LINK_PATTERN.test(link)) {
+      await ctx.reply(deps.translator.translate(group.language, 'SetLinkInvalid'));
+      return;
+    }
+
+    await deps.groupRepository.updateConfig(BigInt(ctx.chat.id), { inviteLink: link });
+    await ctx.reply(deps.translator.translate(group.language, 'SetLinkConfirmed', link));
+  });
+
+  bot.command('remlink', async (ctx) => {
+    if (!ctx.chat || ctx.chat.type === 'private' || !ctx.from) return;
+    if (!(await isGroupAdmin(ctx))) return;
+
+    const group = await deps.groupRepository.getOrCreate(BigInt(ctx.chat.id), ctx.chat.title ?? null, null);
+    await deps.groupRepository.updateConfig(BigInt(ctx.chat.id), { inviteLink: null });
+    await ctx.reply(deps.translator.translate(group.language, 'RemLinkConfirmed'));
+  });
+
+  bot.command('getidles', async (ctx) => {
+    if (!ctx.chat || ctx.chat.type === 'private' || !ctx.from) return;
+    if (!(await isGroupAdmin(ctx))) return;
+
+    const group = await deps.groupRepository.getOrCreate(BigInt(ctx.chat.id), ctx.chat.title ?? null, null);
+    const ids = new Set<bigint>(numericIdTargets(ctx.match as string | undefined));
+    for (const entity of ctx.message?.entities ?? []) {
+      if (entity.type === 'text_mention' && entity.user) ids.add(BigInt(entity.user.id));
+    }
+    const reply = replyTarget(ctx);
+    if (reply) ids.add(reply.id);
+
+    if (ids.size === 0) {
+      await ctx.reply(deps.translator.translate(group.language, 'ModTargetMissing'));
+      return;
+    }
+
+    const lines: string[] = [];
+    for (const id of ids) {
+      const [overall, inGroup] = await Promise.all([
+        deps.gameRepository.getIdleKills24Hours(id),
+        deps.gameRepository.getIdleKills24Hours(id, group.id),
+      ]);
+      lines.push(deps.translator.translate(group.language, 'IdleCount', id.toString(), overall));
+      lines.push(deps.translator.translate(group.language, 'GroupIdleCount', inGroup));
+    }
+    await ctx.reply(lines.join('\n'));
+  });
+
+  bot.command('permban', async (ctx) => {
+    if (!ctx.chat || !ctx.from) return;
+    if (!(await isGlobalAdmin(BigInt(ctx.from.id)))) return;
+
+    const group = await deps.groupRepository.getOrCreate(BigInt(ctx.chat.id), ctx.chat.title ?? null, null);
+    const targets = await resolveEntityTargets(ctx, deps.playerRepository);
+    for (const id of numericIdTargets(ctx.match as string | undefined)) {
+      targets.push({ id, name: id.toString() });
+    }
+    const reason = nonNumericWords(ctx.match as string | undefined) || 'No reason given';
+
+    if (targets.length === 0) {
+      await ctx.reply(deps.translator.translate(group.language, 'ModTargetMissing'));
+      return;
+    }
+
+    for (const target of targets) {
+      await deps.adminRepository.ban(target.id, reason, BigInt(ctx.from.id));
+      await lobby.smite(BigInt(ctx.chat.id), target);
+      await ctx.reply(deps.translator.translate(group.language, 'BanConfirmed', target.name));
+    }
+  });
+
+  bot.command('remban', async (ctx) => {
+    if (!ctx.chat || !ctx.from) return;
+    if (!(await isGlobalAdmin(BigInt(ctx.from.id)))) return;
+
+    const group = await deps.groupRepository.getOrCreate(BigInt(ctx.chat.id), ctx.chat.title ?? null, null);
+    const targets = await resolveEntityTargets(ctx, deps.playerRepository);
+    for (const id of numericIdTargets(ctx.match as string | undefined)) {
+      targets.push({ id, name: id.toString() });
+    }
+    const reply = replyTarget(ctx);
+    if (reply) targets.push(reply);
+
+    if (targets.length === 0) {
+      await ctx.reply(deps.translator.translate(group.language, 'ModTargetMissing'));
+      return;
+    }
+
+    for (const target of targets) {
+      const unbanned = await deps.adminRepository.unban(target.id);
+      const key = unbanned ? 'UnbanConfirmed' : 'UnbanNotFound';
+      await ctx.reply(deps.translator.translate(group.language, key, target.name));
+    }
+  });
+
+  bot.command('getbans', async (ctx) => {
+    if (!ctx.chat || !ctx.from) return;
+    if (!(await isGlobalAdmin(BigInt(ctx.from.id)))) return;
+
+    const group = await deps.groupRepository.getOrCreate(BigInt(ctx.chat.id), ctx.chat.title ?? null, null);
+    const bans = await deps.adminRepository.listActiveBans();
+    if (bans.length === 0) {
+      await ctx.reply(deps.translator.translate(group.language, 'GetBansEmpty'));
+      return;
+    }
+
+    const lines = [deps.translator.translate(group.language, 'GetBansHeader')];
+    for (const ban of bans) {
+      lines.push(
+        deps.translator.translate(group.language, 'GetBansLine', ban.playerName ?? ban.telegramId.toString(), ban.telegramId.toString(), ban.reason),
+      );
+    }
+    await ctx.reply(lines.join('\n'));
+  });
+
+  bot.command('getban', async (ctx) => {
+    if (!ctx.chat || !ctx.from) return;
+    if (!(await isGlobalAdmin(BigInt(ctx.from.id)))) return;
+
+    const group = await deps.groupRepository.getOrCreate(BigInt(ctx.chat.id), ctx.chat.title ?? null, null);
+    const targets = await resolveEntityTargets(ctx, deps.playerRepository);
+    for (const id of numericIdTargets(ctx.match as string | undefined)) {
+      targets.push({ id, name: id.toString() });
+    }
+    const reply = replyTarget(ctx);
+    if (reply) targets.push(reply);
+    const target = targets[0];
+    if (!target) {
+      await ctx.reply(deps.translator.translate(group.language, 'ModTargetMissing'));
+      return;
+    }
+
+    const ban = await deps.adminRepository.getBan(target.id);
+    if (!ban) {
+      await ctx.reply(deps.translator.translate(group.language, 'GetBanNotBanned', target.name));
+      return;
+    }
+    const expires = ban.expiresAt ? ban.expiresAt.toISOString() : deps.translator.translate(group.language, 'GetBanPermanent');
+    await ctx.reply(
+      deps.translator.translate(group.language, 'GetBanStatus', target.name, ban.reason, ban.bannedBy?.toString() ?? '?', expires),
+    );
+  });
 }
