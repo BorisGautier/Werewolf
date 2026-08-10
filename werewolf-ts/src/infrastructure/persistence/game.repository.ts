@@ -46,4 +46,19 @@ export class GameRepository {
       });
     }
   }
+
+  /** Powers `/stats`: how many finished games this player has been in, and how many they won. */
+  async getPlayerStats(telegramId: bigint): Promise<{ played: number; won: number }> {
+    const [played, won] = await Promise.all([
+      this.prisma.gamePlayer.count({ where: { player: { telegramId }, game: { endedAt: { not: null } } } }),
+      this.prisma.gamePlayer.count({ where: { player: { telegramId }, won: true } }),
+    ]);
+    return { played, won };
+  }
+
+  /** Powers `/stats` in a group: how many finished games this group has hosted. */
+  async getGroupStats(groupDbId: number): Promise<{ played: number }> {
+    const played = await this.prisma.game.count({ where: { groupId: groupDbId, endedAt: { not: null } } });
+    return { played };
+  }
 }

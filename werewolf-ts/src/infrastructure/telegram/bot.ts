@@ -1,4 +1,4 @@
-import { Bot, GrammyError, HttpError } from 'grammy';
+import { Bot, GrammyError, HttpError, InlineKeyboard } from 'grammy';
 import { GameManager } from '../../application/game-manager.js';
 import type { Env } from '../config/env.js';
 import type { Logger } from '../logging/logger.js';
@@ -20,11 +20,13 @@ export interface BotDependencies {
 /**
  * Composition root for the Telegram bot itself.
  *
- * Wires up the join-lobby command family (`/startgame`, `/startchaos`,
- * `/join`, `/forcestart`, `/players`, `/flee` - see `game-lobby.ts` for the
- * actual port of `Werewolf Node/Werewolf.cs`'s join logic) on top of the
- * bootstrap commands (`/ping`, `/version`). The night/day/lynch loop that
- * follows role assignment is task #25 and isn't wired up yet.
+ * Wires up: the bootstrap commands (`/ping`, `/version`); the general
+ * commands (`/start`, `/help`, `/setlang`, `/stats` - simplified from
+ * `GeneralCommands.cs`, whose website-backed stats/donation/multi-language
+ * XML-pack machinery doesn't apply to this single-process, two-locale
+ * fork); the join-lobby command family (`/startgame`, `/startchaos`,
+ * `/join`, `/forcestart`, `/players`, `/flee` - see `game-lobby.ts`); and
+ * the night/day/lynch loop's callback buttons (see `game-loop.ts`).
  */
 export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot {
   const bot = new Bot(env.botToken);
@@ -58,6 +60,69 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
 
   bot.command('version', async (ctx) => {
     await ctx.reply('werewolf-ts v0.1.0 (migration in progress)');
+  });
+
+  bot.command('start', async (ctx) => {
+    if (!ctx.from || !ctx.chat || ctx.chat.type !== 'private') return;
+    const telegramId = BigInt(ctx.from.id);
+    await deps.playerRepository.upsert(telegramId, {
+      displayName: `${ctx.from.first_name} ${ctx.from.last_name ?? ''}`.trim(),
+      username: ctx.from.username ?? null,
+    });
+    await deps.playerRepository.markHasStartedPm(telegramId);
+    const player = await deps.playerRepository.findByTelegramId(telegramId);
+    await ctx.reply(deps.translator.translate(player?.languageCode ?? 'en', 'WelcomeMessage'));
+  });
+
+  bot.command('help', async (ctx) => {
+    if (!ctx.from) return;
+    const player = await deps.playerRepository.findByTelegramId(BigInt(ctx.from.id));
+    await ctx.reply(deps.translator.translate(player?.languageCode ?? 'en', 'HelpMessage'));
+  });
+
+  bot.command('setlang', async (ctx) => {
+    if (!ctx.from) return;
+    const keyboard = new InlineKeyboard().text('English', 'setlang:en').text('Français', 'setlang:fr');
+    const player = await deps.playerRepository.findByTelegramId(BigInt(ctx.from.id));
+    const language = player?.languageCode ?? 'en';
+    try {
+      await ctx.api.sendMessage(ctx.from.id, deps.translator.translate(language, 'SetLangPrompt'), {
+        reply_markup: keyboard,
+      });
+      if (ctx.chat && ctx.chat.type !== 'private') {
+        await ctx.reply(deps.translator.translate(language, 'SetLangSentPrivate'));
+      }
+    } catch (err) {
+      if (!(err instanceof GrammyError)) throw err;
+    }
+  });
+
+  bot.callbackQuery(/^setlang:(en|fr)$/, async (ctx) => {
+    if (!ctx.from) return;
+    const language = ctx.match[1]!;
+    await deps.playerRepository.setLanguage(BigInt(ctx.from.id), language);
+    await ctx.answerCallbackQuery({ text: deps.translator.translate(language, 'SetLangConfirmed', language) });
+  });
+
+  bot.command('stats', async (ctx) => {
+    if (!ctx.from) return;
+    const player = await deps.playerRepository.findByTelegramId(BigInt(ctx.from.id));
+    const language = player?.languageCode ?? 'en';
+    const name = `${ctx.from.first_name} ${ctx.from.last_name ?? ''}`.trim();
+
+    const playerStats = await deps.gameRepository.getPlayerStats(BigInt(ctx.from.id));
+    const lines = [
+      deps.translator.translate(language, 'StatsHeader'),
+      deps.translator.translate(language, 'StatsPlayerLine', name, playerStats.played, playerStats.won),
+    ];
+
+    if (ctx.chat && ctx.chat.type !== 'private') {
+      const group = await deps.groupRepository.getOrCreate(BigInt(ctx.chat.id), ctx.chat.title ?? null, null);
+      const groupStats = await deps.gameRepository.getGroupStats(group.id);
+      lines.push(deps.translator.translate(language, 'StatsGroupLine', groupStats.played));
+    }
+
+    await ctx.reply(lines.join('\n'));
   });
 
   bot.command(['startgame', 'startchaos'], async (ctx) => {
