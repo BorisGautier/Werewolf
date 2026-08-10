@@ -71,6 +71,8 @@ export interface Player {
   stumbledGrave: number;
   /** Cult mechanic: the day number they were converted (0 for the founding cultist(s)) - the highest value acts as the pack's "newbie" visitor each night. */
   dayCult: number;
+  /** Augur mechanic: roles they've already been shown, so they never see the same one twice. */
+  sawRoles: Role[];
 }
 
 export function createPlayer(id: bigint, name: string, role: Role, team: Team): Player {
@@ -111,6 +113,7 @@ export function createPlayer(id: bigint, name: string, role: Role, team: Team): 
     dugGravesLastNight: 0,
     stumbledGrave: 0,
     dayCult: 0,
+    sawRoles: [],
   };
 }
 

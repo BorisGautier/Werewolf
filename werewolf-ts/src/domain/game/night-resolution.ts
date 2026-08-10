@@ -11,10 +11,11 @@
  * state, threaded through each step in the same order the original uses.
  *
  * Ported so far: Snow Wolf, Arsonist, Wolves, Serial Killer, Cultist Hunter,
- * Cult, Chemist, Harlot. Everything else in the documented priority order
- * (Grave Digger, Seer, Sorcerer, Fool, Oracle, Augur, Guardian Angel, Thief,
- * plus the day-1-only/passive roles) is tracked separately and still to come
- * - see the project's task list.
+ * Cult, Chemist, Harlot, Guardian Angel (Seer/Sorcerer/Fool/Oracle/Augur live
+ * in `clairvoyance.ts` - they're almost entirely informational, not really
+ * "night resolution" in the causal sense). Everything else in the documented
+ * priority order (Grave Digger, Thief, plus the day-1-only/passive roles) is
+ * tracked separately and still to come - see the project's task list.
  */
 
 import { ROLE_BIT, type Role } from '../roles/role.js';
@@ -626,6 +627,46 @@ export function resolveHarlotNight(players: Player[], visitCtx: VisitContext): G
           killedByRole: killerRole,
         }),
       );
+    }
+  }
+
+  return events;
+}
+
+/**
+ * Port of the `#region GA Night` block: "only notifies the GA about the
+ * impact of his actions, and cleans kerosene" - the original's comment is
+ * accurate, this is almost entirely messages. The one real state change is
+ * clearing `doused` off whoever the GA protected, and *only* in two of the
+ * three narrative branches: when they weren't otherwise attacked tonight
+ * (preventive cleaning), or when they were specifically saved from a spark
+ * (the Arsonist chose SPARK). A player saved from a wolf/Serial Killer
+ * attack who happens to also be doused does *not* get cleaned here - that
+ * asymmetry is exactly what the original's nested if/else encodes.
+ */
+export function resolveGuardianAngelNight(
+  players: Player[],
+  state: NightState,
+  visitCtx: VisitContext,
+): GameEvent[] {
+  const events: GameEvent[] = [];
+  const ga = state.guardianAngel;
+  if (!ga || ga.frozen || (ga.isDead && !ga.diedLastNight)) return events;
+
+  const save = players.find((p) => p.id === ga.choice);
+  const { result, events: visitEvents } = visitPlayer(visitCtx, ga, save);
+  events.push(...visitEvents);
+
+  if ((result === 'Success' || result === 'AlreadyDead') && save) {
+    if (save.wasSavedLastNight) {
+      const arsonist = players.find((p) => p.role === ROLE_BIT.Arsonist);
+      if (save.doused && arsonist?.choice === SPARK) {
+        save.doused = false;
+        events.push({ type: 'GuardianAngelCleanedDouse', playerId: save.id });
+      }
+    } else if (save.doused) {
+      save.doused = false;
+      events.push({ type: 'GuardianAngelCleanedDouse', playerId: save.id });
     }
   }
 
