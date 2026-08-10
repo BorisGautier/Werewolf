@@ -39,15 +39,21 @@ import type { GameEvent } from './game-event.js';
  * everyone who died after `lastGraveDigAt`. A Snow Wolf freezing a Grave
  * Digger who dug at least one grave "undoes" that night's dig by rewinding
  * `lastGraveDigAt` back to `secondLastGraveDigAt`.
+ *
+ * `wolvesThatActed`: whichever wolves were still alive/awake at the end of
+ * `resolveWolfNight`, i.e. the original's `voteWolves` as it's left after
+ * the wolf-night loop. The Cult's "did the wolves go eating tonight?" check
+ * reads this exact leftover set, not a fresh recomputation.
  */
 export interface NightState {
   guardianAngel: Player | null;
   lastGraveDigAt: Date | null;
   secondLastGraveDigAt: Date | null;
+  wolvesThatActed: Player[];
 }
 
 export function initialNightState(): NightState {
-  return { guardianAngel: null, lastGraveDigAt: null, secondLastGraveDigAt: null };
+  return { guardianAngel: null, lastGraveDigAt: null, secondLastGraveDigAt: null, wolvesThatActed: [] };
 }
 
 /** Mirrors the original's `var ga = Players.FirstOrDefault(x => x.PlayerRole == IRole.GuardianAngel & !x.IsDead && x.Choice != 0 && x.Choice != -1);` */
@@ -290,6 +296,7 @@ export function resolveWolfNight(players: Player[], state: NightState, visitCtx:
     }
   }
 
+  state.wolvesThatActed = voteWolves;
   return events;
 }
 
@@ -338,6 +345,74 @@ export function resolveArsonistNight(players: Player[], state: NightState, visit
       events.push({ type: 'PlayerDoused', playerId: doused.id, arsonistId: arsonist.id });
     }
   }
+
+  return events;
+}
+
+/** Port of the `#region Serial Killer Night` block. */
+export function resolveSerialKillerNight(
+  players: Player[],
+  state: NightState,
+  visitCtx: VisitContext,
+): GameEvent[] {
+  const events: GameEvent[] = [];
+  const random = visitCtx.random ?? Math.random;
+
+  const sk = players.find((p) => p.role === ROLE_BIT.SerialKiller && !p.isDead);
+  if (!sk || sk.frozen) return events;
+
+  let skilled = players.find((p) => p.id === sk.choice);
+  const { result, events: visitEvents } = visitPlayer(visitCtx, sk, skilled);
+  events.push(...visitEvents);
+
+  if (result === 'Success' && skilled) {
+    if (sk.stumbledGrave > 0 && sk.stumbledGrave + 1 === visitCtx.dayNumber && Math.floor(random() * 100) < 50) {
+      const originalTarget = skilled;
+      const eligible = players.filter((p) => p.role !== ROLE_BIT.SerialKiller && !p.isDead);
+      const newTarget = eligible[Math.floor(random() * eligible.length)]!;
+      // Side-effecting call for parity with the original (e.g. it could trigger another grave-stumble),
+      // its result is intentionally not used to gate the kill below.
+      events.push(...visitPlayer(visitCtx, sk, newTarget).events);
+      skilled = newTarget;
+      events.push({ type: 'SerialKillerRandomKill', originalTargetId: originalTarget.id, newTargetId: newTarget.id });
+    }
+
+    // The Guardian Angel can't protect the Harlot from the Serial Killer - she's never "found at home".
+    if (state.guardianAngel?.choice === skilled.id && skilled.role !== ROLE_BIT.Harlot) {
+      skilled.wasSavedLastNight = true;
+      events.push({ type: 'GuardianAngelBlockedSerialKiller', targetId: skilled.id });
+    } else {
+      events.push(...killPlayer(players, skilled.id, 'SerialKilled', { killerIds: [sk.id] }));
+    }
+  }
+
+  const gd = players.find((p) => p.role === ROLE_BIT.GraveDigger && !p.isDead && p.dugGravesLastNight > 0);
+  if (gd) {
+    const spotChance = graveDiggerDetectionChance(gd.dugGravesLastNight) / 2;
+    if (Math.floor(random() * 100) < spotChance) {
+      events.push(...killPlayer(players, gd.id, 'Spotted', { killerIds: [sk.id], diedByVisitingKiller: true }));
+    }
+  }
+
+  return events;
+}
+
+/** Port of the `#region Cult Hunter Night` block. */
+export function resolveCultistHunterNight(players: Player[], visitCtx: VisitContext): GameEvent[] {
+  const events: GameEvent[] = [];
+
+  // Mirrors `Players.GetPlayerForRole(IRole.CultistHunter)` - default aliveOnly: true.
+  const hunter = players.find((p) => p.role === ROLE_BIT.CultistHunter && !p.isDead);
+  if (!hunter || hunter.frozen) return events;
+
+  const hunted = players.find((p) => p.id === hunter.choice);
+  const { result, events: visitEvents } = visitPlayer(visitCtx, hunter, hunted);
+  events.push(...visitEvents);
+
+  if (result === 'Success' && hunted && hunted.role === ROLE_BIT.Cultist) {
+    events.push(...killPlayer(players, hunted.id, 'Hunt', { killerIds: [hunter.id] }));
+  }
+  // Fail/AlreadyDead/a non-Cultist Success target: no state change, message-only in the original.
 
   return events;
 }

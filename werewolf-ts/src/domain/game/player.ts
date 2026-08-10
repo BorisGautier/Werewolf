@@ -69,6 +69,8 @@ export interface Player {
   dugGravesLastNight: number;
   /** Serial Killer mechanic: the day number they last stumbled into a dug grave (0 = never). */
   stumbledGrave: number;
+  /** Cult mechanic: the day number they were converted (0 for the founding cultist(s)) - the highest value acts as the pack's "newbie" visitor each night. */
+  dayCult: number;
 }
 
 export function createPlayer(id: bigint, name: string, role: Role, team: Team): Player {
@@ -108,6 +110,7 @@ export function createPlayer(id: bigint, name: string, role: Role, team: Team): 
     burning: false,
     dugGravesLastNight: 0,
     stumbledGrave: 0,
+    dayCult: 0,
   };
 }
 

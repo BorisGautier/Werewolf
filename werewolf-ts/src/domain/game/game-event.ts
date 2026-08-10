@@ -30,4 +30,9 @@ export type GameEvent =
   | { type: 'WolvesGotDrunk'; wolfIds: bigint[]; drunkVictimId: bigint }
   | { type: 'WiseElderSurvivedFirstAttack'; playerId: bigint }
   | { type: 'HunterCounterAttack'; hunterId: bigint; shotWolfId: bigint; hunterAlsoDied: boolean }
-  | { type: 'CursedTurnedWolf'; playerId: bigint };
+  | { type: 'CursedTurnedWolf'; playerId: bigint }
+  | { type: 'SerialKillerRandomKill'; originalTargetId: bigint; newTargetId: bigint }
+  | { type: 'GuardianAngelBlockedSerialKiller'; targetId: bigint }
+  | { type: 'PlayerConvertedToCult'; playerId: bigint }
+  | { type: 'CultConversionFailed'; targetId: bigint }
+  | { type: 'CultVisitFoundTargetGone'; targetId: bigint };
