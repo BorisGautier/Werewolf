@@ -7,6 +7,7 @@ import { GameRepository } from '../persistence/game.repository.js';
 import { GroupRepository } from '../persistence/group.repository.js';
 import { PlayerRepository } from '../persistence/player.repository.js';
 import { GameLobbyManager } from './game-lobby.js';
+import { GameLoop } from './game-loop.js';
 
 export interface BotDependencies {
   translator: Translator;
@@ -27,6 +28,7 @@ export interface BotDependencies {
  */
 export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot {
   const bot = new Bot(env.botToken);
+  const gameLoop = new GameLoop(bot, deps.gameManager, deps.groupRepository, deps.gameRepository, deps.translator, logger);
   const lobby = new GameLobbyManager(
     bot,
     deps.gameManager,
@@ -35,6 +37,7 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     deps.gameRepository,
     deps.translator,
     logger,
+    gameLoop,
   );
 
   bot.catch((error) => {
@@ -88,6 +91,15 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
       ...(ctx.from.last_name !== undefined ? { lastName: ctx.from.last_name } : {}),
       ...(ctx.from.username !== undefined ? { username: ctx.from.username } : {}),
     });
+  });
+
+  // Every night/day/lynch menu button (see game-loop.ts) - registered after the join button so
+  // that more specific handler only intercepts its own exact callback data, and this one gets
+  // everything else.
+  bot.on('callback_query:data', async (ctx) => {
+    if (!ctx.from || !ctx.chat) return;
+    const text = await gameLoop.handleCallback(BigInt(ctx.from.id), BigInt(ctx.chat.id), ctx.callbackQuery.data);
+    await ctx.answerCallbackQuery(text ? { text } : undefined);
   });
 
   bot.command('forcestart', async (ctx) => {
