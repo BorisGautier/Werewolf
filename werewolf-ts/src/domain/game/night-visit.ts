@@ -131,7 +131,7 @@ export function visitPlayer(ctx: VisitContext, visitor: Player, visited: Player 
       return { result: 'Success', events };
     }
 
-    let fallChance = 20 + (30 - 30 * Math.pow(0.5, visited.dugGravesLastNight - 1));
+    let fallChance = graveDiggerDetectionChance(visited.dugGravesLastNight);
     if (visitor.team === 'Village') fallChance /= 2;
 
     if (roll() < fallChance) {
@@ -166,4 +166,14 @@ export function visitPlayer(ctx: VisitContext, visitor: Player, visited: Player 
   }
 
   return { result: 'Success', events };
+}
+
+/**
+ * Shared "how easy is this Grave Digger to catch" formula: the base used both
+ * for a visitor falling into their grave (`VisitPlayer`, halved for Village
+ * team visitors) and for the wolf pack spotting them (halved unconditionally
+ * - see `resolveWolfNight`'s Grave Digger check).
+ */
+export function graveDiggerDetectionChance(dugGravesLastNight: number): number {
+  return 20 + (30 - 30 * Math.pow(0.5, dugGravesLastNight - 1));
 }

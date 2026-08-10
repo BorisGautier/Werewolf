@@ -24,4 +24,10 @@ export type GameEvent =
   | { type: 'PlayerFrozen'; playerId: bigint; cause: 'SnowWolf' }
   | { type: 'GuardianAngelBlockedFreeze'; targetId: bigint; snowWolfId: bigint }
   | { type: 'PlayerDoused'; playerId: bigint; arsonistId: bigint }
-  | { type: 'GuardianAngelSavedFromBurning'; playerId: bigint };
+  | { type: 'GuardianAngelSavedFromBurning'; playerId: bigint }
+  | { type: 'PlayerBitten'; playerId: bigint }
+  | { type: 'GuardianAngelBlockedWolfAttack'; targetId: bigint }
+  | { type: 'WolvesGotDrunk'; wolfIds: bigint[]; drunkVictimId: bigint }
+  | { type: 'WiseElderSurvivedFirstAttack'; playerId: bigint }
+  | { type: 'HunterCounterAttack'; hunterId: bigint; shotWolfId: bigint; hunterAlsoDied: boolean }
+  | { type: 'CursedTurnedWolf'; playerId: bigint };
