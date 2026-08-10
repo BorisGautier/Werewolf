@@ -37,6 +37,8 @@ interface LobbySession {
   forceStarted: boolean;
   playersJoinedSinceAnnounce: string[];
   interval: ReturnType<typeof setInterval>;
+  /** Non-admins may only /extend the join countdown once each - mirrors `HaveExtended`. */
+  haveExtended: Set<bigint>;
 }
 
 export class GameLobbyManager {
@@ -111,6 +113,7 @@ export class GameLobbyManager {
       forceStarted: false,
       playersJoinedSinceAnnounce: [],
       interval: setInterval(() => void this.tick(chatId), 1000),
+      haveExtended: new Set(),
     };
     this.sessions.set(chatId, session);
   }
@@ -189,6 +192,46 @@ export class GameLobbyManager {
     await this.send(chatId, language, 'ForceStarted');
   }
 
+  /**
+   * Mirrors `/extend`: while still in the join countdown, a player already in the lobby (or a
+   * group/global admin) can push the join deadline further out. Each non-admin player only gets
+   * to do this once per game (`HaveExtended`); admins can do it repeatedly. Requires the group's
+   * `AllowExtend` setting unless the caller is an admin, and is clamped to the group's
+   * `MaxExtend` in either direction - `seconds` may be negative to shorten the countdown, which
+   * `bot.ts` only allows admins to request in the first place.
+   */
+  async extend(chatId: bigint, playerId: bigint, isAdmin: boolean, requestedSeconds: number): Promise<void> {
+    const session = this.sessions.get(chatId);
+    const group = await this.groups.getOrCreate(chatId, null, null);
+    const language = session?.language ?? group.language;
+
+    if (!session) {
+      await this.send(chatId, language, 'NoGameRunning');
+      return;
+    }
+    if (!isAdmin && !session.game.players.some((p) => p.id === playerId)) {
+      await this.send(chatId, language, 'NotPlaying');
+      return;
+    }
+    if (!isAdmin && !group.allowExtend) {
+      await this.send(chatId, language, 'GroupAdminOnly');
+      return;
+    }
+    if (!isAdmin && session.haveExtended.has(playerId)) {
+      await this.send(chatId, language, 'CantExtend');
+      return;
+    }
+
+    const maxExtend = group.maxExtendSeconds;
+    const seconds = Math.abs(requestedSeconds) > maxExtend ? maxExtend * Math.sign(requestedSeconds) : requestedSeconds;
+
+    session.secondsLeft = Math.max(session.secondsLeft + seconds, 0);
+    session.haveExtended.add(playerId);
+
+    const key = seconds >= 0 ? 'SecondsAdded' : 'SecondsRemoved';
+    await this.send(chatId, language, key, Math.abs(seconds), session.secondsLeft);
+  }
+
   async showPlayers(chatId: bigint): Promise<void> {
     const session = this.sessions.get(chatId);
     const group = await this.groups.getOrCreate(chatId, null, null);
@@ -209,6 +252,9 @@ export class GameLobbyManager {
    * progress - marks them fled (`Game.removePlayer` already implements both, mirroring
    * `RemovePlayer`'s lover-death-chain-triggering kill). The night/day loop (task #25) still
    * owns announcing the fled player's role/death to the group once it exists.
+   *
+   * `AllowFlee` only gates fleeing a game that's already dealt roles - leaving the joining
+   * lobby is always allowed, mirroring `RemovePlayer`'s `!IsJoining && IsRunning` check.
    */
   async flee(chatId: bigint, player: { id: bigint; name: string }): Promise<void> {
     const group = await this.groups.getOrCreate(chatId, null, null);
@@ -217,6 +263,10 @@ export class GameLobbyManager {
     const game = this.games.get(chatId);
     if (!game) {
       await this.send(chatId, language, 'NoGameRunning');
+      return;
+    }
+    if (game.phase !== 'Joining' && !group.allowFlee) {
+      await this.send(chatId, language, 'FleeDisabled');
       return;
     }
 
