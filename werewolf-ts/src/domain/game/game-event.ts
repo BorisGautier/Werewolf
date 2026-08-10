@@ -34,4 +34,5 @@ export type GameEvent =
   | { type: 'SerialKillerRandomKill'; originalTargetId: bigint; newTargetId: bigint }
   | { type: 'GuardianAngelBlockedSerialKiller'; targetId: bigint }
   | { type: 'PlayerConvertedToCult'; playerId: bigint }
-  | { type: 'CultConversionFailed'; targetId: bigint };
+  | { type: 'CultConversionFailed'; targetId: bigint }
+  | { type: 'GuardianAngelCleanedDouse'; playerId: bigint };
