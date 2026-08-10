@@ -22,7 +22,8 @@ export type LynchResolution =
   | { outcome: 'PrinceSurvived'; playerId: bigint }
   | { outcome: 'TannerWinByLynch'; playerId: bigint }
   | { outcome: 'Tied'; tiedPlayerIds: bigint[] }
-  | { outcome: 'NoVotes' };
+  | { outcome: 'NoVotes' }
+  | { outcome: 'PacifistPeace' };
 
 export interface LynchOptions {
   /** 1 on the first vote of the day, 2 on a forced re-vote (e.g. triggered by the Troublemaker). */
@@ -53,6 +54,20 @@ export function resetLynchState(players: readonly Player[]): void {
 export function resolveLynchVotes(players: Player[], options: LynchOptions): LynchResult {
   const events: GameEvent[] = [];
   const random = options.random ?? Math.random;
+
+  // The Clumsy Guy has a 50% chance of fumbling their vote onto a random living player instead
+  // (mirrors the check in HandleReply, applied here at tally time instead of at vote-cast time -
+  // nothing reads `.choice` in between in the original either, so this is behaviorally identical).
+  for (const voter of alivePlayers(players)) {
+    if (voter.role === ROLE_BIT.ClumsyGuy && voter.choice !== null && voter.choice !== ABSTAIN) {
+      if (Math.floor(random() * 100) < 50) {
+        const alive = players.filter((p) => !p.isDead && p.id !== voter.id);
+        if (alive.length > 0) {
+          voter.choice = alive[Math.floor(random() * alive.length)]!.id;
+        }
+      }
+    }
+  }
 
   for (const voter of alivePlayers(players)) {
     if (voter.choice !== null && voter.choice !== ABSTAIN) {

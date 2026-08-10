@@ -42,4 +42,6 @@ export type GameEvent =
   | { type: 'DoppelgangerTransformed'; playerId: bigint; newRole: Role; roleModelId: bigint }
   | { type: 'ApprenticeSeerPromoted'; playerId: bigint }
   | { type: 'RoleModelChosen'; playerId: bigint; roleModelId: bigint }
-  | { type: 'LoversCreated'; lover1Id: bigint; lover2Id: bigint };
+  | { type: 'LoversCreated'; lover1Id: bigint; lover2Id: bigint }
+  | { type: 'GunnerLostPowerToWiseElder'; playerId: bigint }
+  | { type: 'BittenPlayerTurnedWolf'; playerId: bigint };
