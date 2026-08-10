@@ -8,6 +8,7 @@ import { GroupRepository } from '../persistence/group.repository.js';
 import { PlayerRepository } from '../persistence/player.repository.js';
 import { GameLobbyManager } from './game-lobby.js';
 import { GameLoop } from './game-loop.js';
+import { ConfigMenu } from './config-menu.js';
 
 export interface BotDependencies {
   translator: Translator;
@@ -41,6 +42,7 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     logger,
     gameLoop,
   );
+  const configMenu = new ConfigMenu(deps.groupRepository, deps.translator);
 
   bot.catch((error) => {
     const { ctx } = error;
@@ -156,6 +158,43 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
       ...(ctx.from.last_name !== undefined ? { lastName: ctx.from.last_name } : {}),
       ...(ctx.from.username !== undefined ? { username: ctx.from.username } : {}),
     });
+  });
+
+  bot.command('config', async (ctx) => {
+    if (!ctx.chat || ctx.chat.type === 'private' || !ctx.from) return;
+    const member = await ctx.getAuthor();
+    const isAdmin = member.status === 'creator' || member.status === 'administrator';
+    if (!isAdmin) return;
+
+    const group = await deps.groupRepository.getOrCreate(BigInt(ctx.chat.id), ctx.chat.title ?? null, null);
+    const screen = await configMenu.open(BigInt(ctx.chat.id));
+    try {
+      await ctx.api.sendMessage(ctx.from.id, screen.text, { reply_markup: screen.keyboard });
+      await ctx.reply(deps.translator.translate(group.language, 'CheckYourPM'));
+    } catch (err) {
+      if (err instanceof GrammyError) {
+        await ctx.reply(deps.translator.translate(group.language, 'CantPMYou'));
+        return;
+      }
+      throw err;
+    }
+  });
+
+  bot.callbackQuery(/^cfg:(-?\d+):(.+)$/, async (ctx) => {
+    if (!ctx.from) return;
+    const groupTelegramId = BigInt(ctx.match[1]!);
+    const [action, ...rest] = ctx.match[2]!.split(':');
+
+    const member = await ctx.api.getChatMember(Number(groupTelegramId), ctx.from.id).catch(() => null);
+    const isAdmin = member?.status === 'creator' || member?.status === 'administrator';
+    if (!isAdmin) {
+      await ctx.answerCallbackQuery();
+      return;
+    }
+
+    const screen = await configMenu.handleAction(groupTelegramId, action!, rest);
+    if (screen) await ctx.editMessageText(screen.text, { reply_markup: screen.keyboard });
+    await ctx.answerCallbackQuery();
   });
 
   // Every night/day/lynch menu button (see game-loop.ts) - registered after the join button so

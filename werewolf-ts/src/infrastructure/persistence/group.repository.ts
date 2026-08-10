@@ -71,6 +71,15 @@ export function groupToGameOptions(group: GroupWithConfig): GroupGameOptions {
   };
 }
 
-export function gameModeToDomain(mode: Group['mode']): GameMode {
-  return mode === 'CHAOS' ? 'Chaos' : 'Normal';
+/**
+ * Resolves which mode a new game should actually start in - mirrors the original's
+ * `GameMode = RandomMode ? modes.ElementAt(R.Next(...)) : (DbGroup.Mode == "Player" ? gameMode :
+ * modes.FirstOrDefault(...))`. `commandMode` is whichever of /startgame or /startchaos was used;
+ * it's only consulted when the group hasn't forced a mode via /config (PLAYER_CHOICE, the default).
+ */
+export function resolveGameMode(group: Pick<Group, 'mode' | 'randomMode'>, commandMode: GameMode): GameMode {
+  if (group.randomMode) return Math.random() < 0.5 ? 'Normal' : 'Chaos';
+  if (group.mode === 'NORMAL') return 'Normal';
+  if (group.mode === 'CHAOS') return 'Chaos';
+  return commandMode;
 }
