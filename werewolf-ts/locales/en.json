@@ -1,0 +1,42 @@
+{
+  "code": "en",
+  "name": "English",
+  "isDefault": true,
+  "strings": {
+    "Pong": ["pong"],
+    "WelcomeMessage": [
+      "Welcome to Werewolf! Add me to a group and use /startgame to play.",
+      "Hi, I'm the Werewolf bot. Add me to a group and type /startgame to begin a game."
+    ],
+    "PlayerStartedGame": [
+      "{0} started a new game of Werewolf! Type /join to play.",
+      "A game of Werewolf was started by {0}. Send /join to hop in!"
+    ],
+    "PlayerStartedChaosGame": [
+      "{0} started a CHAOS game of Werewolf! Anything can happen. Type /join to play.",
+      "Chaos mode incoming, courtesy of {0}. Type /join if you dare."
+    ],
+    "JoinButton": ["Join the game!"],
+    "HaveJoined": ["Players joined so far: {0}"],
+    "MinuteLeftToJoin": ["1 minute left to join!"],
+    "SecondsLeftToJoin": ["{0} seconds left to join!"],
+    "NotEnoughPlayers": ["Not enough players joined. The game has been cancelled."],
+    "StartingGameWait": ["Everyone is in! Assigning roles, please wait..."],
+    "DayTime": ["The sun rises. It is now day {0}. Discuss who you think is a werewolf."],
+    "NightFalls": ["Night falls over the village. Everyone, check your private messages."],
+    "LynchTime": ["It's time to vote! You have {0} to decide who to lynch."],
+    "PacifistNoLynchNow": ["The Pacifist has convinced the village not to lynch anyone today."],
+    "TroubleDoubleLynchNow": ["Something feels off... the village will vote twice today."],
+    "NoOneCastLynch": ["No one was lynched today - the votes were split."],
+    "VillagersWin": ["The village has rooted out every threat. Villagers win!"],
+    "WolvesWin": ["The wolves have devoured the village. Wolves win!"],
+    "TannerWin": ["The Tanner got exactly what they wanted: to be lynched. Tanner wins!"],
+    "CultWins": ["The cult has converted the entire village. Cult wins!"],
+    "SerialKillerWins": ["The Serial Killer is the last one standing. Serial Killer wins!"],
+    "ArsonistWins": ["The Arsonist burned the whole village down. Arsonist wins!"],
+    "LoversWin": ["Against all odds, the two lovers survived together. Lovers win!"],
+    "NoWinner": ["The game ended with no winner."],
+    "GameAlreadyRunning": ["A game is already running in this group."],
+    "NoGameRunning": ["There's no game running in this group right now."]
+  }
+}

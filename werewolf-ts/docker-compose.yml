@@ -1,0 +1,34 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: werewolf
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-werewolf}
+      POSTGRES_DB: werewolf
+    volumes:
+      - werewolf-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U werewolf -d werewolf"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://werewolf:${POSTGRES_PASSWORD:-werewolf}@db:5432/werewolf?schema=public
+      BOT_TOKEN: ${BOT_TOKEN}
+      DEV_USER_IDS: ${DEV_USER_IDS:-}
+      ERROR_CHAT_ID: ${ERROR_CHAT_ID:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+
+volumes:
+  werewolf-db-data:
