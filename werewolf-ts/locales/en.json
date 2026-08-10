@@ -140,6 +140,16 @@
     "RoleStolenPM": ["You've stolen {0}'s identity! You are now a {1}."],
     "GunnerLostPowerMsg": ["Your bullet had no effect on the Wise Elder - the shock has stripped you of your power!"],
     "WolvesGotDrunkMsg": ["You got so drunk celebrating tonight's feast that you won't be able to act again for a while."],
-    "YouAreInLove": ["Cupid has struck - you're now hopelessly in love with {0}. If either of you dies, so does the other's will to live."]
+    "YouAreInLove": ["Cupid has struck - you're now hopelessly in love with {0}. If either of you dies, so does the other's will to live."],
+
+    "HelpMessage": [
+      "/startgame or /startchaos to start a game, /join to play, /forcestart to skip the wait, /players to list who's in, /flee to leave.\nDuring a game, check your private messages for your role and night/day actions.\n/setlang to change your language, /stats to see your record."
+    ],
+    "SetLangPrompt": ["Pick your language:"],
+    "SetLangSentPrivate": ["I've sent you a private message to pick your language."],
+    "SetLangConfirmed": ["Your language is now set to {0}."],
+    "StatsPlayerLine": ["{0}: {1} games played, {2} won."],
+    "StatsGroupLine": ["This group has hosted {0} finished games."],
+    "StatsHeader": ["📊 Stats"]
   }
 }
