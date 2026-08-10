@@ -16,3 +16,10 @@ export function promoteToWolf(player: Player): void {
   player.team = getTeamForRole(ROLE_BIT.Wolf);
   player.changedRolesCount++;
 }
+
+export function promoteToCultist(player: Player, dayNumber: number): void {
+  player.role = ROLE_BIT.Cultist;
+  player.team = getTeamForRole(ROLE_BIT.Cultist);
+  player.changedRolesCount++;
+  player.dayCult = dayNumber;
+}
