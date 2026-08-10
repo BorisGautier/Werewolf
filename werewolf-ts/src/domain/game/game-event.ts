@@ -37,4 +37,9 @@ export type GameEvent =
   | { type: 'PlayerConvertedToCult'; playerId: bigint }
   | { type: 'CultConversionFailed'; targetId: bigint }
   | { type: 'GuardianAngelCleanedDouse'; playerId: bigint }
-  | { type: 'RoleStolen'; thiefId: bigint; targetId: bigint; stolenRole: Role };
+  | { type: 'RoleStolen'; thiefId: bigint; targetId: bigint; stolenRole: Role }
+  | { type: 'WildChildTurnedWolf'; playerId: bigint; roleModelId: bigint }
+  | { type: 'DoppelgangerTransformed'; playerId: bigint; newRole: Role; roleModelId: bigint }
+  | { type: 'ApprenticeSeerPromoted'; playerId: bigint }
+  | { type: 'RoleModelChosen'; playerId: bigint; roleModelId: bigint }
+  | { type: 'LoversCreated'; lover1Id: bigint; lover2Id: bigint };
