@@ -250,6 +250,17 @@
     "StatsGroupLine": ["Ce groupe a hébergé {0} parties terminées."],
     "StatsHeader": ["📊 Statistiques"],
 
+    "AchievementUnlocked": ["🏆 Succès débloqué : {0}\n{1}"],
+    "AchvHeader": ["🏆 Tes succès ({0}/{1}) :"],
+    "AchvEmpty": ["Tu n'as encore débloqué aucun succès - va jouer une partie !"],
+    "AchvLine": ["{0} - {1}"],
+    "AchAdded": ["Succès \"{0}\" débloqué pour {1}."],
+    "AchAlreadyHad": ["{1} a déjà le succès \"{0}\"."],
+    "AchRemoved": ["Succès \"{0}\" retiré de {1}."],
+    "AchDidntHave": ["{1} n'a pas le succès \"{0}\"."],
+    "AchUnknownCode": ["Code de succès inconnu : {0}"],
+    "AchUsage": ["Usage : réponds au message de la cible (ou @mention/id), puis le code du succès, ex. /addach WelcomeToHell"],
+
     "CfgMenuRoles": ["🎭 Rôles"],
     "CfgMenuOptions": ["⚙️ Options"],
     "CfgMenuMode": ["🎲 Mode"],

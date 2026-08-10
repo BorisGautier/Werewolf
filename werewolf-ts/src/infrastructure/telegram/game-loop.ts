@@ -22,7 +22,10 @@ import { ROLE_BIT, roleName, type Role, type RoleName } from '../../domain/roles
 import { WOLF_ROLES } from '../../domain/game/game-balancing.js';
 import { ABSTAIN, SPARK, alivePlayers, type Player } from '../../domain/game/player.js';
 import type { GameEvent } from '../../domain/game/game-event.js';
+import { evaluateGameAchievements, firstLynchVictimId } from '../../domain/achievements/evaluate.js';
+import { ACHIEVEMENTS, type AchievementCode } from '../../domain/achievements/catalog.js';
 import type { GroupWithConfig } from '../persistence/group.repository.js';
+import { AchievementRepository } from '../persistence/achievement.repository.js';
 import { GameRepository } from '../persistence/game.repository.js';
 import { GroupRepository } from '../persistence/group.repository.js';
 import type { Translator } from '../i18n/translator.js';
@@ -32,14 +35,26 @@ import { dayOneTargets, DAY_ABILITY_ROLES, DAY_TARGET_ROLES, NIGHT_TARGET_ROLES,
 
 const NIGHT_ONE_MIN_SECONDS = 120;
 
+/** Guardian Angel event types that count as a "save" for the GotYourBack achievement. */
+const GA_SAVE_EVENT_TYPES: ReadonlySet<GameEvent['type']> = new Set([
+  'GuardianAngelBlockedWolfAttack',
+  'GuardianAngelBlockedSerialKiller',
+  'GuardianAngelBlockedFreeze',
+  'GuardianAngelSavedFromBurning',
+]);
+
 export class GameLoop {
   private readonly gameIds = new Map<bigint, number>();
+  /** Every night/day/lynch resolution's events, one batch per call to `broadcast()` - the
+   * history `evaluateGameAchievements()` needs at game end (see `finish()`). Cleared there. */
+  private readonly eventBatches = new Map<bigint, GameEvent[][]>();
 
   constructor(
     private readonly bot: Bot,
     private readonly games: GameManager,
     private readonly groups: GroupRepository,
     private readonly gameRepo: GameRepository,
+    private readonly achievements: AchievementRepository,
     private readonly t: Translator,
     private readonly logger: Logger,
   ) {}
@@ -282,14 +297,83 @@ export class GameLoop {
   private async finish(game: Game): Promise<void> {
     const gameId = this.gameIds.get(game.chatId);
     this.gameIds.delete(game.chatId);
+    const batches = this.eventBatches.get(game.chatId) ?? [];
+    this.eventBatches.delete(game.chatId);
+
     if (gameId !== undefined) {
       try {
         await this.gameRepo.finalizeGame(gameId, game.winningTeam, game.players);
       } catch (err) {
         this.logger.error({ err, chatId: game.chatId.toString(), gameId }, 'Failed to persist finished game');
       }
+      try {
+        await this.awardAchievements(game, batches);
+      } catch (err) {
+        this.logger.error({ err, chatId: game.chatId.toString(), gameId }, 'Failed to award achievements');
+      }
     }
     this.games.remove(game.chatId);
+  }
+
+  /**
+   * Evaluates and persists every achievement this just-finished game earned - both the
+   * single-game ones (`evaluateGameAchievements`, pure) and the cross-game ones
+   * (`AchievementRepository.recordGameResult`, DB-backed) - then PMs each player who unlocked
+   * something new.
+   */
+  private async awardAchievements(game: Game, batches: readonly (readonly GameEvent[])[]): Promise<void> {
+    const group = await this.groups.getOrCreate(game.chatId, null, null);
+    const allEvents = batches.flat();
+
+    const singleGame = evaluateGameAchievements({
+      players: game.players,
+      mode: game.mode,
+      winningTeam: game.winningTeam,
+      eventBatches: batches,
+      showRolesOnDeath: group.showRolesOnDeath,
+    });
+
+    const guardianAngel = game.players.find((p) => p.role === ROLE_BIT.GuardianAngel);
+    const gaSaves = allEvents.filter((e) => GA_SAVE_EVENT_TYPES.has(e.type)).length;
+
+    const newUnlocks = new Map<bigint, AchievementCode[]>();
+    for (const [playerId, codes] of singleGame) {
+      for (const code of codes) {
+        if (await this.achievements.unlock(playerId, code)) {
+          const list = newUnlocks.get(playerId) ?? [];
+          list.push(code);
+          newUnlocks.set(playerId, list);
+        }
+      }
+    }
+
+    const crossGameUnlocks = await this.achievements.recordGameResult(
+      game.players.map((p) => p.id),
+      firstLynchVictimId(batches),
+      guardianAngel && gaSaves > 0 ? { telegramId: guardianAngel.id, savesThisGame: gaSaves } : null,
+    );
+    for (const [playerId, codes] of crossGameUnlocks) {
+      const list = newUnlocks.get(playerId) ?? [];
+      list.push(...codes);
+      newUnlocks.set(playerId, list);
+    }
+
+    for (const [playerId, codes] of newUnlocks) {
+      for (const code of codes) await this.announceAchievement(playerId, group.language, code);
+    }
+  }
+
+  private async announceAchievement(telegramId: bigint, language: string, code: AchievementCode): Promise<void> {
+    const meta = ACHIEVEMENTS[code];
+    try {
+      await this.bot.api.sendMessage(
+        chatNumber(telegramId),
+        this.t.translate(language, 'AchievementUnlocked', meta.name, meta.description),
+      );
+    } catch (err) {
+      if (err instanceof GrammyError) return;
+      throw err;
+    }
   }
 
   // ------------------------------------------------------------- Callbacks
@@ -424,6 +508,10 @@ export class GameLoop {
     events: readonly GameEvent[],
     phase: 'Night' | 'Day' | 'Lynch',
   ): Promise<void> {
+    const batches = this.eventBatches.get(game.chatId) ?? [];
+    batches.push([...events]);
+    this.eventBatches.set(game.chatId, batches);
+
     for (const event of events) {
       for (const msg of describeEvent(event, game.players, group.showRolesOnDeath)) {
         if (msg.audience === 'group') {

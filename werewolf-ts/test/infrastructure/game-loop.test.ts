@@ -80,11 +80,16 @@ function createHarness() {
     recordKill: vi.fn(async () => {}),
   } as unknown as GameRepository;
 
+  const achievements = {
+    unlock: vi.fn(async () => false),
+    recordGameResult: vi.fn(async () => new Map()),
+  } as unknown as import('../../src/infrastructure/persistence/achievement.repository.js').AchievementRepository;
+
   const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as import('../../src/infrastructure/logging/logger.js').Logger;
 
-  const loop = new GameLoop(bot, gameManager, groups, gameRepo, translator, logger);
+  const loop = new GameLoop(bot, gameManager, groups, gameRepo, achievements, translator, logger);
 
-  return { loop, bot, sendMessage, gameManager, groups, gameRepo, group, logger };
+  return { loop, bot, sendMessage, gameManager, groups, gameRepo, achievements, group, logger };
 }
 
 /** A 5-player game (1 Wolf, 4 Villagers) already dealt and in Night 1, matching what
@@ -153,7 +158,7 @@ describe('GameLoop', () => {
   });
 
   it('finalizes and removes the game from the registry once it ends, without creating a second DB row', async () => {
-    const { loop, gameManager, gameRepo } = createHarness();
+    const { loop, gameManager, gameRepo, achievements } = createHarness();
     const game = dealtGame(gameManager);
     const wolf = game.players[0]!;
 
@@ -191,6 +196,10 @@ describe('GameLoop', () => {
     expect(gameRepo.createGame).not.toHaveBeenCalled(); // the lobby already created row #42, not the loop
     expect(gameRepo.finalizeGame).toHaveBeenCalledWith(42, game.winningTeam, game.players);
     expect(game.winningTeam).toBe('Wolf');
+
+    // Achievements are evaluated (both single-game and cross-game) once the game ends.
+    expect(achievements.unlock).toHaveBeenCalledWith(wolf.id, 'WelcomeToHell');
+    expect(achievements.recordGameResult).toHaveBeenCalledTimes(1);
   });
 
   it('rejects a night-target callback from a player not in any active game', async () => {

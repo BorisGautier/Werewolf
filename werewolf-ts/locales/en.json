@@ -256,6 +256,17 @@
     "StatsGroupLine": ["This group has hosted {0} finished games."],
     "StatsHeader": ["📊 Stats"],
 
+    "AchievementUnlocked": ["🏆 Achievement unlocked: {0}\n{1}"],
+    "AchvHeader": ["🏆 Your achievements ({0}/{1}):"],
+    "AchvEmpty": ["You haven't unlocked any achievements yet - go play a game!"],
+    "AchvLine": ["{0} - {1}"],
+    "AchAdded": ["Achievement \"{0}\" unlocked for {1}."],
+    "AchAlreadyHad": ["{1} already has the \"{0}\" achievement."],
+    "AchRemoved": ["Achievement \"{0}\" removed from {1}."],
+    "AchDidntHave": ["{1} doesn't have the \"{0}\" achievement."],
+    "AchUnknownCode": ["Unknown achievement code: {0}"],
+    "AchUsage": ["Usage: reply to (or @mention/id) the target, then the achievement code, e.g. /addach WelcomeToHell"],
+
     "CfgMenuRoles": ["🎭 Roles"],
     "CfgMenuOptions": ["⚙️ Options"],
     "CfgMenuMode": ["🎲 Mode"],

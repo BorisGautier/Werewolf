@@ -151,6 +151,12 @@ model Player {
   tempBanCount   Int      @default(0)
   donationLevel  Int      @default(0)
   isFounder      Boolean  @default(false)
+  /// Cumulative across every game - "saves" (blocked attacks) aren't deaths, so unlike kills
+  /// they can't be counted from `game_kills`; powers the GotYourBack achievement.
+  guardianAngelSaves Int @default(0)
+  /// Consecutive finished games this player was the first lynch victim in; resets to 0 the
+  /// moment a game ends without that being true. Powers the BlackSheep achievement.
+  firstLynchStreak   Int @default(0)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
