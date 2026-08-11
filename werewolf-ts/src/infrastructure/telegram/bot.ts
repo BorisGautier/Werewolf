@@ -621,11 +621,30 @@ function registerModerationCommands(
       return;
     }
 
+    // Mirrors the original's three-section /getbans layout: spam bans (temporary, in-memory list)
+    // separate from global bans, themselves split into expiring-soonest-first vs permanent.
+    const line = (ban: (typeof bans)[number]) =>
+      deps.translator.translate(group.language, 'GetBansLine', ban.playerName ?? ban.telegramId.toString(), ban.telegramId.toString(), ban.reason);
+
+    const spam = bans.filter((b) => b.scope === 'SPAM');
+    const manual = bans.filter((b) => b.scope !== 'SPAM');
+    const expiring = manual
+      .filter((b) => b.expiresAt !== null)
+      .sort((a, b) => a.expiresAt!.getTime() - b.expiresAt!.getTime());
+    const permanent = manual.filter((b) => b.expiresAt === null);
+
     const lines = [deps.translator.translate(group.language, 'GetBansHeader')];
-    for (const ban of bans) {
-      lines.push(
-        deps.translator.translate(group.language, 'GetBansLine', ban.playerName ?? ban.telegramId.toString(), ban.telegramId.toString(), ban.reason),
-      );
+    if (spam.length > 0) {
+      lines.push('', deps.translator.translate(group.language, 'GetBansSpamHeader'));
+      for (const ban of spam) lines.push(line(ban));
+    }
+    if (expiring.length > 0) {
+      lines.push('', deps.translator.translate(group.language, 'GetBansExpiringHeader'));
+      for (const ban of expiring) lines.push(line(ban));
+    }
+    if (permanent.length > 0) {
+      lines.push('', deps.translator.translate(group.language, 'GetBansPermanentHeader'));
+      for (const ban of permanent) lines.push(line(ban));
     }
     await ctx.reply(lines.join('\n'));
   });
@@ -653,8 +672,59 @@ function registerModerationCommands(
       return;
     }
     const expires = ban.expiresAt ? ban.expiresAt.toISOString() : deps.translator.translate(group.language, 'GetBanPermanent');
+    const firstSeen = ban.firstSeen ? ban.firstSeen.toISOString() : deps.translator.translate(group.language, 'GetBanUnknown');
     await ctx.reply(
-      deps.translator.translate(group.language, 'GetBanStatus', target.name, ban.reason, ban.bannedBy?.toString() ?? '?', expires),
+      deps.translator.translate(group.language, 'GetBanStatus', target.name, ban.reason, ban.bannedBy?.toString() ?? '?', expires, firstSeen),
+    );
+  });
+
+  bot.command('user', async (ctx) => {
+    if (!ctx.chat || !ctx.from) return;
+    if (!(await isGlobalAdmin(BigInt(ctx.from.id)))) return;
+
+    const group = await deps.groupRepository.getOrCreate(BigInt(ctx.chat.id), ctx.chat.title ?? null, null);
+    const targets = await resolveEntityTargets(ctx, deps.playerRepository);
+    for (const id of numericIdTargets(ctx.match as string | undefined)) {
+      targets.push({ id, name: id.toString() });
+    }
+    const reply = replyTarget(ctx);
+    if (reply) targets.push(reply);
+    const target = targets[0];
+    if (!target) {
+      await ctx.reply(deps.translator.translate(group.language, 'ModTargetMissing'));
+      return;
+    }
+
+    const player = await deps.playerRepository.findByTelegramId(target.id);
+    if (!player) {
+      await ctx.reply(deps.translator.translate(group.language, 'UserNotFound'));
+      return;
+    }
+
+    const { played, won } = await deps.gameRepository.getPlayerStats(target.id);
+    const ban = await deps.adminRepository.getBan(target.id);
+    const banStatus = ban
+      ? deps.translator.translate(
+          group.language,
+          'UserProfileBanned',
+          ban.reason,
+          ban.expiresAt ? ban.expiresAt.toISOString() : deps.translator.translate(group.language, 'GetBanPermanent'),
+        )
+      : deps.translator.translate(group.language, 'UserProfileNotBanned');
+
+    await ctx.reply(
+      deps.translator.translate(
+        group.language,
+        'UserProfile',
+        player.displayName ?? target.name,
+        player.username ?? '-',
+        player.languageCode ?? '-',
+        `${played} (won: ${won})`,
+        player.donationLevel.toString(),
+        player.createdAt.toISOString(),
+        player.tempBanCount.toString(),
+        banStatus,
+      ),
     );
   });
 }

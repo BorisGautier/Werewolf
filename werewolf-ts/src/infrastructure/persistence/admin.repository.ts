@@ -20,6 +20,11 @@ export interface BanRecord {
   bannedAt: Date;
   expiresAt: Date | null;
   playerName: string | null;
+  scope: BanScope;
+  /** The banned player's own `createdAt` (first time they ever interacted with the bot) - mirrors
+   * the original's `/getban` "Player first seen" line. `null` for an id the bot has never seen
+   * outside of this ban (e.g. banned by raw numeric id, no stub `Player` row created). */
+  firstSeen: Date | null;
 }
 
 /**
@@ -111,7 +116,8 @@ interface BanRow {
   bannedBy: bigint | null;
   bannedAt: Date;
   expiresAt: Date | null;
-  player: { displayName: string | null } | null;
+  scope: BanScope;
+  player: { displayName: string | null; createdAt: Date } | null;
 }
 
 function toBanRecord(ban: BanRow): BanRecord {
@@ -122,5 +128,7 @@ function toBanRecord(ban: BanRow): BanRecord {
     bannedAt: ban.bannedAt,
     expiresAt: ban.expiresAt,
     playerName: ban.player?.displayName ?? null,
+    scope: ban.scope,
+    firstSeen: ban.player?.createdAt ?? null,
   };
 }
