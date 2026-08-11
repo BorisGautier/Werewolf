@@ -332,6 +332,7 @@
     "CfgMenuMode": ["🎲 Mode"],
     "CfgMenuTimers": ["⏱ Minuteurs"],
     "CfgMenuMaxPlayers": ["👥 Joueurs max"],
+    "CfgMenuLanguage": ["🌐 Langue"],
     "CfgMainTitle": ["Réglages pour {0}. Choisis une catégorie :"],
     "CfgBack": ["« Retour"],
     "CfgRolesTitle": ["Touche un rôle pour l'activer/le désactiver dans ce groupe :"],
@@ -346,6 +347,9 @@
     "CfgTimerLynch": ["Vote de pendaison"],
     "CfgTimerExtend": ["Max /extend"],
     "CfgMaxPlayersTitle": ["Limite actuelle : {0} joueurs. Choisis-en une nouvelle :"],
+    "CfgLanguageTitle": ["Dans quelle langue ce groupe doit-il jouer ?"],
+    "CfgLangPackTitle": ["Choisis un pack de langue (ou Défaut pour la version standard) :"],
+    "CfgLangPackDefault": ["Défaut"],
 
     "CfgThiefFull": ["Le Voleur peut voler chaque nuit (pas seulement la nuit 1)"],
     "CfgBurningOverkill": ["Le feu de l'Incendiaire peut tuer malgré la protection de la Garde du Corps"],

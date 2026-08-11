@@ -132,4 +132,27 @@ describe('ConfigMenu', () => {
     expect(tooFar).not.toBeNull();
     expect(negative).not.toBeNull();
   });
+
+  it('lists every loaded base language on the language screen', async () => {
+    const { menu } = createHarness();
+    const screen = await menu.handleAction(-100n, 'lang', []);
+    const data = screen!.keyboard.inline_keyboard.flat().map((b) => b.text);
+    expect(data.some((t) => t.includes('English'))).toBe(true);
+    expect(data.some((t) => t.includes('Français'))).toBe(true);
+  });
+
+  it("offers only Default for a base language with no shipped packs, and marks it selected", async () => {
+    const { menu } = createHarness();
+    const screen = await menu.handleAction(-100n, 'langpacks', ['en']);
+    const data = screen!.keyboard.inline_keyboard.flat().map((b) => b.text);
+    expect(data.some((t) => t.includes('Default'))).toBe(true);
+    expect(data.some((t) => t.startsWith('✅'))).toBe(true);
+  });
+
+  it('sets the group language and returns to the main screen', async () => {
+    const { menu, getGroup } = createHarness();
+    const screen = await menu.handleAction(-100n, 'setlang', ['fr']);
+    expect(getGroup().language).toBe('fr');
+    expect(screen!.text).toContain('Test Group');
+  });
 });

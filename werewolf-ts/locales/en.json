@@ -336,6 +336,7 @@
     "CfgMenuMode": ["🎲 Mode"],
     "CfgMenuTimers": ["⏱ Timers"],
     "CfgMenuMaxPlayers": ["👥 Max players"],
+    "CfgMenuLanguage": ["🌐 Language"],
     "CfgMainTitle": ["Settings for {0}. Pick a category:"],
     "CfgBack": ["« Back"],
     "CfgRolesTitle": ["Tap a role to enable/disable it for this group:"],
@@ -350,6 +351,9 @@
     "CfgTimerLynch": ["Lynch vote"],
     "CfgTimerExtend": ["Max /extend"],
     "CfgMaxPlayersTitle": ["Current limit: {0} players. Pick a new one:"],
+    "CfgLanguageTitle": ["Which language should this group's games be narrated in?"],
+    "CfgLangPackTitle": ["Pick a language pack (or Default for the standard wording):"],
+    "CfgLangPackDefault": ["Default"],
 
     "CfgThiefFull": ["Thief can steal every night (not just night 1)"],
     "CfgBurningOverkill": ["Arsonist fire can kill through Guardian Angel protection"],

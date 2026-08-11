@@ -25,6 +25,27 @@ export class Translator {
     return formatPlaceholders(choice, args);
   }
 
+  /** Every loaded locale that is itself a real language, not a themed pack of one (`isPack` not
+   * set - see `LocaleFile`'s doc comment) - e.g. `en`, `fr`. Powers the language-selection
+   * screen's first step. */
+  listBaseLocales(): { code: string; name: string }[] {
+    return [...this.locales.values()].filter((l) => !l.isPack).map((l) => ({ code: l.code, name: l.name }));
+  }
+
+  /** Every loaded pack registered against `baseCode` (`isPack` set and `base === baseCode`) -
+   * empty until someone actually ships a `locales/<baseCode>-<pack>.json`. Powers the
+   * pack-selection step. */
+  listPacksForBase(baseCode: string): { code: string; name: string }[] {
+    return [...this.locales.values()].filter((l) => l.isPack && l.base === baseCode).map((l) => ({ code: l.code, name: l.name }));
+  }
+
+  /** `localeCode`'s base language - itself if it isn't a pack, or is unknown. Lets a screen
+   * recover "which base is this pack a variant of" from a stored code. */
+  baseOf(localeCode: string): string {
+    const locale = this.locales.get(localeCode);
+    return locale?.isPack && locale.base ? locale.base : localeCode;
+  }
+
   private resolveValues(localeCode: string, key: string): string[] {
     const locale = this.locales.get(localeCode);
 
