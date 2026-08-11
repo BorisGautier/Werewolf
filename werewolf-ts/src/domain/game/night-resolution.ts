@@ -816,8 +816,16 @@ export function resolveThiefNight(
 
   if (!thiefFull) {
     if (dayNumber !== 1) return events;
-    const target = players.find((p) => p.id === thief.choice);
-    if (!target) return events;
+    let target = players.find((p) => p.id === thief.choice);
+    // Mirrors `ChooseRandomPlayerId(thief, false)`: a non-"ThiefFull" Thief who never chose (or
+    // whose choice no longer resolves to a living player) is forced to steal from a random living
+    // player instead of sitting out the rest of the game as a permanently unresolved Thief.
+    if (!target) {
+      const alive = players.filter((p) => p.id !== thief.id && !p.isDead);
+      if (alive.length === 0) return events;
+      target = alive[Math.floor(random() * alive.length)]!;
+      events.push({ type: 'ThiefStealForced', thiefId: thief.id, targetId: target.id });
+    }
 
     const { result, events: visitEvents } = visitPlayer(visitCtx, thief, target);
     events.push(...visitEvents);

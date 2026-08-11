@@ -63,10 +63,27 @@ describe('resolveThiefNight (non-ThiefFull)', () => {
     expect(dead.role).toBe(ROLE_BIT.Seer); // untouched
   });
 
-  it('does nothing without a chosen target', () => {
+  it('does nothing without a chosen target when no other living player exists to redirect to', () => {
     const thief = createPlayer(1n, 'T', ROLE_BIT.Thief, 'Thief');
     resolveThiefNight([thief], 1, false, baseCtx([thief], 1));
     expect(thief.role).toBe(ROLE_BIT.Thief);
+  });
+
+  it('forces a steal from a random living player when the Thief never chose (mirrors ChooseRandomPlayerId)', () => {
+    const thief = createPlayer(1n, 'T', ROLE_BIT.Thief, 'Thief');
+    const seer = createPlayer(2n, 'S', ROLE_BIT.Seer, 'Village');
+    const dead = createPlayer(3n, 'D', ROLE_BIT.Villager, 'Village');
+    dead.isDead = true;
+    // thief.choice stays null - never picked a target.
+
+    const events = resolveThiefNight([thief, seer, dead], 1, false, baseCtx([thief, seer, dead], 1, () => 0));
+
+    expect(thief.role).toBe(ROLE_BIT.Seer);
+    expect(seer.role).toBe(ROLE_BIT.Villager);
+    expect(dead.role).toBe(ROLE_BIT.Villager); // the dead player was never a valid redirect target
+    expect(events.some((e) => e.type === 'ThiefStealForced' && e.thiefId === thief.id && e.targetId === seer.id)).toBe(
+      true,
+    );
   });
 });
 
