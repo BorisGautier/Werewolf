@@ -45,5 +45,8 @@ export type GameEvent =
   | { type: 'LoversCreated'; lover1Id: bigint; lover2Id: bigint }
   | { type: 'GunnerLostPowerToWiseElder'; playerId: bigint }
   | { type: 'ChemistLostPowerToWiseElder'; playerId: bigint }
+  | { type: 'HunterLostPowerToWiseElder'; playerId: bigint }
   | { type: 'BittenPlayerTurnedWolf'; playerId: bigint }
-  | { type: 'GraveDug'; playerId: bigint; graveCount: number };
+  | { type: 'GraveDug'; playerId: bigint; graveCount: number }
+  | { type: 'BlacksmithSpreadSilver'; playerId: bigint; dayNumber: number }
+  | { type: 'SandmanUsedSleep'; playerId: bigint; dayNumber: number };

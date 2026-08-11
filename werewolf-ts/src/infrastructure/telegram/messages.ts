@@ -172,6 +172,15 @@ export function describeEvent(
     case 'ChemistLostPowerToWiseElder':
       return [{ audience: 'group', key: 'ChemistKillWiseElder', args: [] }];
 
+    case 'HunterLostPowerToWiseElder':
+      return [{ audience: event.playerId, key: 'HunterLostPowerMsg', args: [] }];
+
+    // Button presses already get their own immediate feedback as the callback answer
+    // (BlacksmithSpreadMsg/SandmanUsedMsg) - these events exist purely for achievement tracking.
+    case 'BlacksmithSpreadSilver':
+    case 'SandmanUsedSleep':
+      return [];
+
     case 'WolvesGotDrunk':
       return event.wolfIds.map((id) => ({ audience: id, key: 'WolvesGotDrunkMsg', args: [] }));
 

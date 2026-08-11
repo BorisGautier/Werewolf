@@ -349,22 +349,27 @@ export class Game {
     return true;
   }
 
-  /** Mirrors the Blacksmith's "spread silver" button: protects the village from being eaten by wolves tonight. */
-  useBlacksmithSpreadSilver(playerId: bigint): boolean {
+  /**
+   * Mirrors the Blacksmith's "spread silver" button: protects the village from being eaten by
+   * wolves tonight. Returns the resulting events (empty if the ability didn't fire) rather than
+   * a bare boolean so `WastedSilver` (Blacksmith and Sandman both act the same day) can be
+   * detected from the day's event batch alone.
+   */
+  useBlacksmithSpreadSilver(playerId: bigint): GameEvent[] {
     const blacksmith = this.players.find((p) => p.id === playerId && p.role === ROLE_BIT.Blacksmith && !p.isDead);
-    if (!blacksmith || blacksmith.hasUsedAbility) return false;
+    if (!blacksmith || blacksmith.hasUsedAbility) return [];
     blacksmith.hasUsedAbility = true;
     this.silverSpread = true;
-    return true;
+    return [{ type: 'BlacksmithSpreadSilver', playerId, dayNumber: this.dayNumber }];
   }
 
   /** Mirrors the Sandman's "sleep" button: the whole village (and every role's action) skips tonight. */
-  useSandmanSleep(playerId: bigint): boolean {
+  useSandmanSleep(playerId: bigint): GameEvent[] {
     const sandman = this.players.find((p) => p.id === playerId && p.role === ROLE_BIT.Sandman && !p.isDead);
-    if (!sandman || sandman.hasUsedAbility) return false;
+    if (!sandman || sandman.hasUsedAbility) return [];
     sandman.hasUsedAbility = true;
     this.sandmanSleep = true;
-    return true;
+    return [{ type: 'SandmanUsedSleep', playerId, dayNumber: this.dayNumber }];
   }
 
   /** Mirrors the Troublemaker's "double lynch" button: forces two lynch attempts today, overriding a pending Pacifist peace. */
@@ -448,9 +453,28 @@ export class Game {
     return [...resolveGunnerShot(this.players), ...resolveSpumpkinDetonate(this.players, random)];
   }
 
+  /**
+   * The generic post-hoc kill entrypoint - in practice only ever called for the Hunter's final
+   * dying shot (`GameLoop.handleHunterShots`). If that shot lands on the Wise Elder, the guilt
+   * costs the Hunter their role entirely, mirroring the Gunner (`day-actions.ts`) and Chemist
+   * (`night-resolution.ts`) equivalents against the same target.
+   */
   killPlayer(victimId: bigint, method: KillMethod, options: KillOptions = {}): GameEvent[] {
     if (this.phase === 'Ended') throw new GameError('The game has already ended.', 'GAME_OVER');
-    return killPlayer(this.players, victimId, method, options);
+
+    const events: GameEvent[] = [];
+    const victim = this.players.find((p) => p.id === victimId);
+    const killerId = options.killerIds?.[0];
+    const killer = killerId !== undefined ? this.players.find((p) => p.id === killerId) : undefined;
+    if (victim?.role === ROLE_BIT.WiseElder && killer?.role === ROLE_BIT.Hunter) {
+      killer.role = ROLE_BIT.Villager;
+      killer.team = getTeamForRole(ROLE_BIT.Villager);
+      killer.changedRolesCount++;
+      events.push({ type: 'HunterLostPowerToWiseElder', playerId: killer.id });
+    }
+
+    events.push(...killPlayer(this.players, victimId, method, options));
+    return events;
   }
 
   checkWinCondition(context: WinConditionContext = {}): WinConditionResult {
