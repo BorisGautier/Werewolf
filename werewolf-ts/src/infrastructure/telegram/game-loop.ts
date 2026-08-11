@@ -160,6 +160,16 @@ export class GameLoop {
         await this.sendPm(actor.id, language, 'AskWolfPack', targetKeyboard(targets, 'nt2', language, this.t));
       }
     }
+
+    // Mirrors the tail of the original's `SendNightActions()`: drunk/frozen/burning only ever
+    // gated *this* night's menu (already decided above) - every resolver keys off `.choice`
+    // staying null for whoever got skipped, so it's safe to clear the flags here for next time.
+    // Without this, a Snow Wolf freeze or a wolf-pack drunk stupor would otherwise never expire.
+    for (const p of game.players) {
+      p.drunk = false;
+      p.frozen = false;
+      p.burning = false;
+    }
   }
 
   private async sendArsonistMenu(actor: Player, players: readonly Player[], language: string): Promise<void> {

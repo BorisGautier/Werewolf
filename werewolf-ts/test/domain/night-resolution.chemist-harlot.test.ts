@@ -136,4 +136,65 @@ describe('resolveHarlotNight', () => {
 
     expect(harlot.isDead).toBe(false);
   });
+
+  it('tracks a chosen target in playersVisited and emits HarlotVisited', () => {
+    const harlot = createPlayer(1n, 'H', ROLE_BIT.Harlot, 'Village');
+    const target = createPlayer(2n, 'T', ROLE_BIT.Villager, 'Village');
+    harlot.choice = target.id;
+
+    const events = resolveHarlotNight([harlot, target], baseCtx([harlot, target]));
+
+    expect(harlot.playersVisited.has(target.id)).toBe(true);
+    expect(harlot.hasStayedHome).toBe(false);
+    expect(events.some((e) => e.type === 'HarlotVisited' && e.harlotId === harlot.id && e.targetId === target.id)).toBe(
+      true,
+    );
+  });
+
+  it('marks hasStayedHome when the Harlot picks no target', () => {
+    const harlot = createPlayer(1n, 'H', ROLE_BIT.Harlot, 'Village');
+    createPlayer(2n, 'T', ROLE_BIT.Villager, 'Village');
+
+    resolveHarlotNight([harlot], baseCtx([harlot]));
+
+    expect(harlot.hasStayedHome).toBe(true);
+  });
+
+  it('marks hasRepeatedVisit on a second visit to the same target, but not on a first', () => {
+    const harlot = createPlayer(1n, 'H', ROLE_BIT.Harlot, 'Village');
+    const target = createPlayer(2n, 'T', ROLE_BIT.Villager, 'Village');
+    harlot.choice = target.id;
+
+    resolveHarlotNight([harlot, target], baseCtx([harlot, target]));
+    expect(harlot.hasRepeatedVisit).toBe(false);
+
+    harlot.choice = target.id;
+    resolveHarlotNight([harlot, target], baseCtx([harlot, target]));
+    expect(harlot.hasRepeatedVisit).toBe(true);
+  });
+});
+
+describe('resolveChemistNight - ChemistBackfired', () => {
+  it('emits ChemistBackfired with the original target on a failed roll', () => {
+    const chemist = createPlayer(1n, 'Ch', ROLE_BIT.Chemist, 'Village');
+    const target = createPlayer(2n, 'T', ROLE_BIT.Villager, 'Village');
+    chemist.choice = target.id;
+
+    const events = resolveChemistNight([chemist, target], baseCtx([chemist, target], () => 0.99));
+
+    expect(events.some((e) => e.type === 'ChemistBackfired' && e.chemistId === chemist.id && e.targetId === target.id)).toBe(
+      true,
+    );
+    expect(target.isDead).toBe(false);
+  });
+
+  it('does not emit ChemistBackfired on a successful poisoning', () => {
+    const chemist = createPlayer(1n, 'Ch', ROLE_BIT.Chemist, 'Village');
+    const target = createPlayer(2n, 'T', ROLE_BIT.Villager, 'Village');
+    chemist.choice = target.id;
+
+    const events = resolveChemistNight([chemist, target], baseCtx([chemist, target], () => 0));
+
+    expect(events.some((e) => e.type === 'ChemistBackfired')).toBe(false);
+  });
 });

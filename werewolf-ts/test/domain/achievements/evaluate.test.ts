@@ -701,4 +701,98 @@ describe('evaluateGameAchievements', () => {
     expect(unlocksFor(result, 1n)).toContain('OhShi');
     expect(unlocksFor(result, 1n)).not.toContain('ShouldveMentioned');
   });
+
+  it('grants Promiscuous to a Harlot with 5+ distinct visits, no stay-homes, no repeats', () => {
+    const harlot = createPlayer(1n, 'H', ROLE_BIT.Harlot, 'Village');
+    harlot.playersVisited = new Set([2n, 3n, 4n, 5n, 6n]);
+    expect(unlocksFor(evaluateGameAchievements(ctx([harlot])), 1n)).toContain('Promiscuous');
+  });
+
+  it('does not grant Promiscuous if the Harlot ever stayed home or repeated a visit', () => {
+    const stayedHome = createPlayer(1n, 'H1', ROLE_BIT.Harlot, 'Village');
+    stayedHome.playersVisited = new Set([2n, 3n, 4n, 5n, 6n]);
+    stayedHome.hasStayedHome = true;
+    const repeated = createPlayer(2n, 'H2', ROLE_BIT.Harlot, 'Village');
+    repeated.playersVisited = new Set([3n, 4n, 5n, 6n, 7n]);
+    repeated.hasRepeatedVisit = true;
+
+    const result = evaluateGameAchievements(ctx([stayedHome, repeated]));
+    expect(unlocksFor(result, 1n)).not.toContain('Promiscuous');
+    expect(unlocksFor(result, 2n)).not.toContain('Promiscuous');
+  });
+
+  it('grants Affectionate when the Harlot visits their own lover', () => {
+    const harlot = createPlayer(1n, 'H', ROLE_BIT.Harlot, 'Village');
+    harlot.loverId = 2n;
+    const events: GameEvent[][] = [[{ type: 'HarlotVisited', harlotId: 1n, targetId: 2n }]];
+    expect(unlocksFor(evaluateGameAchievements(ctx([harlot], { eventBatches: events })), 1n)).toContain('Affectionate');
+  });
+
+  it('does not grant Affectionate when the Harlot visits someone else', () => {
+    const harlot = createPlayer(1n, 'H', ROLE_BIT.Harlot, 'Village');
+    harlot.loverId = 2n;
+    const events: GameEvent[][] = [[{ type: 'HarlotVisited', harlotId: 1n, targetId: 3n }]];
+    expect(unlocksFor(evaluateGameAchievements(ctx([harlot], { eventBatches: events })), 1n)).not.toContain(
+      'Affectionate',
+    );
+  });
+
+  it('grants GoodChoiceForYou to a Chemist with 3 successful (non-backfired) poisonings', () => {
+    const chemist = createPlayer(1n, 'Ch', ROLE_BIT.Chemist, 'Village');
+    const events: GameEvent[][] = [
+      [{ type: 'PlayerDied', playerId: 2n, method: 'Chemistry', killerIds: [1n], isNight: true }],
+      [{ type: 'PlayerDied', playerId: 3n, method: 'Chemistry', killerIds: [1n], isNight: true }],
+      [{ type: 'PlayerDied', playerId: 4n, method: 'Chemistry', killerIds: [1n], isNight: true }],
+    ];
+    expect(unlocksFor(evaluateGameAchievements(ctx([chemist], { eventBatches: events })), 1n)).toContain(
+      'GoodChoiceForYou',
+    );
+  });
+
+  it('does not count a backfire (self-kill) toward GoodChoiceForYou', () => {
+    const chemist = createPlayer(1n, 'Ch', ROLE_BIT.Chemist, 'Village');
+    const events: GameEvent[][] = [
+      [{ type: 'PlayerDied', playerId: 2n, method: 'Chemistry', killerIds: [1n], isNight: true }],
+      [{ type: 'PlayerDied', playerId: 3n, method: 'Chemistry', killerIds: [1n], isNight: true }],
+      [{ type: 'PlayerDied', playerId: 1n, method: 'Chemistry', killerIds: [1n], isNight: true }], // backfire
+    ];
+    expect(unlocksFor(evaluateGameAchievements(ctx([chemist], { eventBatches: events })), 1n)).not.toContain(
+      'GoodChoiceForYou',
+    );
+  });
+
+  it('grants LuckyNight to a survivor of both a Chemist backfire and a Harlot visit the same night', () => {
+    const target = createPlayer(1n, 'T', ROLE_BIT.Villager, 'Village');
+    const events: GameEvent[][] = [
+      [
+        { type: 'ChemistBackfired', chemistId: 2n, targetId: 1n },
+        { type: 'HarlotVisited', harlotId: 3n, targetId: 1n },
+      ],
+    ];
+    expect(unlocksFor(evaluateGameAchievements(ctx([target], { eventBatches: events })), 1n)).toContain('LuckyNight');
+  });
+
+  it('grants ThanksJunior to sober wolves listed in a WolfPackHasDrunkMembers event', () => {
+    const sober = createPlayer(1n, 'S', ROLE_BIT.Wolf, 'Wolf');
+    const drunk = createPlayer(2n, 'D', ROLE_BIT.Wolf, 'Wolf');
+    const events: GameEvent[][] = [[{ type: 'WolfPackHasDrunkMembers', soberWolfIds: [1n] }]];
+
+    const result = evaluateGameAchievements(ctx([sober, drunk], { eventBatches: events }));
+    expect(unlocksFor(result, 1n)).toContain('ThanksJunior');
+    expect(unlocksFor(result, 2n)).not.toContain('ThanksJunior');
+  });
+
+  it('does not grant LuckyNight when the Harlot visited a different player than the backfire', () => {
+    const target = createPlayer(1n, 'T', ROLE_BIT.Villager, 'Village');
+    const other = createPlayer(2n, 'O', ROLE_BIT.Villager, 'Village');
+    const events: GameEvent[][] = [
+      [
+        { type: 'ChemistBackfired', chemistId: 3n, targetId: 1n },
+        { type: 'HarlotVisited', harlotId: 4n, targetId: 2n },
+      ],
+    ];
+    const result = evaluateGameAchievements(ctx([target, other], { eventBatches: events }));
+    expect(unlocksFor(result, 1n)).not.toContain('LuckyNight');
+    expect(unlocksFor(result, 2n)).not.toContain('LuckyNight');
+  });
 });

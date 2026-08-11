@@ -345,6 +345,50 @@ describe('Game.enterNight / resolveNightActions', () => {
     expect(events.some((e) => e.type === 'BittenPlayerTurnedWolf')).toBe(true);
   });
 
+  it('emits WolfPackHasDrunkMembers listing whoever is still sober when part of the pack is drunk', () => {
+    const game = startedGame([
+      [1n, 'SoberWolf'],
+      [2n, 'DrunkWolf'],
+      [3n, 'V3'],
+      [4n, 'V4'],
+      [5n, 'V5'],
+    ]);
+    const sober = game.players[0]!;
+    const drunk = game.players[1]!;
+    sober.role = ROLE_BIT.Wolf;
+    sober.team = 'Wolf';
+    drunk.role = ROLE_BIT.Wolf;
+    drunk.team = 'Wolf';
+    drunk.drunk = true;
+
+    game.startDay();
+    game.startLynch();
+    game.resolveLynch();
+    const events = game.startNight();
+
+    expect(events.some((e) => e.type === 'WolfPackHasDrunkMembers' && e.soberWolfIds.includes(sober.id))).toBe(true);
+    expect(events.some((e) => e.type === 'WolfPackHasDrunkMembers' && e.soberWolfIds.includes(drunk.id))).toBe(false);
+  });
+
+  it('does not emit WolfPackHasDrunkMembers when nobody in the pack is drunk', () => {
+    const game = startedGame([
+      [1n, 'Wolf'],
+      [2n, 'V2'],
+      [3n, 'V3'],
+      [4n, 'V4'],
+      [5n, 'V5'],
+    ]);
+    game.players[0]!.role = ROLE_BIT.Wolf;
+    game.players[0]!.team = 'Wolf';
+
+    game.startDay();
+    game.startLynch();
+    game.resolveLynch();
+    const events = game.startNight();
+
+    expect(events.some((e) => e.type === 'WolfPackHasDrunkMembers')).toBe(false);
+  });
+
   it('automatically digs graves for a living Grave Digger, counting deaths since the last dig', () => {
     // Disable Grave Digger for the initial balance() - if it randomly landed on some other player
     // pre-override, that player's automatic dig during night 1's enterNight() would set the game's

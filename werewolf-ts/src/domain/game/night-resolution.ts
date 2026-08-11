@@ -637,6 +637,7 @@ export function resolveChemistNight(players: Player[], visitCtx: VisitContext): 
       events.push(...killPlayer(players, target.id, 'Chemistry', { killerIds: [chemist.id] }));
     } else {
       // Oops - the Chemist blew themselves up instead.
+      events.push({ type: 'ChemistBackfired', chemistId: chemist.id, targetId: target.id });
       events.push(...killPlayer(players, chemist.id, 'Chemistry', { killerIds: [chemist.id] }));
     }
   }
@@ -649,7 +650,10 @@ export function resolveChemistNight(players: Player[], visitCtx: VisitContext): 
  * branch: visiting someone who turns out to already be dead *this same
  * night* at a wolf's or the Serial Killer's hands gets the Harlot killed too
  * (she stumbled onto the murder) - everything else in this block is
- * message-only.
+ * message-only. `playersVisited`/`hasStayedHome`/`hasRepeatedVisit` are
+ * updated unconditionally on the choice itself (Promiscuous/Affectionate),
+ * before the visit's success/failure is even resolved - mirrors the
+ * original checking these ahead of its own `VisitPlayer` switch.
  */
 export function resolveHarlotNight(players: Player[], visitCtx: VisitContext): GameEvent[] {
   const events: GameEvent[] = [];
@@ -658,6 +662,14 @@ export function resolveHarlotNight(players: Player[], visitCtx: VisitContext): G
   if (!harlot || harlot.frozen) return events;
 
   const target = players.find((p) => p.id === harlot.choice);
+  if (target) {
+    if (harlot.playersVisited.has(target.id)) harlot.hasRepeatedVisit = true;
+    harlot.playersVisited.add(target.id);
+    events.push({ type: 'HarlotVisited', harlotId: harlot.id, targetId: target.id });
+  } else {
+    harlot.hasStayedHome = true;
+  }
+
   const { result, events: visitEvents } = visitPlayer(visitCtx, harlot, target);
   events.push(...visitEvents);
 

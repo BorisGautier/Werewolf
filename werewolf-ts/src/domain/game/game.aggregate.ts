@@ -326,6 +326,15 @@ export class Game {
       this.wolfCubKilled = false;
       for (const p of this.players) p.drunk = false;
     } else {
+      // Mirrors the original's ThanksJunior check: if part of the pack is still sleeping off last
+      // night's drunken meal, whoever's sober can still try to eat while the rest snores through it.
+      const aliveWolves = this.players.filter(
+        (p) => !p.isDead && (WOLF_ROLES.includes(p.role) || p.role === ROLE_BIT.SnowWolf),
+      );
+      if (aliveWolves.some((p) => p.drunk)) {
+        const soberWolfIds = aliveWolves.filter((p) => !p.drunk).map((p) => p.id);
+        if (soberWolfIds.length > 0) events.push({ type: 'WolfPackHasDrunkMembers', soberWolfIds });
+      }
       events.push(...this.digGraves());
     }
 

@@ -118,6 +118,12 @@ export interface Player {
   everyManForHimself: boolean;
   /** Pacifist's lover mechanic: saved from a majority-vote lynch by the Pacifist declaring peace (MySweetieSoStrong). */
   mySweetieSoStrong: boolean;
+  /** Harlot mechanic: distinct players visited across the game (Promiscuous). */
+  playersVisited: Set<bigint>;
+  /** Harlot mechanic: ever stayed home (didn't pick a target) on a night they could act. */
+  hasStayedHome: boolean;
+  /** Harlot mechanic: ever visited the same player more than once. */
+  hasRepeatedVisit: boolean;
 }
 
 export function createPlayer(id: bigint, name: string, role: Role, team: Team): Player {
@@ -181,6 +187,9 @@ export function createPlayer(id: bigint, name: string, role: Role, team: Team): 
     tannerOverkill: false,
     everyManForHimself: false,
     mySweetieSoStrong: false,
+    playersVisited: new Set(),
+    hasStayedHome: false,
+    hasRepeatedVisit: false,
   };
 }
 

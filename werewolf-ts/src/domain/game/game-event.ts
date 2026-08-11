@@ -58,4 +58,7 @@ export type GameEvent =
   | { type: 'OracleVision'; playerId: bigint; targetId: bigint; shownRole: Role | null }
   | { type: 'AugurVision'; playerId: bigint; shownRole: Role | null }
   | { type: 'DetectiveSnoop'; playerId: bigint; targetId: bigint; targetRole: Role }
-  | { type: 'DetectiveCaught'; playerId: bigint };
+  | { type: 'DetectiveCaught'; playerId: bigint }
+  | { type: 'HarlotVisited'; harlotId: bigint; targetId: bigint }
+  | { type: 'ChemistBackfired'; chemistId: bigint; targetId: bigint }
+  | { type: 'WolfPackHasDrunkMembers'; soberWolfIds: bigint[] };
