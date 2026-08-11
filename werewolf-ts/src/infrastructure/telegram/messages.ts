@@ -132,6 +132,9 @@ export function describeEvent(
         { audience: event.thiefId, key: 'RoleStolenPM', args: [name(event.targetId), displayRole(event.stolenRole)] },
       ];
 
+    case 'ThiefStealForced':
+      return [{ audience: event.thiefId, key: 'ThiefStealChosen', args: [name(event.targetId)] }];
+
     case 'CursedTurnedWolf':
       return [{ audience: event.playerId, key: 'CursedTurnedWolfMsg', args: [name(event.playerId)] }];
 

@@ -305,6 +305,7 @@
     "WiseElderSurvived": ["You were attacked, but your wisdom saved you... just this once."],
     "ConvertedToCult": ["You feel a dark pull... you've joined the Cult!"],
     "RoleStolenPM": ["You've stolen {0}'s identity! You are now a {1}."],
+    "ThiefStealChosen": ["Your theft target is now {0}."],
     "GunnerLostPowerMsg": ["Your bullet had no effect on the Wise Elder - the shock has stripped you of your power!"],
     "HunterLostPowerMsg": ["Your final shot found the Wise Elder - the guilt strips your title from you. Your last act was that of a lowly villager, not a hunter."],
     "WolvesGotDrunkMsg": ["You got so drunk celebrating tonight's feast that you won't be able to act again for a while."],

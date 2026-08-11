@@ -301,6 +301,7 @@
     "WiseElderSurvived": ["Tu as été attaqué(e), mais ta sagesse t'a sauvé(e)... juste cette fois."],
     "ConvertedToCult": ["Tu sens un appel obscur... tu as rejoint le Culte !"],
     "RoleStolenPM": ["Tu as volé l'identité de {0} ! Tu es maintenant un(e) {1}."],
+    "ThiefStealChosen": ["Ta cible est maintenant {0}."],
     "GunnerLostPowerMsg": ["Ta balle n'a eu aucun effet sur l'Ancien Sage - le choc t'a fait perdre ton pouvoir !"],
     "HunterLostPowerMsg": ["Ton dernier tir a atteint le Sage - la culpabilité te fait perdre ton titre. Ton dernier acte fut celui d'un simple villageois, pas d'un chasseur."],
     "WolvesGotDrunkMsg": ["Tu as tellement fêté le festin de cette nuit que tu ne pourras plus agir pendant un moment."],
