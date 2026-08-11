@@ -1,16 +1,25 @@
 /**
  * Port of the day-phase ability resolutions at the tail end of `DayCycle`:
- * the Gunner's shot and the Spumpkin's detonation. (The Detective's snoop
- * is intentionally not ported as a resolver - re-reading it confirmed it has
- * zero mechanical state effect: an accurate role reveal to the Detective
- * plus a "the wolves might have noticed" message, nothing else.)
+ * the Gunner's shot, the Spumpkin's detonation, and the Detective's snoop.
  */
 
-import { ROLE_BIT } from '../roles/role.js';
+import { ROLE_BIT, type Role } from '../roles/role.js';
 import { killPlayer } from './kill.js';
 import type { GameEvent } from './game-event.js';
 import { ABSTAIN, type Player } from './player.js';
 import { getTeamForRole } from './team.js';
+
+/** The "bad team" roles a Detective's snoop (Streetwise) or a Gunner's bullet (SmartGunner) counts as a real hit. */
+const THREAT_ROLES: readonly Role[] = [
+  ROLE_BIT.Wolf,
+  ROLE_BIT.AlphaWolf,
+  ROLE_BIT.WolfCub,
+  ROLE_BIT.Lycan,
+  ROLE_BIT.Cultist,
+  ROLE_BIT.SerialKiller,
+  ROLE_BIT.SnowWolf,
+  ROLE_BIT.Arsonist,
+];
 
 /**
  * Port of the Gunner block. Always spends a bullet and marks the ability
@@ -32,6 +41,7 @@ export function resolveGunnerShot(players: Player[]): GameEvent[] {
 
   gunner.bullet--;
   gunner.hasUsedAbility = true;
+  if (THREAT_ROLES.includes(target.role)) gunner.bulletHitBaddies++;
 
   if (target.role === ROLE_BIT.WiseElder) {
     gunner.role = ROLE_BIT.Villager;
@@ -76,5 +86,42 @@ export function resolveSpumpkinDetonate(players: Player[], random: () => number 
 
   events.push(...killPlayer(players, spumpkin.id, 'None', { killerIds: [], isNight: false }));
   events.push(...killPlayer(players, target.id, 'Shoot', { killerIds: [spumpkin.id], isNight: false }));
+  return events;
+}
+
+/**
+ * Port of the Detective's snoop block: an accurate (undisguised) role reveal, a chance the wolf
+ * pack gets tipped off, and the Streetwise streak - finding a different threat 4 times running
+ * resets on either a repeat target or a non-threat snoop, mirroring `CorrectSnooped`.
+ */
+export function resolveDetectiveSnoop(players: Player[], random: () => number = Math.random): GameEvent[] {
+  const events: GameEvent[] = [];
+
+  const detective = players.find(
+    (p) => p.role === ROLE_BIT.Detective && !p.isDead && p.choice !== null && p.choice !== ABSTAIN,
+  );
+  if (!detective) return events;
+
+  if (Math.floor(random() * 100) < 40) {
+    // Settings.ChanceDetectiveCaught
+    events.push({ type: 'DetectiveCaught', playerId: detective.id });
+  }
+
+  const target = players.find((p) => p.id === detective.choice);
+  if (!target) return events;
+
+  events.push({ type: 'DetectiveSnoop', playerId: detective.id, targetId: target.id, targetRole: target.role });
+
+  if (!THREAT_ROLES.includes(target.role)) {
+    detective.correctSnoopedIds = [];
+  } else {
+    if (detective.correctSnoopedIds.includes(target.id)) detective.correctSnoopedIds = [];
+    detective.correctSnoopedIds.push(target.id);
+    if (detective.correctSnoopedIds.length >= 4) {
+      detective.streetwise = true;
+      detective.correctSnoopedIds = [];
+    }
+  }
+
   return events;
 }

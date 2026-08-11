@@ -149,6 +149,95 @@ describe('resolveLynchVotes', () => {
 
     expect(clumsy.choice).toBe(SKIP_VOTE);
   });
+
+  it("counts a Clumsy Guy's vote as correct on a no-fumble roll, and on a fumble that lands back on the same target", () => {
+    const clumsy = createPlayer(1n, 'Clumsy', ROLE_BIT.ClumsyGuy, 'Village');
+    const target = createPlayer(2n, 'T', ROLE_BIT.Villager, 'Village');
+    clumsy.choice = target.id;
+
+    resolveLynchVotes([clumsy, target], { lynchAttempt: 1, random: () => 0.99 }); // no fumble
+    expect(clumsy.clumsyCorrectLynchCount).toBe(1);
+
+    clumsy.choice = target.id;
+    resolveLynchVotes([clumsy, target], { lynchAttempt: 1, random: () => 0 }); // fumbles, only target to pick from
+    expect(clumsy.clumsyCorrectLynchCount).toBe(2);
+  });
+
+  it("does not count a Clumsy Guy's vote as correct when a fumble lands on someone else", () => {
+    const clumsy = createPlayer(1n, 'Clumsy', ROLE_BIT.ClumsyGuy, 'Village');
+    const intended = createPlayer(2n, 'Intended', ROLE_BIT.Villager, 'Village');
+    const other = createPlayer(3n, 'Other', ROLE_BIT.Villager, 'Village');
+    clumsy.choice = intended.id;
+
+    let call = 0;
+    const random = () => (call++ === 0 ? 0 : 0.99); // fumble, then pick the last of the two others
+    resolveLynchVotes([clumsy, intended, other], { lynchAttempt: 1, random });
+
+    expect(clumsy.clumsyCorrectLynchCount).toBe(0);
+  });
+
+  it('marks a lynch target as hasBeenVoted the moment anyone votes for them', () => {
+    const voter = createPlayer(1n, 'V', ROLE_BIT.Villager, 'Village');
+    const target = createPlayer(2n, 'T', ROLE_BIT.Villager, 'Village');
+    voter.choice = target.id;
+
+    resolveLynchVotes([voter, target], { lynchAttempt: 1 });
+
+    expect(target.hasBeenVoted).toBe(true);
+    expect(voter.hasBeenVoted).toBe(false);
+  });
+
+  it("counts a revealed Mayor's vote toward mayorLynchAfterRevealCount", () => {
+    const mayor = createPlayer(1n, 'Mayor', ROLE_BIT.Mayor, 'Village');
+    mayor.hasUsedAbility = true;
+    const target = createPlayer(2n, 'T', ROLE_BIT.Villager, 'Village');
+    mayor.choice = target.id;
+
+    resolveLynchVotes([mayor, target], { lynchAttempt: 1 });
+
+    expect(mayor.mayorLynchAfterRevealCount).toBe(1);
+  });
+
+  it('marks a tied Tanner soClose', () => {
+    const tanner = createPlayer(1n, 'Tanner', ROLE_BIT.Tanner, 'Tanner');
+    const other = createPlayer(2n, 'O', ROLE_BIT.Villager, 'Village');
+    const v1 = createPlayer(3n, 'V1', ROLE_BIT.Villager, 'Village');
+    const v2 = createPlayer(4n, 'V2', ROLE_BIT.Villager, 'Village');
+    v1.choice = tanner.id;
+    v2.choice = other.id;
+
+    const { resolution } = resolveLynchVotes([tanner, other, v1, v2], { lynchAttempt: 1 });
+
+    expect(resolution.outcome).toBe('Tied');
+    expect(tanner.soClose).toBe(true);
+    expect(other.soClose).toBe(false); // not a Tanner
+  });
+
+  it('marks tannerOverkill when literally every other living player voted for the Tanner', () => {
+    const tanner = createPlayer(1n, 'Tanner', ROLE_BIT.Tanner, 'Tanner');
+    const v1 = createPlayer(2n, 'V1', ROLE_BIT.Villager, 'Village');
+    const v2 = createPlayer(3n, 'V2', ROLE_BIT.Villager, 'Village');
+    v1.choice = tanner.id;
+    v2.choice = tanner.id;
+
+    resolveLynchVotes([tanner, v1, v2], { lynchAttempt: 1 });
+
+    expect(tanner.tannerOverkill).toBe(true);
+  });
+
+  it('does not mark tannerOverkill when only some voters chose the Tanner', () => {
+    const tanner = createPlayer(1n, 'Tanner', ROLE_BIT.Tanner, 'Tanner');
+    const v1 = createPlayer(2n, 'V1', ROLE_BIT.Villager, 'Village');
+    const v2 = createPlayer(3n, 'V2', ROLE_BIT.Villager, 'Village');
+    const v3 = createPlayer(4n, 'V3', ROLE_BIT.Villager, 'Village');
+    v1.choice = tanner.id;
+    v2.choice = tanner.id;
+    v3.choice = v1.id;
+
+    resolveLynchVotes([tanner, v1, v2, v3], { lynchAttempt: 1 });
+
+    expect(tanner.tannerOverkill).toBe(false);
+  });
 });
 
 describe('resetLynchState', () => {

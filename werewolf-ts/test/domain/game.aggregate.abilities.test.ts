@@ -107,6 +107,59 @@ describe('Game ability toggles', () => {
     expect(game.players[2]!.isDead).toBe(false);
   });
 
+  it('marks EveryManForHimself when the Pacifist declares peace with a majority of votes already against them', () => {
+    const game = startedGame([
+      [1n, 'Pacifist'],
+      [2n, 'V2'],
+      [3n, 'V3'],
+      [4n, 'V4'],
+      [5n, 'V5'],
+    ]);
+    const pacifist = game.players[0]!;
+    pacifist.role = ROLE_BIT.Pacifist;
+
+    game.startDay();
+    game.startLynch();
+    // 3 of 5 alive players (a majority) already vote for the Pacifist before peace is declared.
+    game.players[1]!.choice = pacifist.id;
+    game.players[2]!.choice = pacifist.id;
+    game.players[3]!.choice = pacifist.id;
+    game.usePacifistPeace(pacifist.id);
+
+    game.resolveLynch();
+
+    expect(pacifist.everyManForHimself).toBe(true);
+  });
+
+  it("marks MySweetieSoStrong on the Pacifist's lover when peace saves the lover instead", () => {
+    const game = startedGame([
+      [1n, 'Pacifist'],
+      [2n, 'Lover'],
+      [3n, 'V3'],
+      [4n, 'V4'],
+      [5n, 'V5'],
+    ]);
+    const pacifist = game.players[0]!;
+    const lover = game.players[1]!;
+    pacifist.role = ROLE_BIT.Pacifist;
+    pacifist.loverId = lover.id;
+    lover.loverId = pacifist.id;
+    lover.inLove = true;
+    pacifist.inLove = true;
+
+    game.startDay();
+    game.startLynch();
+    game.players[2]!.choice = lover.id;
+    game.players[3]!.choice = lover.id;
+    game.players[4]!.choice = lover.id;
+    game.usePacifistPeace(pacifist.id);
+
+    game.resolveLynch();
+
+    expect(lover.mySweetieSoStrong).toBe(true);
+    expect(pacifist.everyManForHimself).toBe(false);
+  });
+
   it('Blacksmith spread silver and Sandman sleep set their flags once', () => {
     const game = startedGame([
       [1n, 'Blacksmith'],

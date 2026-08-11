@@ -97,7 +97,7 @@ export function killPlayer(
   }
 
   if (victim.role === ROLE_BIT.WolfCub) {
-    events.push({ type: 'WolfCubKilled' });
+    events.push({ type: 'WolfCubKilled', playerId: victim.id });
   }
 
   if (victim.role === ROLE_BIT.Hunter && (options.triggerHunterShot ?? true)) {

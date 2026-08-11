@@ -213,4 +213,87 @@ describe('resolveWolfNight', () => {
     expect(v1.isDead).toBe(true);
     expect(v2.isDead).toBe(true);
   });
+
+  it("carries the biting Alpha Wolf's id on a bite, for StrongestAlpha/LuckyDay/IncreaseThePack", () => {
+    const alpha = createPlayer(1n, 'Alpha', ROLE_BIT.AlphaWolf, 'Wolf');
+    const villager = createPlayer(2n, 'V', ROLE_BIT.Villager, 'Village');
+    alpha.choice = villager.id;
+
+    const events = resolveWolfNight([alpha, villager], initialNightState(), baseCtx([alpha, villager], () => 0));
+
+    expect(events.some((e) => e.type === 'PlayerBitten' && e.alphaId === alpha.id)).toBe(true);
+  });
+
+  it('marks the Alpha Wolf strongestAlpha when they successfully bite the Serial Killer', () => {
+    const alpha = createPlayer(1n, 'Alpha', ROLE_BIT.AlphaWolf, 'Wolf');
+    const sk = createPlayer(2n, 'SK', ROLE_BIT.SerialKiller, 'SerialKiller');
+    alpha.choice = sk.id;
+    sk.choice = alpha.id; // an active SK gives the visiting wolf a lucky-survival chance at all
+
+    // 1st roll: picks the visiting wolf out of voteWolves (only the Alpha, so any value works).
+    // 2nd roll: the "does the wolf survive visiting the SK" check (needs >= 0.8 to survive).
+    // 3rd roll: the Alpha's bite-conversion chance (needs < 0.2 to bite).
+    const rolls = [0, 0.9, 0];
+    let i = 0;
+    const random = () => rolls[i++]!;
+
+    resolveWolfNight([alpha, sk], initialNightState(), baseCtx([alpha, sk], random));
+
+    expect(alpha.isDead).toBe(false);
+    expect(sk.bitten).toBe(true);
+    expect(alpha.strongestAlpha).toBe(true);
+  });
+
+  it('does not eat the Serial Killer on a failed bite roll - falls back to a normal eat', () => {
+    const alpha = createPlayer(1n, 'Alpha', ROLE_BIT.AlphaWolf, 'Wolf');
+    const sk = createPlayer(2n, 'SK', ROLE_BIT.SerialKiller, 'SerialKiller');
+    alpha.choice = sk.id;
+    sk.choice = alpha.id;
+
+    const rolls = [0, 0.9, 0.99]; // pick the visitor, survive the visit, then fail the bite-conversion roll
+    let i = 0;
+    const random = () => rolls[i++]!;
+
+    resolveWolfNight([alpha, sk], initialNightState(), baseCtx([alpha, sk], random));
+
+    expect(sk.isDead).toBe(true);
+    expect(alpha.strongestAlpha).toBe(false);
+  });
+
+  it('emits AlphaWolfLuckyDay and stays sober when the Alpha bites the Drunk instead of eating them', () => {
+    const alpha = createPlayer(1n, 'Alpha', ROLE_BIT.AlphaWolf, 'Wolf');
+    const drunk = createPlayer(2n, 'D', ROLE_BIT.Drunk, 'Village');
+    alpha.choice = drunk.id;
+
+    const events = resolveWolfNight([alpha, drunk], initialNightState(), baseCtx([alpha, drunk], () => 0));
+
+    expect(drunk.bitten).toBe(true);
+    expect(alpha.drunk).toBe(false); // the pack only falls asleep on the Eat path, not the bite path
+    expect(events.some((e) => e.type === 'AlphaWolfLuckyDay' && e.alphaId === alpha.id)).toBe(true);
+  });
+
+  it('emits WolfPackAteTwice when both pack attacks succeed in the same night', () => {
+    const w1 = createPlayer(1n, 'W1', ROLE_BIT.Wolf, 'Wolf');
+    const w2 = createPlayer(2n, 'W2', ROLE_BIT.Wolf, 'Wolf');
+    const v1 = createPlayer(3n, 'V1', ROLE_BIT.Villager, 'Village');
+    const v2 = createPlayer(4n, 'V2', ROLE_BIT.Villager, 'Village');
+    w1.choice = v1.id;
+    w2.choice = v1.id;
+    w1.choice2 = v2.id;
+    w2.choice2 = v2.id;
+
+    const events = resolveWolfNight([w1, w2, v1, v2], initialNightState(), baseCtx([w1, w2, v1, v2]));
+
+    expect(events.some((e) => e.type === 'WolfPackAteTwice')).toBe(true);
+  });
+
+  it('does not emit WolfPackAteTwice when the pack only manages one successful attack', () => {
+    const wolf = createPlayer(1n, 'W', ROLE_BIT.Wolf, 'Wolf');
+    const villager = createPlayer(2n, 'V', ROLE_BIT.Villager, 'Village');
+    wolf.choice = villager.id;
+
+    const events = resolveWolfNight([wolf, villager], initialNightState(), baseCtx([wolf, villager]));
+
+    expect(events.some((e) => e.type === 'WolfPackAteTwice')).toBe(false);
+  });
 });

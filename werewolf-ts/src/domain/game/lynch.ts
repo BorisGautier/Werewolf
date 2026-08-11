@@ -58,13 +58,20 @@ export function resolveLynchVotes(players: Player[], options: LynchOptions): Lyn
   // The Clumsy Guy has a 50% chance of fumbling their vote onto a random living player instead
   // (mirrors the check in HandleReply, applied here at tally time instead of at vote-cast time -
   // nothing reads `.choice` in between in the original either, so this is behaviorally identical).
+  // `ClumsyCorrectLynchCount` counts a vote as "correct" whenever the one that actually lands is
+  // the one they meant to cast: always on the 50% no-fumble roll, or on a fumble that coincidentally
+  // re-picks their original target (ImNotDrunk).
   for (const voter of alivePlayers(players)) {
     if (voter.role === ROLE_BIT.ClumsyGuy && voter.choice !== null && voter.choice !== ABSTAIN) {
       if (Math.floor(random() * 100) < 50) {
+        const original = voter.choice;
         const alive = players.filter((p) => !p.isDead && p.id !== voter.id);
         if (alive.length > 0) {
           voter.choice = alive[Math.floor(random() * alive.length)]!.id;
         }
+        if (voter.choice === original) voter.clumsyCorrectLynchCount++;
+      } else {
+        voter.clumsyCorrectLynchCount++;
       }
     }
   }
@@ -75,9 +82,11 @@ export function resolveLynchVotes(players: Player[], options: LynchOptions): Lyn
       if (target) {
         target.votes++;
         target.votedBy.add(voter.id);
+        target.hasBeenVoted = true;
 
         if (voter.role === ROLE_BIT.Mayor && voter.hasUsedAbility) {
           target.votes++;
+          voter.mayorLynchAfterRevealCount++;
         }
       }
       voter.nonVoteCount = 0;
@@ -103,6 +112,9 @@ export function resolveLynchVotes(players: Player[], options: LynchOptions): Lyn
       resolution = { outcome: 'Lynched', playerId: lynched!.id };
     } else {
       resolution = { outcome: 'Tied', tiedPlayerIds: tied.map((p) => p.id) };
+      // Mirrors the original's SoClose check in the tie branch: a tied Tanner was "so close" to
+      // being lynched.
+      for (const p of tied) if (p.role === ROLE_BIT.Tanner) p.soClose = true;
     }
   } else {
     lynched = tied[0];
@@ -118,6 +130,10 @@ export function resolveLynchVotes(players: Player[], options: LynchOptions): Lyn
         .filter((p) => p.choice === lynched!.id)
         .map((p) => p.id);
       events.push(...killPlayer(players, lynched.id, 'Lynch', { killerIds, isNight: false }));
+
+      if (lynched.role === ROLE_BIT.Tanner && alivePlayers(players).every((p) => p.choice === lynched!.id)) {
+        lynched.tannerOverkill = true;
+      }
 
       if (lynched.role === ROLE_BIT.Tanner) {
         lynched.diedLastNight = true; // marks which Tanner should be credited with the win

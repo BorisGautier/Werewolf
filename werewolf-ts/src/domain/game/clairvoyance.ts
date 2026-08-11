@@ -13,6 +13,7 @@ import { ROLE_BIT, type Role } from '../roles/role.js';
 import { WOLF_ROLES } from './game-balancing.js';
 import { shuffle } from '../shared/shuffle.js';
 import type { Player } from './player.js';
+import type { GameEvent } from './game-event.js';
 
 /**
  * Port of the Seer's role-disguise `switch` in the `#region Seer / Fool`
@@ -108,4 +109,75 @@ export function augurSees(players: readonly Player[], augur: Player, possibleRol
 
   augur.sawRoles.push(roleToSee);
   return roleToSee;
+}
+
+/**
+ * Port of the `#region Seer / Fool` and `#region Augur` blocks' *side effects* - unlike the pure
+ * calculators above, this is what actually reads each informational role's nightly `.choice`,
+ * applies the disguises, and reports back (as `GameEvent`s the infra layer turns into PMs). Also
+ * the only place several achievement-tracking fields get touched: `Player.trustworthy` (the real
+ * Seer checking a Wolf Man), and the Fool's `foolCorrectSeeCount`/`foolCorrectlySeenBH`/
+ * `hasSeenImpossible`.
+ */
+export function resolveClairvoyanceNight(
+  players: readonly Player[],
+  possibleRoles: readonly Role[],
+  random: () => number = Math.random,
+): GameEvent[] {
+  const events: GameEvent[] = [];
+
+  for (const seer of players.filter((p) => p.role === ROLE_BIT.Seer && !p.isDead && !p.frozen)) {
+    const target = players.find((p) => p.id === seer.choice);
+    if (!target) continue;
+    if (target.role === ROLE_BIT.WolfMan) target.trustworthy = true;
+    events.push({ type: 'SeerVision', playerId: seer.id, targetId: target.id, shownRole: seerSees(target.role, random) });
+  }
+
+  const sorcerer = players.find((p) => p.role === ROLE_BIT.Sorcerer && !p.isDead && !p.frozen);
+  if (sorcerer) {
+    const target = players.find((p) => p.id === sorcerer.choice);
+    if (target) {
+      events.push({
+        type: 'SorcererVision',
+        playerId: sorcerer.id,
+        targetId: target.id,
+        detectedRole: sorcererDetects(target.role),
+      });
+    }
+  }
+
+  const fool = players.find((p) => p.role === ROLE_BIT.Fool && !p.isDead && !p.frozen);
+  if (fool) {
+    const target = players.find((p) => p.id === fool.choice);
+    if (target) {
+      const seen = foolSeesRandomRole(players, fool.id);
+      if (seen !== null) {
+        const isCorrect = seen === target.role || (seen === ROLE_BIT.Wolf && WOLF_ROLES.includes(target.role));
+        if (isCorrect) fool.foolCorrectSeeCount++;
+        if (seen === ROLE_BIT.Beholder && target.role === ROLE_BIT.Beholder) fool.foolCorrectlySeenBH = true;
+        if (seen === ROLE_BIT.WolfMan || seen === ROLE_BIT.Traitor) fool.hasSeenImpossible = true;
+      }
+      events.push({ type: 'FoolVision', playerId: fool.id, targetId: target.id, shownRole: seen });
+    }
+  }
+
+  const oracle = players.find((p) => p.role === ROLE_BIT.Oracle && !p.isDead && !p.frozen);
+  if (oracle) {
+    const target = players.find((p) => p.id === oracle.choice);
+    if (target) {
+      events.push({
+        type: 'OracleVision',
+        playerId: oracle.id,
+        targetId: target.id,
+        shownRole: oracleSeesRandomRole(players, oracle.id, target.role),
+      });
+    }
+  }
+
+  const augur = players.find((p) => p.role === ROLE_BIT.Augur && !p.isDead && !p.frozen);
+  if (augur) {
+    events.push({ type: 'AugurVision', playerId: augur.id, shownRole: augurSees(players, augur, possibleRoles) });
+  }
+
+  return events;
 }

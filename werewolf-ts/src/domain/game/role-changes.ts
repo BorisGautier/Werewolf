@@ -93,6 +93,7 @@ function addLover(players: readonly Player[], existingId: bigint | null, random:
   if (!lover) return null;
 
   lover.inLove = true;
+  lover.speedDating = true; // auto-picked by the bot, not chosen by Cupid (OnlineDating)
   if (existingId !== null) {
     const existing = players.find((p) => p.id === existingId);
     if (existing) {
