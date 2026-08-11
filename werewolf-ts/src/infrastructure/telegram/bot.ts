@@ -11,7 +11,7 @@ import { GameRepository } from '../persistence/game.repository.js';
 import { GIF_CATEGORIES, GifPackRepository } from '../persistence/gif-pack.repository.js';
 import { GroupRepository } from '../persistence/group.repository.js';
 import { NotifyGameRepository } from '../persistence/notify-game.repository.js';
-import { PlayerRepository } from '../persistence/player.repository.js';
+import { DONATION_TIERS, PlayerRepository } from '../persistence/player.repository.js';
 import { GameLobbyManager } from './game-lobby.js';
 import { GameLoop } from './game-loop.js';
 import { ConfigMenu } from './config-menu.js';
@@ -289,6 +289,7 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
   registerUtilityCommands(bot, deps);
   registerDevCommands(bot, env, logger, deps, gameLoop, deps.gameManager, maintenance, startTime);
   registerGifCommands(bot, env, deps);
+  registerDonationCommands(bot, env, deps);
 
   return bot;
 }
@@ -876,7 +877,12 @@ function registerGifCommands(bot: Bot, env: Env, deps: BotDependencies): void {
 
   bot.command('customgif', async (ctx) => {
     if (!ctx.from) return;
-    const language = (await deps.playerRepository.findByTelegramId(BigInt(ctx.from.id)))?.languageCode ?? 'en';
+    const player = await deps.playerRepository.findByTelegramId(BigInt(ctx.from.id));
+    const language = player?.languageCode ?? 'en';
+    if ((player?.donationLevel ?? 0) < 1) {
+      await ctx.reply(deps.translator.translate(language, 'GifPackDonationRequired'));
+      return;
+    }
     const pack = await deps.gifPackRepository.findOwnPack(BigInt(ctx.from.id));
 
     const status = !pack
@@ -907,7 +913,12 @@ function registerGifCommands(bot: Bot, env: Env, deps: BotDependencies): void {
 
   bot.command('setgif', async (ctx) => {
     if (!ctx.from) return;
-    const language = (await deps.playerRepository.findByTelegramId(BigInt(ctx.from.id)))?.languageCode ?? 'en';
+    const player = await deps.playerRepository.findByTelegramId(BigInt(ctx.from.id));
+    const language = player?.languageCode ?? 'en';
+    if ((player?.donationLevel ?? 0) < 1) {
+      await ctx.reply(deps.translator.translate(language, 'GifPackDonationRequired'));
+      return;
+    }
 
     const categoryArg = ((ctx.match as string | undefined) ?? '').trim();
     const category = GIF_CATEGORIES.find((c) => c.toLowerCase() === categoryArg.toLowerCase());
@@ -979,5 +990,76 @@ function registerGifCommands(bot: Bot, env: Env, deps: BotDependencies): void {
     }
     await deps.groupRepository.setDefaultGifPack(BigInt(ctx.chat.id), packId);
     await ctx.reply(deps.translator.translate(group.language, 'GifPackGroupSet'));
+  });
+}
+
+/** Prefix identifying our own invoices in `invoice_payload`, so `pre_checkout_query` never blindly
+ * approves a payload it didn't generate. */
+const DONATE_PAYLOAD_PREFIX = 'donate:';
+
+/**
+ * Port of the original's PayPal-donation flow (`InlineCommand.cs`/`Extensions.cs`), replaced with
+ * Telegram Stars' native payment support (currency `XTR`, no external payment provider/account
+ * needed - `provider_token` is simply left empty). `/donate <amount>` sends a Stars invoice;
+ * `pre_checkout_query` approves it; `message:successful_payment` credits the total and recomputes
+ * the player's donation tier (see `DONATION_TIERS` in `player.repository.ts`) - level 1 (10 stars)
+ * unlocks the custom gif pack feature (see `registerGifCommands`), 2 and 3 are cosmetic-only.
+ */
+function registerDonationCommands(bot: Bot, env: Env, deps: BotDependencies): void {
+  const isDev = (telegramId: bigint) => env.devUserIds.includes(telegramId);
+
+  bot.command('donate', async (ctx) => {
+    if (!ctx.from || !ctx.chat) return;
+    await deps.playerRepository.upsert(BigInt(ctx.from.id), { username: ctx.from.username ?? null });
+    const language = (await deps.playerRepository.findByTelegramId(BigInt(ctx.from.id)))?.languageCode ?? 'en';
+
+    const arg = (ctx.match as string | undefined)?.trim();
+    const amount = arg ? Number.parseInt(arg, 10) : NaN;
+    if (!arg || !Number.isInteger(amount) || amount < 1 || amount > 10000) {
+      await ctx.reply(deps.translator.translate(language, 'DonateHelp', DONATION_TIERS.join(' / ')));
+      return;
+    }
+
+    await ctx.api.sendInvoice(
+      ctx.chat.id,
+      deps.translator.translate(language, 'DonateInvoiceTitle'),
+      deps.translator.translate(language, 'DonateInvoiceDescription', amount),
+      `${DONATE_PAYLOAD_PREFIX}${ctx.from.id}:${amount}`,
+      'XTR',
+      [{ label: deps.translator.translate(language, 'DonateInvoiceLabel'), amount }],
+    );
+  });
+
+  bot.on('pre_checkout_query', async (ctx) => {
+    const ok = ctx.preCheckoutQuery.invoice_payload.startsWith(DONATE_PAYLOAD_PREFIX);
+    await ctx.answerPreCheckoutQuery(ok);
+  });
+
+  bot.on('message:successful_payment', async (ctx) => {
+    const payment = ctx.message.successful_payment;
+    if (!payment.invoice_payload.startsWith(DONATE_PAYLOAD_PREFIX)) return;
+
+    const language = (await deps.playerRepository.findByTelegramId(BigInt(ctx.from.id)))?.languageCode ?? 'en';
+    const result = await deps.playerRepository.recordDonation(BigInt(ctx.from.id), payment.total_amount);
+
+    await ctx.reply(deps.translator.translate(language, 'DonateThanks', payment.total_amount, result.totalStars));
+    if (result.leveledUp) {
+      await ctx.reply(deps.translator.translate(language, 'DonateLeveledUp', result.level));
+    }
+  });
+
+  /** `/adddonation <telegram id> <total stars>` - dev override to set a player's lifetime total
+   * directly (support/testing), same spirit as `/addach`. */
+  bot.command('adddonation', async (ctx) => {
+    if (!ctx.from || !isDev(BigInt(ctx.from.id))) return;
+    const words = ((ctx.match as string | undefined) ?? '').trim().split(/\s+/).filter(Boolean);
+    if (words.length !== 2 || !/^-?\d+$/.test(words[0]!) || !/^\d+$/.test(words[1]!)) {
+      await ctx.reply('Command syntax: /adddonation TELEGRAM_ID TOTAL_STARS');
+      return;
+    }
+    const target = BigInt(words[0]!);
+    const totalStars = Number.parseInt(words[1]!, 10);
+    const result = await deps.playerRepository.setDonatedTotal(target, totalStars);
+    await ctx.reply(`${target.toString()} now has ${result.totalStars} lifetime stars (level ${result.level}).`);
   });
 }

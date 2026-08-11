@@ -525,6 +525,14 @@
     "GifPackGroupCleared": ["Ce groupe n'utilise plus de pack de gifs personnalisé."],
     "GifPackUsageUsePack": ["Utilisez /usegifpack <identifiant telegram> pour activer un pack de gifs approuvé dans ce groupe, ou /usegifpack none pour le désactiver."],
     "GifPackNotApproved": ["Ce pack de gifs n'est pas encore approuvé."],
-    "GifPackGroupSet": ["Ce groupe utilisera désormais ce pack de gifs personnalisé."]
+    "GifPackGroupSet": ["Ce groupe utilisera désormais ce pack de gifs personnalisé."],
+    "GifPackDonationRequired": ["Les packs de gifs personnalisés sont un avantage réservé aux donateurs - faites un don d'au moins 10 Étoiles Telegram avec /donate pour le débloquer."],
+
+    "DonateHelp": ["Soutenez le développement du bot avec les Étoiles Telegram ! Utilisez /donate <montant>, par exemple /donate 10. Paliers de don : {0} étoiles cumulées."],
+    "DonateInvoiceTitle": ["Soutenir Werewolf"],
+    "DonateInvoiceDescription": ["Faites un don de {0} Étoiles Telegram pour soutenir le développement du bot et débloquer des avantages donateur."],
+    "DonateInvoiceLabel": ["Don"],
+    "DonateThanks": ["Merci pour votre don de {0} Étoiles ! Vous avez donné {1} étoiles au total."],
+    "DonateLeveledUp": ["Vous avez atteint le palier de don {0} ! Découvrez vos nouveaux avantages avec /customgif."]
   }
 }

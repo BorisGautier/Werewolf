@@ -149,6 +149,9 @@ model Player {
   banReason      String?
   bannedBy       BigInt?
   tempBanCount   Int      @default(0)
+  /// Cumulative Telegram Stars ever paid via /donate - the running total `donationLevel` is
+  /// recomputed from (see `PlayerRepository.recordDonation`'s DONATION_TIERS thresholds).
+  totalDonatedStars Int   @default(0)
   donationLevel  Int      @default(0)
   isFounder      Boolean  @default(false)
   /// Cumulative across every game - "saves" (blocked attacks) aren't deaths, so unlike kills
