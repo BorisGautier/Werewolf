@@ -817,6 +817,29 @@ function registerDevCommands(
     await ctx.reply(`Bot successfully left from group${group.title ? ` ${group.title}.` : '.'}`);
   });
 
+  bot.command('bangroup', async (ctx) => {
+    if (!ctx.from || !isDev(BigInt(ctx.from.id))) return;
+
+    const arg = (ctx.match as string | undefined)?.trim();
+    if (!arg) {
+      await ctx.reply('Use /bangroup <id|link|username>');
+      return;
+    }
+    const group = await resolveGroupArg(deps.groupRepository, arg);
+    if (!group) {
+      await ctx.reply("Couldn't find the group. Is the id/link valid?");
+      return;
+    }
+
+    await deps.groupRepository.updateConfig(group.telegramId, { banned: true });
+    try {
+      await ctx.api.leaveChat(Number(group.telegramId));
+    } catch (err) {
+      logger.warn({ err, chatId: group.telegramId.toString() }, 'Failed to leave a group just banned via /bangroup');
+    }
+    await ctx.reply(`Group${group.title ? ` ${group.title}` : ''} banned - the bot will refuse to play there and leave on sight.`);
+  });
+
   bot.command('getroles', async (ctx) => {
     if (!ctx.from || !isDev(BigInt(ctx.from.id))) return;
     const arg = (ctx.match as string | undefined)?.trim();

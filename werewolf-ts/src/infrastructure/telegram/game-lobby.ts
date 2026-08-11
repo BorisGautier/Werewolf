@@ -70,6 +70,17 @@ export class GameLobbyManager {
     const group = await this.groups.getOrCreate(chatId, chatTitle, null);
     const language = group.language;
 
+    // Mirrors `StartGame`'s `if (grp.CreatedBy == "BAN")` check: a `/bangroup`'d group never gets
+    // to start another game, even after re-inviting the bot - it just leaves again on sight.
+    if (group.banned) {
+      try {
+        await this.bot.api.leaveChat(chatNumber(chatId));
+      } catch (err) {
+        this.logger.warn({ err, chatId: chatId.toString() }, 'Failed to leave a banned group');
+      }
+      return;
+    }
+
     if (this.games.has(chatId)) {
       await this.send(chatId, language, 'GameAlreadyRunning');
       return;

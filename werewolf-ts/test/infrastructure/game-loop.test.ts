@@ -52,6 +52,7 @@ function fakeGroup(overrides: Partial<GroupWithConfig> = {}): GroupWithConfig {
     secretLynchShowVotes: false,
     secretLynchShowVoters: false,
     botInGroup: true,
+    banned: false,
     memberCount: null,
     preferred: false,
     inviteLink: null,
