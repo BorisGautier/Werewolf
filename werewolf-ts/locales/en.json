@@ -530,6 +530,14 @@
     "GifPackGroupCleared": ["This group no longer uses a custom gif pack."],
     "GifPackUsageUsePack": ["Use /usegifpack <telegram id> to enable an approved gif pack for this group, or /usegifpack none to clear it."],
     "GifPackNotApproved": ["That gif pack isn't approved yet."],
-    "GifPackGroupSet": ["This group will now use that custom gif pack."]
+    "GifPackGroupSet": ["This group will now use that custom gif pack."],
+    "GifPackDonationRequired": ["Custom gif packs are a perk for donors - donate at least 10 Telegram Stars with /donate to unlock it."],
+
+    "DonateHelp": ["Support the bot's development with Telegram Stars! Use /donate <amount>, e.g. /donate 10. Donation tiers: {0} lifetime stars."],
+    "DonateInvoiceTitle": ["Support Werewolf"],
+    "DonateInvoiceDescription": ["Donate {0} Telegram Stars to support the bot's development and unlock donor perks."],
+    "DonateInvoiceLabel": ["Donation"],
+    "DonateThanks": ["Thank you for donating {0} Stars! You've donated {1} lifetime Stars total."],
+    "DonateLeveledUp": ["You've reached donation level {0}! Check out your new perks with /customgif."]
   }
 }
