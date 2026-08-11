@@ -1,134 +1,138 @@
-# werewolf-ts
+# 🐺 werewolf-ts
 
-Réécriture du bot Telegram [Werewolf for Telegram](../Werewolf%20for%20Telegram) (C#/.NET Framework)
-en **Node.js / TypeScript**, en architecture propre (clean architecture),
-pensée pour tourner sur un VPS personnel via Docker.
+Bot Telegram **Loup-Garou / Mafia** — réécriture complète en **Node.js / TypeScript**
+du projet original [Werewolf for Telegram](https://github.com/) (C# / .NET Framework),
+pensée pour tourner en un seul service Docker sur un VPS personnel.
 
-> Ce dossier vit dans la branche `claude/werewolf-nodejs-migration`, à côté du
-> projet C# original (conservé comme référence tant que la migration n'est
-> pas terminée).
+> Ce dossier contient le port complet. Le projet C# original vit dans
+> `../Werewolf for Telegram/` et n'est conservé que comme référence historique —
+> il n'est plus déployé.
 
-## Pourquoi une réécriture (et pas juste un port 1:1)
+## Table des matières de la documentation
 
-Le projet original était conçu pour un opérateur gérant des milliers de
-groupes Telegram simultanément : il utilise donc une architecture distribuée
-`Control` (routeur Telegram) / `Node` (moteur de jeu), plusieurs process qui
-se parlent en TCP, avec auto-scaling. Sur un VPS personnel, cette complexité
-n'apporte rien. `werewolf-ts` garde donc **la même richesse fonctionnelle**
-(43 rôles, équilibrage automatique, cycles jour/nuit/vote, config par groupe,
-stats, achievements) mais dans **un seul service** organisé en couches, plus
-simple à comprendre, tester et faire évoluer.
+| Document | Contenu |
+|---|---|
+| [`ARCHITECTURE.md`](./ARCHITECTURE.md) | Clean architecture, couches, flux d'événements, schéma de base de données, décisions techniques |
+| [`GAMEPLAY.md`](./GAMEPLAY.md) | Déroulement d'une partie, les camps, le détail des 43 rôles, les options de configuration |
+| [`DEPLOYMENT.md`](./DEPLOYMENT.md) | Créer le bot sur Telegram (BotFather) et le déployer sur un VPS avec Docker |
+| [`TESTING.md`](./TESTING.md) | Tout ce qu'on peut tester en local (unitaire, typecheck, lint, build, base de données, bot réel) |
 
-## Architecture (clean architecture)
+## Pourquoi une réécriture (et pas un simple port 1:1)
+
+Le projet original était conçu pour un opérateur gérant potentiellement des
+milliers de groupes Telegram en simultané : il utilise une architecture
+distribuée `Control` (routeur Telegram) / `Node` (moteur de jeu), plusieurs
+process qui se parlent en TCP, avec auto-scaling. Pour un usage personnel sur
+un seul VPS, cette complexité n'apporte rien et complique inutilement la
+maintenance.
+
+`werewolf-ts` garde **la même richesse fonctionnelle** — 43 rôles, équilibrage
+automatique des parties, cycles jour/nuit/vote complets, configuration fine
+par groupe, statistiques, plus de 100 succès (achievements), dons via
+Telegram Stars — mais dans **un seul service monolithe**, organisé en couches
+propres (clean architecture), plus simple à comprendre, tester et faire
+évoluer.
+
+## Fonctionnalités
+
+- **43 rôles jouables** répartis en 6 camps (Village, Loups, Voleur, Tanneur,
+  Culte, Tueur en série, Incendiaire), avec équilibrage automatique de la
+  composition de partie selon le nombre de joueurs (voir `GAMEPLAY.md`).
+- **Deux modes de jeu** : `Normal` (équilibré automatiquement) et `Chaos`
+  (composition aléatoire, aucune garantie d'équilibre).
+- **Configuration par groupe** (`/config`, menu à boutons en message privé) :
+  activer/désactiver chaque rôle individuellement, régler les timers de
+  jour/nuit/vote/prolongation, la taille max de partie, le vote secret, le
+  mode d'affichage des rôles en fin de partie, la langue du groupe, etc.
+- **Plus de 100 succès (achievements)** débloqués automatiquement selon les
+  actions effectuées en partie, consultables avec `/achv`.
+- **Dons via Telegram Stars** (`/donate`) débloquant des badges affichés à
+  côté du nom du joueur et l'accès aux packs de GIFs personnalisés.
+- **Système de GIFs personnalisés** par joueur donateur, avec file de
+  validation par les administrateurs du bot.
+- **i18n complet FR/EN**, formulations aléatoires pour éviter la répétition,
+  système extensible à d'autres langues et à plusieurs "packs" par langue.
+- **Modération complète** : bans temporaires/permanents globaux, ban de
+  groupe persistant, détection anti-spam automatique avec bannissement
+  progressif, admins anonymes de groupe pris en charge.
+- **Outils d'administration bot** : profils joueurs, transferts de succès,
+  mode maintenance, informations d'usage serveur, mise à jour à chaud.
+- **Tâches planifiées (cron)** : agrégation de statistiques quotidiennes,
+  levée automatique des bans temporaires expirés, purge des parties
+  abandonnées suite à un crash/redéploiement.
+
+## Architecture en un coup d'œil
 
 ```
 src/
-  domain/           <- logique métier pure, zéro dépendance IO/framework
-    roles/           - catalogue des 43 rôles (bitmask, emoji, etc.)
-    game/             - équilibrage des rôles, modes de jeu, teams, kill methods
-    config/           - règles de configuration de groupe
-  application/       <- cas d'usage qui orchestrent le domaine + les "ports"
-    ports/             - interfaces (repository, gateway Telegram, horloge...)
-    services/
-  infrastructure/    <- implémentations concrètes des ports
-    persistence/       - Prisma/PostgreSQL
-    telegram/           - bot grammy, commandes
-    i18n/               - chargement des fichiers de langue + traduction
-    scheduler/          - cron jobs (node-cron)
-    config/             - chargement/validation des variables d'env (zod)
-    logging/            - logger (pino)
-  main.ts            <- composition root : assemble tout et démarre le bot
+  domain/            <- logique métier pure, zéro dépendance IO/framework
+    roles/             - catalogue des 43 rôles (bitmask, emoji, camp)
+    game/               - moteur de jeu : phases, résolution de nuit, vote, victoire
+    achievements/       - catalogue et évaluateur des succès
+    shared/             - utilitaires purs (shuffle, ...)
+  application/        <- cas d'usage / orchestration
+    game-manager.ts     - registre en mémoire des parties en cours
+  infrastructure/     <- tout ce qui touche à l'extérieur
+    persistence/         - repositories Prisma / PostgreSQL
+    telegram/             - bot grammy : commandes, menus, boucle de partie
+    i18n/                 - chargement et traduction des fichiers de langue
+    cron/                 - tâches planifiées (node-cron)
+    config/               - chargement/validation des variables d'environnement (zod)
+    logging/              - logger structuré (pino)
+  main.ts             <- composition root : assemble tout et démarre le bot
 ```
 
-Règle de dépendance : `domain` ne dépend de rien d'autre. `application` ne
-dépend que de `domain` (via des ports/interfaces). `infrastructure` implémente
-ces ports et est le seul endroit qui connaît Prisma, grammy, etc. `main.ts`
-est le seul fichier qui "branche" les implémentations concrètes.
+Détails complets dans [`ARCHITECTURE.md`](./ARCHITECTURE.md).
 
-## État d'avancement
-
-| Bloc | Statut |
-|---|---|
-| Squelette projet (TS strict, ESLint, Prettier, Vitest) | ✅ |
-| Domaine : rôles (43), équilibrage automatique, modes de jeu | ✅ testé |
-| Schéma base de données (Prisma/PostgreSQL) | ✅ |
-| Docker (Dockerfile multi-stage + docker-compose) | ✅ |
-| i18n (FR/EN, formulations aléatoires, système extensible) | ✅ testé (jeu de clés de démarrage, pas encore la parité totale avec les ~1000 clés de `English.xml`) |
-| Bot Telegram : bootstrap (long polling, `/ping`, `/version`, gestion d'erreurs) | ✅ |
-| Moteur de jeu : state machine (Joining/Night/Day/Lynch/Ended), conditions de victoire, pipeline de mort (chaîne amoureux/chasseur), vote de lynchage | ✅ testé (56 tests) |
-| Moteur de jeu : résolveurs d'action de nuit rôle par rôle (43 rôles) | ⏳ à venir |
-| Bot Telegram : commandes de jeu/admin/dev complètes | ⏳ à venir |
-| Cron jobs (rotation de stats, purge des parties mortes, bans) | ⏳ à venir |
-| CI (GitHub Actions) | ⏳ à venir |
-
-Le moteur de jeu de base (`src/domain/game/`) est un port fidèle et testé de
-`Werewolf.cs` pour tout ce qui est *règles génériques* : assignation des
-rôles, transitions de phase, conditions de victoire (`CheckForGameEnd`),
-pipeline de mort avec ses réactions en chaîne (`KillPlayer`/`KillLover`), et
-résolution du vote de lynchage (`LynchCycle`). Ce qui reste volontairement
-hors scope pour l'instant : la logique de nuit *spécifique à chaque rôle*
-(qui la Voyante voit, qui les Loups mangent, etc.) - un chantier à part
-entière, lié aux menus Telegram de la commande de nuit.
-
-## Prérequis
-
-- Node.js 20+
-- Docker + Docker Compose (pour le déploiement / pour lancer Postgres en local)
-- Un token de bot Telegram ([@BotFather](https://t.me/BotFather))
-
-## Développement local
+## Démarrage rapide (développement local)
 
 ```bash
 cp .env.example .env
-# renseigner BOT_TOKEN et DATABASE_URL dans .env
+# renseigner BOT_TOKEN (voir DEPLOYMENT.md) et éventuellement DATABASE_URL
 
 npm install
 docker compose up -d db        # démarre juste Postgres
-npm run prisma:migrate         # applique le schéma
-npm run dev                    # démarre le bot en mode watch
+npm run prisma:deploy          # applique les migrations existantes
+npm run dev                    # démarre le bot en mode watch (tsx)
 ```
+
+Guide complet, y compris sans Docker (Postgres local natif) et sans jamais
+toucher à un vrai bot Telegram : voir [`TESTING.md`](./TESTING.md).
 
 Autres commandes utiles :
 
 ```bash
-npm run lint       # ESLint
-npm run test       # Vitest (tests unitaires du domaine, i18n, ...)
-npm run build       # compilation TypeScript -> dist/
-npm run prisma:studio  # explorateur de données Prisma
+npm run lint            # ESLint
+npm run test            # Vitest (tests unitaires — domaine, infra, i18n...)
+npm run build            # compilation TypeScript -> dist/
+npm run prisma:studio    # explorateur de données Prisma (GUI web)
+npm run prisma:migrate   # crée une nouvelle migration après modification du schéma
 ```
 
-## Déploiement sur ton VPS (Docker)
+## Déploiement en production
 
-1. Sur le VPS : installer Docker + Docker Compose plugin.
-2. Cloner le repo, se placer dans `werewolf-ts/`.
-3. Créer un `.env` à partir de `.env.example` avec ton vrai `BOT_TOKEN`, un
-   `POSTGRES_PASSWORD` fort, et éventuellement `DEV_USER_IDS`/`ERROR_CHAT_ID`.
-4. Démarrer :
+Guide détaillé pas à pas (création du bot via BotFather, configuration du
+`.env`, `docker compose up -d --build`, mise à jour, sauvegarde de la base) :
+voir [`DEPLOYMENT.md`](./DEPLOYMENT.md).
 
-   ```bash
-   docker compose up -d --build
-   ```
+Résumé : le bot tourne en *long polling* (pas besoin de nom de domaine ni de
+certificat HTTPS) dans un conteneur `app`, avec PostgreSQL dans un conteneur
+`db` séparé et un volume nommé pour la persistance. Au démarrage, le conteneur
+applique automatiquement les migrations Prisma avant de lancer le bot.
 
-   Au démarrage, le conteneur `app` applique automatiquement les migrations
-   Prisma (`prisma migrate deploy`) avant de lancer le bot
-   (`docker-entrypoint.sh`). Postgres tourne dans son propre conteneur avec
-   un volume nommé (`werewolf-db-data`) pour la persistance.
-5. Suivre les logs : `docker compose logs -f app`.
-6. Mettre à jour après un `git pull` : `docker compose up -d --build`.
+## Prérequis
 
-Le bot tourne en *long polling* (pas besoin d'un nom de domaine ni de
-certificat HTTPS pour le VPS) - suffisant pour un usage personnel. On pourra
-passer en mode webhook plus tard si besoin de scaler.
+- Node.js 20+
+- Docker + Docker Compose (déploiement, ou pour lancer juste Postgres en local)
+- Un token de bot Telegram ([@BotFather](https://t.me/BotFather))
 
-## Prochaines étapes (roadmap)
+## État du projet
 
-1. Résolveurs d'action de nuit rôle par rôle (Voyante, Loups, Garde du corps,
-   Cupidon, Chasseur, Détective, ...), branchés sur `Game` (`src/domain/game/game.aggregate.ts`).
-2. Porter l'ensemble des commandes (`Werewolf Control/Commands/*.cs`) avec
-   `grammy` : jeu (`/startgame`, `/join`, ...), admin de groupe (`/config`,
-   `/smite`, ...), modération globale (bans, dev commands) - c'est cette
-   couche qui pilotera les timers et les menus Telegram par-dessus le moteur.
-3. Cron jobs : rotation des statistiques agrégées, purge des parties
-   abandonnées, expiration des bans temporaires.
-4. Étendre le jeu de langues au-delà de FR/EN si besoin.
-5. CI GitHub Actions (lint + tests + build sur chaque PR).
+Le moteur de jeu, les 43 rôles, l'ensemble des commandes Telegram, les succès,
+les dons, la modération et l'i18n FR/EN sont implémentés et couverts par une
+suite de tests unitaires (485 tests). Voir l'audit de stabilité le plus
+récent partagé en conversation pour le détail des vérifications effectuées
+(typecheck, lint, tests, build, migrations de base de données, image Docker)
+et les quelques limites connues et assumées (pas d'environnement Telegram
+réel disponible pour un test de bout en bout, quelques mécaniques annotées
+"best effort" dans le code).
