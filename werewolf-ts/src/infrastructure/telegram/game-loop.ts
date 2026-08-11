@@ -153,6 +153,10 @@ export class GameLoop {
       }
       if (!NIGHT_TARGET_ROLES.includes(actor.role)) continue;
 
+      // The Blacksmith spread silver today: the wolf pack (and the Snow Wolf) get no menu at
+      // all tonight, mirroring the original never building their `AskEat`/`AskFreeze` prompt.
+      if (game.silverSpread && (actor.role === ROLE_BIT.SnowWolf || WOLF_ROLES.includes(actor.role))) continue;
+
       const targets = nightTargets(game.players, actor);
       if (targets.length === 0) continue;
 
@@ -323,6 +327,12 @@ export class GameLoop {
       const killEvents = game.killPlayer(targetId, shot.method, { killerIds: [hunter.id] });
       await this.send(game.chatId, group.language, 'HunterShotFired', hunter.name, target.name);
       await this.broadcast(game, group, killEvents, phase);
+
+      // Mirrors `CheckForGameEnd()` right after the original's `HunterFinalShot` resolves - the
+      // shot itself (not just the death that triggered it) can be the killing blow that ends the
+      // game, e.g. the last Wolf standing.
+      const win = game.checkWinCondition();
+      await this.broadcast(game, group, win.events, phase);
 
       if (game.phase === 'Ended') {
         await this.finish(game);
