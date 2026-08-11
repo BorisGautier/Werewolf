@@ -225,6 +225,59 @@
     ],
     "NoOneDiedLastNight": ["Miraculously, no one died last night!"],
 
+    "SerialKillerKilledWolf": [
+      "The wolves attempted to have a nice late night snack, but were instead greeted by a crazed murderer! {0} was killed in the fight!"
+    ],
+    "SerialKillerKilledCH": [
+      "The villagers wake up in the morning, only to find the severed body parts of {0}, the Cultist Hunter, in a cart placed in full view outside the town hall. Lesson learnt: don't visit the serial killer!"
+    ],
+    "ThiefStoleKiller": [
+      "The Thief, {0}, tried to steal the role from the serial killer! This didn't work out so well: {0} got stabbed multiple times and now their liver is missing..."
+    ],
+    "ChemistSKPublic": [
+      "The chemist 👨‍🔬 {0} tried to force the serial killer to a game tonight. Looks like the murderer didn't feel like playing games... {0} was found, stabbed, with two potions still in their bag!"
+    ],
+    "SnowFrozeKiller": [
+      "The snow wolf {0} attempted to freeze someone last night, but accidentally visited the serial killer! The murderer noticed the unwanted visitor and stabbed {0}!"
+    ],
+    "ArsonistVisitKiller": ["The arsonist {0} tried to douse the house of the serial killer... They didn't quite survive that."],
+    "CultConvertKillerPublic": [
+      "The cult thought they would have a new member in their ranks, but they were wrong! {0}, a cultist, was minced to pieces and placed at the town square in the morning! Strangely their \"holy\" book was found stabbed with a knife, as if a statement to show whose religion was triumphant."
+    ],
+    "HarlotFuckKillerPublic": [
+      "The village sees {0}'s body, lying dead in the public square with countless stab wounds. {0} is dead."
+    ],
+    "GAGuardedKiller": [
+      "It was supposed to be a night where {0} would save the village from the killers, but {0}'s halo was extinguished and wings sliced by the serial killer! Left was a note, \"I could protect myself better than you can.\""
+    ],
+    "HarlotFuckedWolfPublic": [
+      "{0} slipped into the wrong house last night! {0}'s slutty remains are found pinned to the church doors with an iron rod... how sad :("
+    ],
+    "CultConvertWolfPublic": [
+      "While it seemed that the wolves decided to stay good for once, punishing {0}, a cultist that decided to court trouble with the wolves, proved too difficult to resist. {0}'s head was converted to a fine supper, delivered to the wolves' doorsteps!"
+    ],
+    "GAGuardedWolf": [
+      "{0} tried to guard a wolf last night. The town woke up to find only the wings of {0} hung on the church cross. Clearly the wolves had an extra meal god-sent, free-of-charge, to their homes."
+    ],
+    "HunterKilledCultist": [
+      "A noticeable stench is coming from {0}'s house... the village inspects it to find a body lying in front of a dark altar. A cultist has been killed by the cult hunter!"
+    ],
+    "HunterKilledVisiter": [
+      "In the middle of the town square, everyone finds the body of {0}, multiple shots to the body. Looks like they tried to sneak up on the Hunter! Well, {1}."
+    ],
+    "KillerSpottedDiggerPublic": [
+      "{0} is missing today... Did they maybe oversleep? You go look for them and find them dead on the graveyard, still holding their shovel. It seems they died from several stabbing wounds..."
+    ],
+    "WolvesSpottedDiggerPublic": [
+      "{0} doesn't show up to the town meeting. Have they overslept again? As you go look for them, you find them lying dead on the graveyard, the shovel still in their hands. It seems they were surprised by wolves in the night..."
+    ],
+    "HarlotFuckedVictimPublic": [
+      "{0} slips into {1}'s house, ready to have a little fun to ease off the stress. Instead, {0} finds a werewolf eating {1}! The werewolf quickly turns on {0} and jumps... {0} is dead."
+    ],
+    "HarlotFuckedKilledPublic": [
+      "{0} slips into {1}'s house, ready for a night of passion, only to find a mysterious stranger surgically removing {1}'s innards! The serial killer decides to satisfy {0} before adding a slutty heart to their collection!"
+    ],
+
     "AskHunterShot": ["As your final act, who would you like to take down with you?"],
     "HunterShotFired": ["With their dying breath, {0} shoots {1}!"],
 

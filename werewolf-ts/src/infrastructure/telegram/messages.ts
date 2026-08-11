@@ -69,8 +69,20 @@ export function describeEvent(
 
       if (showRolesOnDeath) {
         const victim = findById(players, event.playerId);
+
+        // The Harlot stumbling onto the wolves'/Serial Killer's actual victim needs that other
+        // player's name, not a role reveal - doesn't fit deathFlavorKey's (key, includeRoleArg)
+        // shape, so it's built directly here. `killerIds[0]` is the found victim's id (see
+        // resolveHarlotNight's 'VisitVictim' call).
+        if (event.method === 'VisitVictim' && victim?.role === ROLE_BIT.Harlot && event.killerIds[0] !== undefined) {
+          const foundVictimRole = victim.killedByRole !== null ? roleName(victim.killedByRole) : null;
+          const key = foundVictimRole === 'SerialKiller' ? 'HarlotFuckedKilledPublic' : 'HarlotFuckedVictimPublic';
+          return [{ audience: 'group', key, args: [name(event.playerId), name(event.killerIds[0])] }];
+        }
+
         const selfInflicted = event.killerIds.length === 1 && event.killerIds[0] === event.playerId;
-        const flavor = victim ? deathFlavorKey(event.method, roleName(victim.role), selfInflicted) : null;
+        const killedByRole = victim?.killedByRole != null ? roleName(victim.killedByRole) : null;
+        const flavor = victim ? deathFlavorKey(event.method, roleName(victim.role), selfInflicted, killedByRole) : null;
         if (flavor) {
           return [
             {
