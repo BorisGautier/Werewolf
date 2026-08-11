@@ -38,6 +38,28 @@ const GRAVEDIGGER_FELL_ROLE_KEY: Partial<Record<RoleName, string>> = {
   Thief: 'ThiefFellPublic',
 };
 
+/** Died visiting the Serial Killer (`'VisitKiller'`), keyed by the dying player's own role. */
+const VISIT_KILLER_ROLE_KEY: Partial<Record<RoleName, string>> = {
+  Wolf: 'SerialKillerKilledWolf',
+  AlphaWolf: 'SerialKillerKilledWolf',
+  Lycan: 'SerialKillerKilledWolf',
+  WolfCub: 'SerialKillerKilledWolf',
+  CultistHunter: 'SerialKillerKilledCH',
+  Thief: 'ThiefStoleKiller',
+  Chemist: 'ChemistSKPublic',
+  SnowWolf: 'SnowFrozeKiller',
+  Arsonist: 'ArsonistVisitKiller',
+  Cultist: 'CultConvertKillerPublic',
+  Harlot: 'HarlotFuckKillerPublic',
+  GuardianAngel: 'GAGuardedKiller',
+};
+
+/** Died visiting a wolf (`'VisitWolf'`), keyed by the dying player's own role. */
+const VISIT_WOLF_ROLE_KEY: Partial<Record<RoleName, string>> = {
+  Harlot: 'HarlotFuckedWolfPublic',
+  Cultist: 'CultConvertWolfPublic',
+};
+
 export interface DeathFlavor {
   key: string;
   /** Whether this key's template has a second `{1}` slot for the explicit "X was a Y" reveal. */
@@ -53,13 +75,22 @@ export interface DeathFlavor {
  * flavor text (lynching - handled separately - fleeing, idling, ...); the caller falls back to
  * the generic `PlayerFoundDeadWithRole` in that case.
  *
- * Deliberately not ported: the deeper "died while visiting X" sub-branches (a Harlot visiting a
- * wolf vs. visiting the wolves' actual target, a Cultist caught mid-conversion, ...) - those are
- * rarer edge cases largely already covered by this project's own dedicated events (see
- * `CultistAutoConverted`, `HunterCounterAttack`, the standoff events) rather than one shared
- * "public death" narrative.
+ * Two of the original's "died while visiting" variants are deliberately not here:
+ *  - `HunterShotWolf`/`HunterShotWolfMulti` (a wolf shot dead by the Hunter's counter-attack) -
+ *    already fully narrated by the dedicated `HunterCounterAttackMsg` event, so adding a second
+ *    flavor line for the same death here would just double the announcement.
+ *  - The Harlot's two "found the wolves'/Serial Killer's actual victim" variants
+ *    (`HarlotFuckedVictimPublic`/`HarlotFuckedKilledPublic`, `'VisitVictim'` method) need a
+ *    *second player's* name (whoever she found dead), not a role reveal - that shape doesn't fit
+ *    this function's `(key, includeRoleArg)` contract, so `messages.ts` builds it directly from
+ *    the event's `killerIds[0]` (the found victim's id, per `resolveHarlotNight`).
  */
-export function deathFlavorKey(method: KillMethod, role: RoleName, selfInflicted: boolean): DeathFlavor | null {
+export function deathFlavorKey(
+  method: KillMethod,
+  role: RoleName,
+  selfInflicted: boolean,
+  killedByRole: RoleName | null,
+): DeathFlavor | null {
   switch (method) {
     case 'Eat': {
       const key = EATEN_ROLE_KEY[role];
@@ -80,6 +111,25 @@ export function deathFlavorKey(method: KillMethod, role: RoleName, selfInflicted
         : { key: 'DefaultVisitBurn', includeRoleArg: true };
     case 'Chemistry':
       return selfInflicted ? { key: 'ChemistFailPublic', includeRoleArg: false } : { key: 'ChemistSuccessPublic', includeRoleArg: true };
+    case 'VisitKiller': {
+      const key = VISIT_KILLER_ROLE_KEY[role];
+      return key ? { key, includeRoleArg: false } : null;
+    }
+    case 'VisitWolf': {
+      const key = VISIT_WOLF_ROLE_KEY[role];
+      return key ? { key, includeRoleArg: false } : null;
+    }
+    case 'GuardWolf':
+      return { key: 'GAGuardedWolf', includeRoleArg: false };
+    case 'Hunt':
+      return role === 'Cultist' ? { key: 'HunterKilledCultist', includeRoleArg: false } : null;
+    case 'HunterCult':
+      return role === 'Cultist' ? { key: 'HunterKilledVisiter', includeRoleArg: true } : null;
+    case 'Spotted':
+      if (role !== 'GraveDigger') return null;
+      return killedByRole === 'SerialKiller'
+        ? { key: 'KillerSpottedDiggerPublic', includeRoleArg: false }
+        : { key: 'WolvesSpottedDiggerPublic', includeRoleArg: false };
     default:
       return null;
   }

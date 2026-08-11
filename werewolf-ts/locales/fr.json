@@ -219,6 +219,61 @@
     ],
     "NoOneDiedLastNight": ["Miraculeusement, personne n'est mort cette nuit !"],
 
+    "SerialKillerKilledWolf": [
+      "Les loups voulaient se faire un petit encas nocturne, mais sont tombés sur un meurtrier bien plus déterminé qu'eux ! {0} n'a pas survécu à l'échange !"
+    ],
+    "SerialKillerKilledCH": [
+      "Les villageois se réveillent au matin pour découvrir les restes démembrés de {0}, le Chasseur de Culte, entassés dans une charrette bien en vue devant la mairie. Leçon retenue : ne rendez jamais visite au tueur en série."
+    ],
+    "ThiefStoleKiller": [
+      "Le Voleur, {0}, a tenté de dérober le rôle du tueur en série ! Mauvaise idée : {0} a été poignardé à de multiples reprises et son foie a disparu..."
+    ],
+    "ChemistSKPublic": [
+      "Le chimiste 👨‍🔬 {0} a tenté d'entraîner le tueur en série dans une petite expérience nocturne. Le meurtrier n'était visiblement pas d'humeur à jouer... {0} a été retrouvé poignardé, deux fioles encore dans son sac."
+    ],
+    "SnowFrozeKiller": [
+      "Le loup des neiges {0} a tenté de geler quelqu'un cette nuit, mais s'est trompé de porte et est tombé sur le tueur en série ! Le meurtrier n'a pas apprécié la visite surprise et a poignardé {0} !"
+    ],
+    "ArsonistVisitKiller": [
+      "L'incendiaire {0} a tenté d'asperger d'essence la maison du tueur en série... Ça ne s'est pas très bien passé pour {0}."
+    ],
+    "CultConvertKillerPublic": [
+      "Le culte pensait accueillir une nouvelle recrue, mais c'était sans compter sur le tueur en série ! {0}, un(e) cultiste, a été réduit(e) en pièces et déposé(e) sur la place du village au petit matin ! Son livre \"sacré\" a été retrouvé transpercé d'un couteau, comme pour affirmer qui, de la religion ou de la lame, l'a emporté."
+    ],
+    "HarlotFuckKillerPublic": [
+      "Le village découvre le corps de {0}, gisant sur la place publique, criblé de coups de couteau. {0} est mort(e)."
+    ],
+    "GAGuardedKiller": [
+      "{0} devait cette nuit-là protéger le village des tueurs, mais son auréole s'est éteinte et ses ailes ont été tranchées par le tueur en série ! Un mot fut laissé : \"Je pouvais me protéger bien mieux que toi.\""
+    ],
+    "HarlotFuckedWolfPublic": [
+      "{0} s'est glissé(e) dans la mauvaise maison la nuit dernière ! Sa dépouille est retrouvée clouée aux portes de l'église par une barre de fer... quelle tristesse :("
+    ],
+    "CultConvertWolfPublic": [
+      "Alors que les loups semblaient vouloir rester sages pour une fois, punir {0}, un(e) cultiste venu(e) chercher les ennuis chez eux, s'est révélé une tentation trop grande. La tête de {0} a été convertie en un délicieux souper, livré directement au pas de la porte des loups !"
+    ],
+    "GAGuardedWolf": [
+      "{0} a tenté de protéger un loup cette nuit-là. Le village n'a retrouvé au matin que les ailes de {0}, accrochées à la croix de l'église. Les loups ont visiblement eu droit à un repas supplémentaire, offert gracieusement à domicile."
+    ],
+    "HunterKilledCultist": [
+      "Une odeur nauséabonde s'échappe de la maison de {0}... le village inspecte les lieux et découvre un corps gisant devant un autel sombre. Un(e) cultiste a été tué(e) par le Chasseur de Culte !"
+    ],
+    "HunterKilledVisiter": [
+      "En plein milieu de la place du village, tout le monde découvre le corps de {0}, criblé de balles. On dirait bien que quelqu'un a tenté de surprendre le Chasseur... Eh bien, {1}."
+    ],
+    "KillerSpottedDiggerPublic": [
+      "{0} est introuvable aujourd'hui... A-t-il/elle fait la grasse matinée ? Vous partez à sa recherche et le/la retrouvez mort(e) au cimetière, la pelle encore en main. Il/elle semble être mort(e) de plusieurs coups de couteau..."
+    ],
+    "WolvesSpottedDiggerPublic": [
+      "{0} ne se présente pas à la réunion du village. Encore en retard ? Vous partez à sa recherche et le/la retrouvez mort(e) au cimetière, la pelle encore en main. Il/elle semble avoir été surpris(e) par les loups pendant la nuit..."
+    ],
+    "HarlotFuckedVictimPublic": [
+      "{0} se glisse dans la maison de {1}, prêt(e) à se détendre un peu. Au lieu de ça, {0} découvre un loup-garou en train de dévorer {1} ! La bête se retourne aussitôt et se jette sur {0}... {0} est mort(e)."
+    ],
+    "HarlotFuckedKilledPublic": [
+      "{0} se glisse dans la maison de {1}, prêt(e) pour une nuit torride, mais découvre à la place un inconnu en train d'extraire chirurgicalement les entrailles de {1} ! Le tueur en série décide d'abord de satisfaire {0} avant d'ajouter un cœur de plus à sa collection !"
+    ],
+
     "AskHunterShot": ["Pour ton dernier acte, qui veux-tu emporter avec toi ?"],
     "HunterShotFired": ["Dans son dernier souffle, {0} abat {1} !"],
 
