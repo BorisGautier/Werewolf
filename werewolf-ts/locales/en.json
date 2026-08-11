@@ -60,6 +60,7 @@
     "ThiefTeamEnd": ["Thief Team"],
     "GameAlreadyRunning": ["A game is already running in this group."],
     "NoGameRunning": ["There's no game running in this group right now."],
+    "GameKilledMsg": ["This game has been force-stopped by an admin."],
     "JoinFromGroup": ["You can only /join from within a group chat."],
     "YouJoined": ["You joined the game in {0}!"],
     "PlayerLimitReached": ["This game is full - can't join right now."],

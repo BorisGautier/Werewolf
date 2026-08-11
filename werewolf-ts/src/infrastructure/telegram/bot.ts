@@ -320,7 +320,7 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     await lobby.extend(BigInt(ctx.chat.id), BigInt(ctx.from.id), isAdmin, seconds);
   });
 
-  registerModerationCommands(bot, env, deps, lobby);
+  registerModerationCommands(bot, env, deps, lobby, gameLoop);
   registerRoleInfoCommands(bot, deps);
   registerAchievementCommands(bot, env, deps);
   registerUtilityCommands(bot, deps);
@@ -447,7 +447,13 @@ function registerRoleInfoCommands(bot: Bot, deps: BotDependencies): void {
  * the group's invite link shown by `/players` etc.). Deliberately not ported: the gif-pack
  * review/approval commands and the multi-node `/updatestatus` (both out of scope - see README).
  */
-function registerModerationCommands(bot: Bot, env: Env, deps: BotDependencies, lobby: GameLobbyManager): void {
+function registerModerationCommands(
+  bot: Bot,
+  env: Env,
+  deps: BotDependencies,
+  lobby: GameLobbyManager,
+  gameLoop: GameLoop,
+): void {
   async function isGroupAdmin(ctx: Context): Promise<boolean> {
     if (!ctx.chat || ctx.chat.type === 'private') return false;
     const member = await ctx.getAuthor();
@@ -583,6 +589,15 @@ function registerModerationCommands(bot: Bot, env: Env, deps: BotDependencies, l
       const key = unbanned ? 'UnbanConfirmed' : 'UnbanNotFound';
       await ctx.reply(deps.translator.translate(group.language, key, target.name));
     }
+  });
+
+  bot.command('killgame', async (ctx) => {
+    if (!ctx.chat || ctx.chat.type === 'private' || !ctx.from) return;
+    if (!(await isGlobalAdmin(BigInt(ctx.from.id)))) return;
+
+    const group = await deps.groupRepository.getOrCreate(BigInt(ctx.chat.id), ctx.chat.title ?? null, null);
+    const killed = gameLoop.killGame(BigInt(ctx.chat.id));
+    await ctx.reply(deps.translator.translate(group.language, killed ? 'GameKilledMsg' : 'NoGameRunning'));
   });
 
   bot.command('getbans', async (ctx) => {

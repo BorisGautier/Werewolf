@@ -60,6 +60,7 @@
     "ThiefTeamEnd": ["Équipe du Voleur"],
     "GameAlreadyRunning": ["Une partie est déjà en cours dans ce groupe."],
     "NoGameRunning": ["Il n'y a pas de partie en cours dans ce groupe."],
+    "GameKilledMsg": ["Cette partie a été arrêtée de force par un administrateur."],
     "JoinFromGroup": ["Tu ne peux utiliser /join que dans un groupe."],
     "YouJoined": ["Tu as rejoint la partie dans {0} !"],
     "PlayerLimitReached": ["Cette partie est complète - impossible de rejoindre maintenant."],

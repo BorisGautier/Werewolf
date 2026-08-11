@@ -580,4 +580,43 @@ describe('GameLoop', () => {
     const { loop } = createHarness();
     expect(loop.skipVote(999n)).toBe(false);
   });
+
+  it('killGame() force-stops a running game immediately, freeing the chat with no resolution', async () => {
+    const { loop, gameManager, sendMessage } = createHarness();
+    const game = dealtGame(gameManager);
+    const wolf = game.players[0]!;
+    const victim = game.players[1]!;
+
+    loop.start(game, 42);
+    await vi.advanceTimersByTimeAsync(0); // night 1 menus sent, now waiting out the night timer
+    await loop.handleCallback(wolf.id, wolf.id, `nt:${victim.id.toString()}`);
+
+    const killed = loop.killGame(game.chatId);
+    expect(killed).toBe(true);
+    // The chat is freed up immediately, synchronously - not just once the loop notices.
+    expect(gameManager.has(game.chatId)).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(0); // let the now-resolved sleep's continuation (if any) run
+
+    // No resolution happened: the wolf's pending kill never landed, and the game never announced
+    // a new day (which a normal night resolution would have).
+    expect(victim.isDead).toBe(false);
+    expect(sendMessage.mock.calls.some((call) => typeof call[1] === 'string' && call[1].includes('Day'))).toBe(false);
+  });
+
+  it('killGame() returns false when no game is running in that chat', () => {
+    const { loop } = createHarness();
+    expect(loop.killGame(999n)).toBe(false);
+  });
+
+  it("killGame() lets a brand new game start in the same chat right away", async () => {
+    const { loop, gameManager } = createHarness();
+    const game = dealtGame(gameManager);
+    loop.start(game, 42);
+    await vi.advanceTimersByTimeAsync(0);
+
+    loop.killGame(game.chatId);
+
+    expect(() => gameManager.create(game.chatId, { mode: 'Normal', minPlayers: 5 })).not.toThrow();
+  });
 });
