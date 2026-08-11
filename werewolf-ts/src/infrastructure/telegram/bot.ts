@@ -25,6 +25,14 @@ import {
 import { ABOUT_ROLE_BY_TRIGGER, aboutLocaleKey } from './role-info.js';
 import { ROLE_META, roleName } from '../../domain/roles/role.js';
 import { ACHIEVEMENT_CODES, ACHIEVEMENTS } from '../../domain/achievements/catalog.js';
+import { SpamGuard } from './spam-guard.js';
+
+/** Mirrors `AdminRepository.banForSpam`'s tier order: index 0 is the 1st spam ban, etc. - anything
+ * past the array (4th ban onward) is permanent. */
+const SPAM_BAN_DURATION_KEYS = ['SpamBanDuration12h', 'SpamBanDuration24h', 'SpamBanDuration3d'] as const;
+function spamBanDurationKey(tempBanCount: number): string {
+  return SPAM_BAN_DURATION_KEYS[tempBanCount - 1] ?? 'SpamBanPermanent';
+}
 
 export interface BotDependencies {
   translator: Translator;
@@ -78,6 +86,35 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     deps.notifyGameRepository,
   );
   const configMenu = new ConfigMenu(deps.groupRepository, deps.translator);
+
+  // Port of `AddCount`/`SpamDetection`/`SpamBanList`: flags a Telegram user flooding the bot with
+  // commands, warns them, then bans them (escalating duration) if they keep going. Registered
+  // before every command handler below so a banned/flooding user's message never reaches one.
+  const spamGuard = new SpamGuard();
+  bot.use(async (ctx, next) => {
+    const fromId = ctx.from?.id;
+    const text = ctx.message?.text;
+    if (fromId === undefined || text === undefined || !(text.startsWith('/') || text.startsWith('!'))) {
+      return next();
+    }
+    const telegramId = BigInt(fromId);
+    if (spamGuard.isBanned(telegramId)) return;
+
+    const verdict = spamGuard.record(telegramId);
+    if (verdict === 'ok') return next();
+
+    const player = await deps.playerRepository.findByTelegramId(telegramId);
+    const language = player?.languageCode ?? 'en';
+    if (verdict === 'warn') {
+      await ctx.reply(deps.translator.translate(language, 'SpamWarning'));
+      return;
+    }
+
+    const { expiresAt, tempBanCount } = await deps.adminRepository.banForSpam(telegramId);
+    spamGuard.markBanned(telegramId, expiresAt);
+    const duration = deps.translator.translate(language, spamBanDurationKey(tempBanCount));
+    await ctx.reply(deps.translator.translate(language, 'SpamBanned', duration));
+  });
 
   // Registered before the generic `callback_query:data` catch-all further down (which doesn't
   // call next()) so its own `stopwaiting:...` callback data actually gets a chance to match.

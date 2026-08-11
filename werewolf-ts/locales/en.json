@@ -4,6 +4,12 @@
   "isDefault": true,
   "strings": {
     "Pong": ["pong"],
+    "SpamWarning": ["Please do not spam me. Next time is automated ban."],
+    "SpamBanned": ["You have been banned for spamming. Your ban period is: {0}"],
+    "SpamBanDuration12h": ["12 hours"],
+    "SpamBanDuration24h": ["24 hours"],
+    "SpamBanDuration3d": ["3 days"],
+    "SpamBanPermanent": ["Permanent. You have reached the max limit of temp bans for spamming."],
     "WelcomeMessage": [
       "Welcome to Werewolf! Add me to a group and use /startgame to play.",
       "Hi, I'm the Werewolf bot. Add me to a group and type /startgame to begin a game."
