@@ -270,4 +270,134 @@ describe('GameLoop', () => {
     expect(finalTarget.isDead).toBe(true);
     expect(hunter.pendingHunterShot).toBeNull();
   });
+
+  it('announces each lynch vote by name in a normal (non-secret) lynch', async () => {
+    const { loop, gameManager, sendMessage } = createHarness();
+    const game = dealtGame(gameManager);
+    const wolf = game.players[0]!;
+    const voter = game.players[1]!;
+
+    loop.start(game, 42);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000); // night resolves
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000); // day resolves, into Lynch
+
+    await loop.handleCallback(voter.id, game.chatId, `vote:${wolf.id.toString()}`);
+
+    expect(
+      sendMessage.mock.calls.some(
+        (call) => typeof call[1] === 'string' && call[1] === `${voter.name} voted to lynch ${wolf.name}.`,
+      ),
+    ).toBe(true);
+  });
+
+  it('under a secret lynch, announces only a running vote count, never the target', async () => {
+    const { loop, gameManager, sendMessage, group } = createHarness();
+    group.secretLynch = true;
+    const game = dealtGame(gameManager);
+    const wolf = game.players[0]!;
+    const voter = game.players[1]!;
+
+    loop.start(game, 42);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000);
+
+    await loop.handleCallback(voter.id, game.chatId, `vote:${wolf.id.toString()}`);
+
+    expect(sendMessage.mock.calls.some((call) => typeof call[1] === 'string' && call[1] === '1/5 players have voted.')).toBe(
+      true,
+    );
+    expect(sendMessage.mock.calls.some((call) => typeof call[1] === 'string' && call[1].includes('voted to lynch'))).toBe(
+      false,
+    );
+  });
+
+  it('reveals a full voter-by-voter breakdown after resolution when secretLynchShowVoters is on', async () => {
+    const { loop, gameManager, sendMessage, group } = createHarness();
+    group.secretLynch = true;
+    group.secretLynchShowVotes = true;
+    group.secretLynchShowVoters = true;
+    const game = dealtGame(gameManager);
+    const wolf = game.players[0]!;
+
+    loop.start(game, 42);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000);
+
+    const villagers = game.players.filter((p) => p.id !== wolf.id);
+    for (const voter of villagers) {
+      await loop.handleCallback(voter.id, game.chatId, `vote:${wolf.id.toString()}`);
+    }
+
+    await vi.advanceTimersByTimeAsync(5000); // lynch resolves
+
+    const voterNames = villagers.map((p) => p.name).join(', ');
+    expect(
+      sendMessage.mock.calls.some(
+        (call) =>
+          typeof call[1] === 'string' &&
+          call[1].includes('Secret lynch results') &&
+          call[1].includes(`${villagers.length} vote(s) - ${wolf.name} (voted by: ${voterNames})`),
+      ),
+    ).toBe(true);
+  });
+
+  it('reveals only vote counts (no voter names) after resolution when secretLynchShowVoters is off', async () => {
+    const { loop, gameManager, sendMessage, group } = createHarness();
+    group.secretLynch = true;
+    group.secretLynchShowVotes = true;
+    group.secretLynchShowVoters = false;
+    const game = dealtGame(gameManager);
+    const wolf = game.players[0]!;
+
+    loop.start(game, 42);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000);
+
+    const villagers = game.players.filter((p) => p.id !== wolf.id);
+    for (const voter of villagers) {
+      await loop.handleCallback(voter.id, game.chatId, `vote:${wolf.id.toString()}`);
+    }
+
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(
+      sendMessage.mock.calls.some(
+        (call) =>
+          typeof call[1] === 'string' && call[1].includes(`${villagers.length} vote(s) - ${wolf.name}`) && !call[1].includes('voted by'),
+      ),
+    ).toBe(true);
+  });
+
+  it('stays silent about the vote breakdown when secretLynchShowVotes is off, even under a secret lynch', async () => {
+    const { loop, gameManager, sendMessage, group } = createHarness();
+    group.secretLynch = true;
+    group.secretLynchShowVotes = false;
+    const game = dealtGame(gameManager);
+    const wolf = game.players[0]!;
+
+    loop.start(game, 42);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000);
+
+    const villagers = game.players.filter((p) => p.id !== wolf.id);
+    for (const voter of villagers) {
+      await loop.handleCallback(voter.id, game.chatId, `vote:${wolf.id.toString()}`);
+    }
+
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(sendMessage.mock.calls.some((call) => typeof call[1] === 'string' && call[1].includes('Secret lynch results'))).toBe(
+      false,
+    );
+  });
 });

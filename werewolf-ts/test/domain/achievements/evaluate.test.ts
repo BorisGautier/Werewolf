@@ -421,4 +421,33 @@ describe('evaluateGameAchievements', () => {
     const result = evaluateGameAchievements(ctx([ga, wolf], { eventBatches: events }));
     expect(unlocksFor(result, 1n)).toContain('InTheMiddleOfTheTrouble');
   });
+
+  it('grants DemotedByTheDeath when the Hunter\'s final shot demotes them for killing the Wise Elder', () => {
+    const hunter = createPlayer(1n, 'H', ROLE_BIT.Villager, 'Village'); // already demoted by the time this fires
+    const events: GameEvent[][] = [[{ type: 'HunterLostPowerToWiseElder', playerId: 1n }]];
+    const result = evaluateGameAchievements(ctx([hunter], { eventBatches: events }));
+    expect(unlocksFor(result, 1n)).toContain('DemotedByTheDeath');
+  });
+
+  it('grants WastedSilver to the Blacksmith when Sandman sleep lands the same day as their silver spread', () => {
+    const blacksmith = createPlayer(1n, 'B', ROLE_BIT.Blacksmith, 'Village');
+    const sandman = createPlayer(2n, 'S', ROLE_BIT.Sandman, 'Village');
+    const events: GameEvent[][] = [
+      [{ type: 'BlacksmithSpreadSilver', playerId: 1n, dayNumber: 3 }],
+      [{ type: 'SandmanUsedSleep', playerId: 2n, dayNumber: 3 }],
+    ];
+    const result = evaluateGameAchievements(ctx([blacksmith, sandman], { eventBatches: events }));
+    expect(unlocksFor(result, 1n)).toContain('WastedSilver');
+  });
+
+  it('does not grant WastedSilver when the Blacksmith and Sandman act on different days', () => {
+    const blacksmith = createPlayer(1n, 'B', ROLE_BIT.Blacksmith, 'Village');
+    const sandman = createPlayer(2n, 'S', ROLE_BIT.Sandman, 'Village');
+    const events: GameEvent[][] = [
+      [{ type: 'BlacksmithSpreadSilver', playerId: 1n, dayNumber: 2 }],
+      [{ type: 'SandmanUsedSleep', playerId: 2n, dayNumber: 3 }],
+    ];
+    const result = evaluateGameAchievements(ctx([blacksmith, sandman], { eventBatches: events }));
+    expect(unlocksFor(result, 1n)).not.toContain('WastedSilver');
+  });
 });

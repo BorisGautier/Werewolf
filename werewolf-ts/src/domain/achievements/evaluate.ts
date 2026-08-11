@@ -281,12 +281,24 @@ export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigin
   // wolf-pack victims in this port (there's no SK-specific infection branch), so this can never
   // fire; not a gap worth chasing for a single achievement.
   // #63 AmIYourSeer - needs the Fool's specific (randomized) vision result. Deferred (see #38).
-  // #64 DemotedByTheDeath - real mechanics gap: the Hunter's final shot doesn't demote them like
-  // the Chemist/Gunner do when the target is the Wise Elder (see night-resolution.ts's Chemist
-  // block and day-actions.ts's Gunner block for the pattern this would follow).
-  // #65 WastedSilver - the Blacksmith/Sandman day abilities resolve straight to a translated
-  // string in game-loop.ts without emitting a GameEvent, so there's nothing to correlate here.
-  // Deferred.
+  // #64 DemotedByTheDeath - the Hunter's final shot kills the Wise Elder (Game.killPlayer demotes
+  // them to Villager in the same call, mirroring the Gunner/Chemist equivalents).
+  for (const event of allEvents) {
+    if (event.type === 'HunterLostPowerToWiseElder') out.grant(event.playerId, 'DemotedByTheDeath');
+  }
+  // #65 WastedSilver - the Blacksmith spreads their silver dust the same day the Sandman puts
+  // everyone to sleep.
+  {
+    const silverDays = new Set(
+      allEvents.filter((e) => e.type === 'BlacksmithSpreadSilver').map((e) => e.dayNumber),
+    );
+    for (const event of allEvents) {
+      if (event.type === 'SandmanUsedSleep' && silverDays.has(event.dayNumber)) {
+        const blacksmith = players.find((p) => p.role === ROLE_BIT.Blacksmith);
+        if (blacksmith) out.grant(blacksmith.id, 'WastedSilver');
+      }
+    }
+  }
   // #66 Trustworthy, #67 DeepLove, #68 TimeToRetire, #69 SeeingBetweenTeams, #70 JustABeardyGuy -
   // need per-role Seer-check history or Doppelganger role-model choices that aren't tracked as
   // events (RoleModelChosen only fires for WildChild/Doppelganger's initial pick - see #82 below

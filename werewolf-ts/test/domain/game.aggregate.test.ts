@@ -150,4 +150,42 @@ describe('Game (full day/night/lynch cycle)', () => {
     expect(game.phase).toBe('Ended');
     expect(() => game.killPlayer(a!.id, 'Eat')).toThrow(GameError);
   });
+
+  it("demotes the Hunter to Villager when their final shot kills the Wise Elder", () => {
+    const game = joinedGame(5);
+    game.start();
+    for (const p of game.players) {
+      p.role = ROLE_BIT.Villager;
+      p.team = 'Village';
+    }
+    const hunter = game.players[0]!;
+    hunter.role = ROLE_BIT.Hunter;
+    const wiseElder = game.players[1]!;
+    wiseElder.role = ROLE_BIT.WiseElder;
+
+    const events = game.killPlayer(wiseElder.id, 'HunterShot', { killerIds: [hunter.id] });
+
+    expect(hunter.role).toBe(ROLE_BIT.Villager);
+    expect(hunter.team).toBe('Village');
+    expect(hunter.changedRolesCount).toBe(1);
+    expect(events.some((e) => e.type === 'HunterLostPowerToWiseElder' && e.playerId === hunter.id)).toBe(true);
+    expect(events.some((e) => e.type === 'PlayerDied' && e.playerId === wiseElder.id)).toBe(true);
+  });
+
+  it("doesn't demote a Hunter who kills anyone other than the Wise Elder", () => {
+    const game = joinedGame(5);
+    game.start();
+    for (const p of game.players) {
+      p.role = ROLE_BIT.Villager;
+      p.team = 'Village';
+    }
+    const hunter = game.players[0]!;
+    hunter.role = ROLE_BIT.Hunter;
+    const target = game.players[1]!;
+
+    game.killPlayer(target.id, 'HunterShot', { killerIds: [hunter.id] });
+
+    expect(hunter.role).toBe(ROLE_BIT.Hunter);
+    expect(hunter.changedRolesCount).toBe(0);
+  });
 });

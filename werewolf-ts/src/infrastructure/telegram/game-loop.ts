@@ -208,6 +208,7 @@ export class GameLoop {
       await sleep(seconds * 1000);
 
       const result = game.resolveLynch();
+      await this.sendSecretLynchSummary(game, group);
       await this.broadcastLynchOutcome(game, group.language, result.resolution);
       await this.broadcast(game, group, result.events, 'Lynch');
       if (await this.handleHunterShots(game, group, result.events, 'Lynch')) return;
@@ -404,7 +405,7 @@ export class GameLoop {
     switch (action) {
       case 'vote':
         if (game.phase !== 'Lynch') return null;
-        return this.applyChoice(game, playerId, 'choice', rest[0]!);
+        return this.applyLynchVote(game, playerId, rest[0]!);
       case 'nt':
         if (game.phase !== 'Night') return null;
         return this.applyChoice(game, playerId, 'choice', rest[0]!);
@@ -481,6 +482,52 @@ export class GameLoop {
     return 'ChoiceRecorded';
   }
 
+  /**
+   * Mirrors the original's live per-vote group announcement: who voted for whom normally, or -
+   * under `AllowSecretLynch` (the group's `secretLynch` flag) - just a running "X/Y have voted"
+   * count instead, so the target stays hidden until the reveal in `sendSecretLynchSummary()`.
+   * Abstains don't announce anything, matching the fact the original's announcement code only
+   * ever names a concrete target.
+   */
+  private async applyLynchVote(game: Game, playerId: bigint, rawTarget: string): Promise<string | null> {
+    const voter = game.players.find((p) => p.id === playerId);
+    if (!voter || voter.isDead) return null;
+    const result = this.applyChoice(game, playerId, 'choice', rawTarget);
+    if (result !== 'ChoiceRecorded' || rawTarget === 'abstain') return result;
+
+    const group = await this.groups.getOrCreate(game.chatId, null, null);
+    if (group.secretLynch) {
+      const voted = alivePlayers(game.players).filter((p) => p.choice !== null).length;
+      await this.send(game.chatId, group.language, 'PlayerVoteCounts', voted, alivePlayers(game.players).length);
+    } else {
+      const target = game.players.find((p) => p.id === BigInt(rawTarget));
+      if (target) await this.send(game.chatId, group.language, 'PlayerVotedLynch', voter.name, target.name);
+    }
+    return result;
+  }
+
+  /**
+   * Mirrors the original's post-vote reveal: with `secretLynch` on, individual votes stay hidden
+   * until now. `secretLynchShowVotes` gates whether a breakdown is shown at all; if it is,
+   * `secretLynchShowVoters` further gates whether it names who voted for whom, or just a count.
+   * Read right after `game.resolveLynch()` - the tally resets at the top of the next attempt.
+   */
+  private async sendSecretLynchSummary(game: Game, group: GroupWithConfig): Promise<void> {
+    if (!group.secretLynch || !group.secretLynchShowVotes) return;
+
+    const voted = game.players.filter((p) => p.votes > 0).sort((a, b) => b.votes - a.votes);
+    if (voted.length === 0) return;
+
+    const lines = voted.map((p) => {
+      if (group.secretLynchShowVoters) {
+        const voters = [...p.votedBy].map((id) => findName(game.players, id)).join(', ');
+        return this.t.translate(group.language, 'SecretLynchResultEach', p.votes, p.name, voters);
+      }
+      return this.t.translate(group.language, 'SecretLynchResultNumber', p.votes, p.name);
+    });
+    await this.send(game.chatId, group.language, 'SecretLynchResultFull', lines.join('\n'));
+  }
+
   private applyAbility(game: Game, playerId: bigint, role: RoleName): string | null {
     const player = game.players.find((p) => p.id === playerId && !p.isDead);
     if (!player || roleName(player.role) !== role) return null;
@@ -489,10 +536,18 @@ export class GameLoop {
         return game.useMayorReveal(playerId) ? 'MayorRevealedMsg' : 'AbilityAlreadyUsed';
       case 'Pacifist':
         return game.usePacifistPeace(playerId) ? 'PacifistDeclaredMsg' : 'AbilityAlreadyUsed';
-      case 'Blacksmith':
-        return game.useBlacksmithSpreadSilver(playerId) ? 'BlacksmithSpreadMsg' : 'AbilityAlreadyUsed';
-      case 'Sandman':
-        return game.useSandmanSleep(playerId) ? 'SandmanUsedMsg' : 'AbilityAlreadyUsed';
+      case 'Blacksmith': {
+        const events = game.useBlacksmithSpreadSilver(playerId);
+        if (events.length === 0) return 'AbilityAlreadyUsed';
+        this.logEvents(game.chatId, events);
+        return 'BlacksmithSpreadMsg';
+      }
+      case 'Sandman': {
+        const events = game.useSandmanSleep(playerId);
+        if (events.length === 0) return 'AbilityAlreadyUsed';
+        this.logEvents(game.chatId, events);
+        return 'SandmanUsedMsg';
+      }
       case 'Troublemaker':
         return game.useTroublemakerDoubleLynch(playerId) ? 'TroubleDoubleLynchNow' : 'AbilityAlreadyUsed';
       default:
@@ -502,15 +557,20 @@ export class GameLoop {
 
   // --------------------------------------------------------------- Sending
 
+  /** Records a batch of events for `evaluateGameAchievements()` at game end, without sending anything. */
+  private logEvents(chatId: bigint, events: readonly GameEvent[]): void {
+    const batches = this.eventBatches.get(chatId) ?? [];
+    batches.push([...events]);
+    this.eventBatches.set(chatId, batches);
+  }
+
   private async broadcast(
     game: Game,
     group: GroupWithConfig,
     events: readonly GameEvent[],
     phase: 'Night' | 'Day' | 'Lynch',
   ): Promise<void> {
-    const batches = this.eventBatches.get(game.chatId) ?? [];
-    batches.push([...events]);
-    this.eventBatches.set(game.chatId, batches);
+    this.logEvents(game.chatId, events);
 
     for (const event of events) {
       for (const msg of describeEvent(event, game.players, group.showRolesOnDeath)) {

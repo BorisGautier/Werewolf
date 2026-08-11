@@ -118,11 +118,15 @@ describe('Game ability toggles', () => {
     game.players[0]!.role = ROLE_BIT.Blacksmith;
     game.players[1]!.role = ROLE_BIT.Sandman;
 
-    expect(game.useBlacksmithSpreadSilver(game.players[0]!.id)).toBe(true);
+    expect(game.useBlacksmithSpreadSilver(game.players[0]!.id)).toEqual([
+      { type: 'BlacksmithSpreadSilver', playerId: game.players[0]!.id, dayNumber: game.dayNumber },
+    ]);
     expect(game.silverSpread).toBe(true);
-    expect(game.useBlacksmithSpreadSilver(game.players[0]!.id)).toBe(false);
+    expect(game.useBlacksmithSpreadSilver(game.players[0]!.id)).toEqual([]);
 
-    expect(game.useSandmanSleep(game.players[1]!.id)).toBe(true);
+    expect(game.useSandmanSleep(game.players[1]!.id)).toEqual([
+      { type: 'SandmanUsedSleep', playerId: game.players[1]!.id, dayNumber: game.dayNumber },
+    ]);
     expect(game.sandmanSleep).toBe(true);
   });
 });
@@ -146,7 +150,7 @@ describe('Game.enterNight / resolveNightActions', () => {
 
     // Night 1 -> Day 1: the Sandman uses their ability during the day.
     game.startDay();
-    expect(game.useSandmanSleep(sandman.id)).toBe(true);
+    expect(game.useSandmanSleep(sandman.id)).toHaveLength(1);
     game.startLynch();
     game.resolveLynch();
 

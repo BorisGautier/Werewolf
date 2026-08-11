@@ -112,6 +112,12 @@
     "PrinceSurvivedLynch": ["Le village essaie de pendre {0}, mais en tant que Prince, il/elle est épargné(e) - une fois."],
     "LynchTied": ["Le vote s'est terminé par une égalité. Personne n'est pendu aujourd'hui."],
 
+    "PlayerVotedLynch": ["{0} a voté pour pendre {1}."],
+    "PlayerVoteCounts": ["{0}/{1} joueurs ont voté."],
+    "SecretLynchResultEach": ["{0} vote(s) - {1} (voté par : {2})"],
+    "SecretLynchResultNumber": ["{0} vote(s) - {1}"],
+    "SecretLynchResultFull": ["🗳️ Résultats du vote secret :\n{0}"],
+
     "PlayerFoundDead": ["{0} a été retrouvé(e) mort(e) ce matin."],
     "PlayerFoundDeadWithRole": ["{0} a été retrouvé(e) mort(e) ce matin. C'était un(e) {1}."],
 
@@ -237,6 +243,7 @@
     "ConvertedToCult": ["Tu sens un appel obscur... tu as rejoint le Culte !"],
     "RoleStolenPM": ["Tu as volé l'identité de {0} ! Tu es maintenant un(e) {1}."],
     "GunnerLostPowerMsg": ["Ta balle n'a eu aucun effet sur l'Ancien Sage - le choc t'a fait perdre ton pouvoir !"],
+    "HunterLostPowerMsg": ["Ton dernier tir a atteint le Sage - la culpabilité te fait perdre ton titre. Ton dernier acte fut celui d'un simple villageois, pas d'un chasseur."],
     "WolvesGotDrunkMsg": ["Tu as tellement fêté le festin de cette nuit que tu ne pourras plus agir pendant un moment."],
     "YouAreInLove": ["Cupidon a frappé - tu es maintenant éperdument amoureux(se) de {0}. Si l'un de vous meurt, l'autre perd goût à la vie."],
 
