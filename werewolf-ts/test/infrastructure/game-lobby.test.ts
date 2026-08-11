@@ -51,6 +51,7 @@ function fakeGroup(telegramId: bigint, title: string | null, overrides: Partial<
     secretLynchShowVotes: false,
     secretLynchShowVoters: false,
     botInGroup: true,
+    banned: false,
     memberCount: null,
     preferred: false,
     inviteLink: null,
@@ -64,7 +65,8 @@ function fakeGroup(telegramId: bigint, title: string | null, overrides: Partial<
 
 function createHarness(joinTimeSeconds = 5) {
   const sendMessage = vi.fn().mockResolvedValue({ message_id: 1 });
-  const bot = { api: { sendMessage } } as unknown as Bot;
+  const leaveChat = vi.fn().mockResolvedValue(true);
+  const bot = { api: { sendMessage, leaveChat } } as unknown as Bot;
 
   const gameManager = new GameManager();
 
@@ -116,7 +118,7 @@ function createHarness(joinTimeSeconds = 5) {
 
   const lobby = new GameLobbyManager(bot, gameManager, groups, players, gameRepo, translator, logger, gameLoop, notifyGames, joinTimeSeconds);
 
-  return { lobby, bot, sendMessage, gameManager, groups, groupsStore, players, gameRepo, gameLoop, notifyGames };
+  return { lobby, bot, sendMessage, leaveChat, gameManager, groups, groupsStore, players, gameRepo, gameLoop, notifyGames };
 }
 
 function user(id: number, firstName: string) {
@@ -153,6 +155,18 @@ describe('GameLobbyManager', () => {
 
     expect(sendMessage).toHaveBeenCalledWith(101, expect.stringContaining('already running'));
     expect(gameManager.size).toBe(1);
+  });
+
+  it("refuses to start a game and leaves a group that's been /bangroup'd, even without creating a game", async () => {
+    const { lobby, sendMessage, leaveChat, gameManager, groupsStore } = createHarness();
+    const chatId = 111n;
+    groupsStore.set(chatId.toString(), fakeGroup(chatId, 'Banned Group', { banned: true }));
+
+    await lobby.startGame(chatId, 'Banned Group', { id: 1n, name: 'Starter' }, 'Normal');
+
+    expect(leaveChat).toHaveBeenCalledWith(111);
+    expect(gameManager.has(chatId)).toBe(false);
+    expect(sendMessage).not.toHaveBeenCalled();
   });
 
   it('rejects a second player joining with the same display name', async () => {

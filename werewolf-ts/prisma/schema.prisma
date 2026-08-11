@@ -218,6 +218,10 @@ model Group {
   memberCount  Int?
   preferred    Boolean  @default(false)
   inviteLink   String?
+  /// Mirrors the original's `Group.CreatedBy == "BAN"` sentinel (`/bangroup`, DevOnly): the bot
+  /// refuses to start a new game here and leaves on sight, persistently - unlike a plain
+  /// `/leavegroup`, re-inviting the bot doesn't undo this.
+  banned       Boolean  @default(false)
 
   /// Which approved gif pack (if any) this group broadcasts with. Optional even when the owner
   /// has other approved packs elsewhere - a group only uses one it explicitly opted into.
