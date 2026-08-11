@@ -54,6 +54,10 @@ export class GameLoop {
   /** One entry per chat currently waiting out a night/day/lynch timer, letting `/skipvote`
    * (see `skipVote()`) resolve it immediately instead of waiting for `setTimeout` to fire. */
   private readonly phaseSkips = new Map<bigint, () => void>();
+  /** Chat ids force-stopped via `killGame()` mid-phase - consumed the next time the loop checks in
+   * (right after its current phase's wait window closes), so it bails out instead of resolving/
+   * announcing/recursing into the next phase. */
+  private readonly killedChats = new Set<bigint>();
 
   constructor(
     private readonly bot: Bot,
@@ -83,6 +87,30 @@ export class GameLoop {
    * currently waiting out to resolve immediately, same as if it had just naturally elapsed.
    * Returns false if no phase is currently in its wait window (e.g. between phases, or no game).
    */
+  /**
+   * Port of `/killgame` (the original's `Werewolf.Kill()` + `Program.RemoveGame`): force-stops
+   * whatever phase this chat's game is currently in, with no resolution or announcement - unlike a
+   * normal game end, this is an abrupt admin override. Frees the chat up for a new game right away;
+   * the loop itself notices and unwinds the next time it checks in (see `killedChats`), typically
+   * within moments since this also wakes up any phase currently waiting out its timer. Returns
+   * false if no game is running in this chat.
+   */
+  killGame(chatId: bigint): boolean {
+    if (!this.games.has(chatId)) return false;
+    this.killedChats.add(chatId);
+    this.games.remove(chatId);
+    this.gameIds.delete(chatId);
+    this.eventBatches.delete(chatId);
+    this.skipVote(chatId);
+    return true;
+  }
+
+  /** Consumes (and reports) a pending `killGame()` for this chat - checked right after each
+   * phase's wait window closes, before the loop would otherwise resolve/announce/recurse. */
+  private consumeKilled(chatId: bigint): boolean {
+    return this.killedChats.delete(chatId);
+  }
+
   skipVote(chatId: bigint): boolean {
     const resolve = this.phaseSkips.get(chatId);
     if (!resolve) return false;
@@ -117,6 +145,7 @@ export class GameLoop {
       await this.sendNightMenus(game, group.language);
       await this.phaseSleep(game.chatId, seconds * 1000);
     }
+    if (this.consumeKilled(game.chatId)) return;
 
     const events = game.resolveNightActions();
     await this.broadcast(game, group, events, 'Night');
@@ -212,6 +241,7 @@ export class GameLoop {
     await this.sendDayMenus(game, group.language);
 
     await this.phaseSleep(game.chatId, seconds * 1000);
+    if (this.consumeKilled(game.chatId)) return;
 
     const events = game.resolveDayActions();
     await this.broadcast(game, group, events, 'Day');
@@ -250,6 +280,7 @@ export class GameLoop {
 
       await this.sendLynchVoteMenu(game, group.language, seconds);
       await this.phaseSleep(game.chatId, seconds * 1000);
+      if (this.consumeKilled(game.chatId)) return;
 
       const result = game.resolveLynch();
       await this.sendSecretLynchSummary(game, group);
