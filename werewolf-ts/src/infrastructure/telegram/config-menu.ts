@@ -125,6 +125,16 @@ export class ConfigMenu {
         return this.modeScreen(refreshed);
       }
 
+      case 'showrolesend':
+        return this.showRolesEndScreen(group);
+
+      case 'setshowrolesend': {
+        const value = rest[0] as 'NONE' | 'LIVING' | 'ALL';
+        await this.groups.updateConfig(groupTelegramId, { showRolesEnd: value });
+        const refreshed = await this.groups.getOrCreate(groupTelegramId, null, null);
+        return this.showRolesEndScreen(refreshed);
+      }
+
       case 'timers':
         return this.timersScreen(group);
 
@@ -183,6 +193,7 @@ export class ConfigMenu {
       .text(this.t.translate(lang, 'CfgMenuTimers'), `cfg:${gid}:timers`)
       .row()
       .text(this.t.translate(lang, 'CfgMenuMaxPlayers'), `cfg:${gid}:maxplayers`)
+      .text(this.t.translate(lang, 'CfgMenuShowRolesEnd'), `cfg:${gid}:showrolesend`)
       .row()
       .text(this.t.translate(lang, 'CfgMenuLanguage'), `cfg:${gid}:lang`);
     return { text: this.t.translate(lang, 'CfgMainTitle', group.title ?? gid), keyboard };
@@ -237,6 +248,21 @@ export class ConfigMenu {
       .row()
       .text(this.t.translate(lang, 'CfgBack'), `cfg:${gid}:main`);
     return { text: this.t.translate(lang, 'CfgModeTitle'), keyboard };
+  }
+
+  private showRolesEndScreen(group: GroupWithConfig): MenuScreen {
+    const lang = group.language;
+    const gid = group.telegramId.toString();
+    const mark = (value: string) => (group.showRolesEnd === value ? '✅ ' : '');
+    const keyboard = new InlineKeyboard()
+      .text(`${mark('NONE')}${this.t.translate(lang, 'CfgShowRolesEndNone')}`, `cfg:${gid}:setshowrolesend:NONE`)
+      .row()
+      .text(`${mark('LIVING')}${this.t.translate(lang, 'CfgShowRolesEndLiving')}`, `cfg:${gid}:setshowrolesend:LIVING`)
+      .row()
+      .text(`${mark('ALL')}${this.t.translate(lang, 'CfgShowRolesEndAll')}`, `cfg:${gid}:setshowrolesend:ALL`)
+      .row()
+      .text(this.t.translate(lang, 'CfgBack'), `cfg:${gid}:main`);
+    return { text: this.t.translate(lang, 'CfgShowRolesEndTitle'), keyboard };
   }
 
   private timersScreen(group: GroupWithConfig): MenuScreen {

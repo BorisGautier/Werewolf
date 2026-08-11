@@ -43,6 +43,7 @@ function fakeGroup(telegramId: bigint, title: string | null, overrides: Partial<
     thiefFull: false,
     burningOverkill: false,
     showRolesOnDeath: true,
+    showRolesEnd: 'ALL',
     showIds: false,
     shufflePlayerList: false,
     randomMode: false,

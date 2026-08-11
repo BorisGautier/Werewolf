@@ -35,6 +35,7 @@ function fakeGroup(overrides: Partial<GroupWithConfig> = {}): GroupWithConfig {
     thiefFull: false,
     burningOverkill: false,
     showRolesOnDeath: true,
+    showRolesEnd: 'ALL',
     showIds: false,
     shufflePlayerList: false,
     randomMode: false,
@@ -111,6 +112,13 @@ describe('ConfigMenu', () => {
     const { menu, getGroup } = createHarness();
     await menu.handleAction(-100n, 'setmode', ['CHAOS']);
     expect(getGroup().mode).toBe('CHAOS');
+  });
+
+  it('sets the end-game recap detail level', async () => {
+    const { menu, getGroup } = createHarness();
+    expect(getGroup().showRolesEnd).toBe('ALL');
+    await menu.handleAction(-100n, 'setshowrolesend', ['NONE']);
+    expect(getGroup().showRolesEnd).toBe('NONE');
   });
 
   it('sets a phase timer', async () => {
