@@ -338,7 +338,9 @@ describe('evaluateGameAchievements', () => {
   it('grants ColdAsIce to the Snow Wolf who freezes the Harlot', () => {
     const snowWolf = createPlayer(1n, 'SW', ROLE_BIT.SnowWolf, 'Wolf');
     const harlot = createPlayer(2n, 'Ha', ROLE_BIT.Harlot, 'Village');
-    const events: GameEvent[][] = [[{ type: 'PlayerFrozen', playerId: 2n, cause: 'SnowWolf' }]];
+    const events: GameEvent[][] = [
+      [{ type: 'PlayerFrozen', playerId: 2n, cause: 'SnowWolf', snowWolfId: 1n, flavor: 'Harlot' }],
+    ];
     const result = evaluateGameAchievements(ctx([snowWolf, harlot], { eventBatches: events }));
     expect(unlocksFor(result, 1n)).toContain('ColdAsIce');
   });
@@ -346,9 +348,9 @@ describe('evaluateGameAchievements', () => {
   it('grants Firefighter to the Guardian Angel after cleaning 3 houses', () => {
     const ga = createPlayer(1n, 'GA', ROLE_BIT.GuardianAngel, 'Village');
     const events: GameEvent[][] = [
-      [{ type: 'GuardianAngelCleanedDouse', playerId: 2n }],
-      [{ type: 'GuardianAngelCleanedDouse', playerId: 3n }],
-      [{ type: 'GuardianAngelCleanedDouse', playerId: 4n }],
+      [{ type: 'GuardianAngelCleanedDouse', gaId: 1n, playerId: 2n }],
+      [{ type: 'GuardianAngelCleanedDouse', gaId: 1n, playerId: 3n }],
+      [{ type: 'GuardianAngelCleanedDouse', gaId: 1n, playerId: 4n }],
     ];
     const result = evaluateGameAchievements(ctx([ga], { eventBatches: events }));
     expect(unlocksFor(result, 1n)).toContain('Firefighter');

@@ -40,7 +40,12 @@ describe('resolveGuardianAngelNight', () => {
     const events = resolveGuardianAngelNight([ga, target, arsonist], state, baseCtx([ga, target, arsonist]));
 
     expect(target.doused).toBe(false);
-    expect(events.some((e) => e.type === 'GuardianAngelCleanedDouse')).toBe(true);
+    expect(
+      events.some((e) => e.type === 'GuardianAngelSavedTargetFromFire' && e.gaId === ga.id && e.targetId === target.id),
+    ).toBe(true);
+    // Only the "preventive cleaning" branch (nobody attacked, just doused) counts towards
+    // Firefighter - being saved from an actual fire is a different narrative branch entirely.
+    expect(events.some((e) => e.type === 'GuardianAngelCleanedDouse')).toBe(false);
   });
 
   it('does NOT clean a douse when the target was saved from a non-fire attack (wolf/SK)', () => {
@@ -113,6 +118,66 @@ describe('resolveGuardianAngelNight', () => {
     resolveGuardianAngelNight([ga, wolf], state, baseCtx([ga, wolf]));
 
     expect(ga.gaGuardWolfCount).toBe(0);
+  });
+
+  it('emits GuardianAngelSaved when the target was attacked (not by fire) and blocked', () => {
+    const ga = createPlayer(1n, 'GA', ROLE_BIT.GuardianAngel, 'Village');
+    const target = createPlayer(2n, 'T', ROLE_BIT.Villager, 'Village');
+    target.wasSavedLastNight = true; // e.g. set by resolveWolfNight earlier in the same night
+    ga.choice = target.id;
+
+    const state = initialNightState();
+    state.guardianAngel = ga;
+    const events = resolveGuardianAngelNight([ga, target], state, baseCtx([ga, target]));
+
+    expect(events.some((e) => e.type === 'GuardianAngelSaved' && e.gaId === ga.id && e.targetId === target.id)).toBe(
+      true,
+    );
+  });
+
+  it("emits GuardianAngelNoAttack when the target wasn't attacked, doused, or dead", () => {
+    const ga = createPlayer(1n, 'GA', ROLE_BIT.GuardianAngel, 'Village');
+    const target = createPlayer(2n, 'T', ROLE_BIT.Villager, 'Village');
+    ga.choice = target.id;
+
+    const state = initialNightState();
+    state.guardianAngel = ga;
+    const events = resolveGuardianAngelNight([ga, target], state, baseCtx([ga, target]));
+
+    expect(
+      events.some((e) => e.type === 'GuardianAngelNoAttack' && e.gaId === ga.id && e.targetId === target.id),
+    ).toBe(true);
+  });
+
+  it("emits GuardianAngelTargetEmpty when the target isn't home (e.g. themselves out visiting)", () => {
+    const ga = createPlayer(1n, 'GA', ROLE_BIT.GuardianAngel, 'Village');
+    const harlot = createPlayer(2n, 'H', ROLE_BIT.Harlot, 'Village');
+    harlot.choice = 99n; // the Harlot is out visiting someone, so VisitPlayer reports Fail for the GA
+    ga.choice = harlot.id;
+
+    const state = initialNightState();
+    state.guardianAngel = ga;
+    const events = resolveGuardianAngelNight([ga, harlot], state, baseCtx([ga, harlot]));
+
+    expect(
+      events.some((e) => e.type === 'GuardianAngelTargetEmpty' && e.gaId === ga.id && e.targetId === harlot.id),
+    ).toBe(true);
+  });
+
+  it('emits GuardianAngelDiedProtecting when the GA dies visiting a wolf', () => {
+    const ga = createPlayer(1n, 'GA', ROLE_BIT.GuardianAngel, 'Village');
+    const wolf = createPlayer(2n, 'W', ROLE_BIT.Wolf, 'Wolf');
+    ga.choice = wolf.id;
+
+    const state = initialNightState();
+    state.guardianAngel = ga;
+    // Force the 50/50 death roll against the GA (roll < 50).
+    const events = resolveGuardianAngelNight([ga, wolf], state, baseCtx([ga, wolf], () => 0));
+
+    expect(ga.isDead).toBe(true);
+    expect(
+      events.some((e) => e.type === 'GuardianAngelDiedProtecting' && e.gaId === ga.id && e.targetId === wolf.id),
+    ).toBe(true);
   });
 
   it('does not count guarding a non-wolf toward gaGuardWolfCount', () => {

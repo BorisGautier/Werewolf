@@ -57,6 +57,60 @@ describe('resolveChemistNight', () => {
       ),
     ).toBe(true);
   });
+
+  it('emits ChemistPoisoned on a successful poisoning', () => {
+    const chemist = createPlayer(1n, 'Ch', ROLE_BIT.Chemist, 'Village');
+    const target = createPlayer(2n, 'T', ROLE_BIT.Villager, 'Village');
+    chemist.choice = target.id;
+
+    const events = resolveChemistNight([chemist, target], baseCtx([chemist, target], () => 0));
+
+    expect(
+      events.some((e) => e.type === 'ChemistPoisoned' && e.chemistId === chemist.id && e.targetId === target.id),
+    ).toBe(true);
+  });
+
+  it('emits ChemistTargetAlreadyDead when the target is already dead', () => {
+    const chemist = createPlayer(1n, 'Ch', ROLE_BIT.Chemist, 'Village');
+    const target = createPlayer(2n, 'T', ROLE_BIT.Villager, 'Village');
+    target.isDead = true;
+    chemist.choice = target.id;
+
+    const events = resolveChemistNight([chemist, target], baseCtx([chemist, target]));
+
+    expect(
+      events.some(
+        (e) => e.type === 'ChemistTargetAlreadyDead' && e.chemistId === chemist.id && e.targetId === target.id,
+      ),
+    ).toBe(true);
+  });
+
+  it("emits ChemistTargetEmpty when the target isn't home", () => {
+    const chemist = createPlayer(1n, 'Ch', ROLE_BIT.Chemist, 'Village');
+    const harlot = createPlayer(2n, 'H', ROLE_BIT.Harlot, 'Village');
+    harlot.choice = 99n; // out visiting someone, so VisitPlayer reports Fail
+    chemist.choice = harlot.id;
+
+    const events = resolveChemistNight([chemist, harlot], baseCtx([chemist, harlot]));
+
+    expect(
+      events.some((e) => e.type === 'ChemistTargetEmpty' && e.chemistId === chemist.id && e.targetId === harlot.id),
+    ).toBe(true);
+  });
+
+  it('emits ChemistDiedVisiting when the Chemist dies visiting the Serial Killer', () => {
+    const chemist = createPlayer(1n, 'Ch', ROLE_BIT.Chemist, 'Village');
+    const sk = createPlayer(2n, 'SK', ROLE_BIT.SerialKiller, 'SerialKiller');
+    sk.choice = 99n; // SK must have committed to a target for the visit to be able to succeed
+    chemist.choice = sk.id;
+
+    const events = resolveChemistNight([chemist, sk], baseCtx([chemist, sk], () => 0));
+
+    expect(chemist.isDead).toBe(true);
+    expect(
+      events.some((e) => e.type === 'ChemistDiedVisiting' && e.chemistId === chemist.id && e.targetId === sk.id),
+    ).toBe(true);
+  });
 });
 
 describe('resolveHarlotNight', () => {

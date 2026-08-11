@@ -3,6 +3,27 @@ import type { Role } from '../roles/role.js';
 import type { Team } from './team.js';
 
 /**
+ * Which "you woke up frozen" flavor text a Snow Wolf's target gets, mirroring the role switch in
+ * `Werewolf.cs`'s `#region Snow Wolf Night` (`SKFrozen`/`HarlotFrozen`/.../`DefaultFrozen`).
+ * Captured at freeze time rather than re-derived from the target's post-resolution state, because
+ * two of the branches (`GraveDiggerDug`, `Thief`) depend on state (`dugGravesLastNight`, the
+ * group's `thiefFull` setting) that either gets reset or isn't visible by the time messages are
+ * built.
+ */
+export type FreezeFlavor =
+  | 'SerialKiller'
+  | 'Harlot'
+  | 'Chemist'
+  | 'Cultist'
+  | 'CultistHunter'
+  | 'Seeing'
+  | 'GuardianAngel'
+  | 'Thief'
+  | 'GraveDiggerDug'
+  | 'Arsonist'
+  | 'Default';
+
+/**
  * Domain events emitted by the pure game-state functions (`kill.ts`,
  * `win-condition.ts`). The domain layer never sends Telegram messages or
  * touches the database itself - it returns these events, and the
@@ -22,7 +43,7 @@ export type GameEvent =
   | { type: 'WolfKilledHunterInStandoff'; wolfId: bigint; hunterId: bigint }
   | { type: 'GunnerPreventsWolfWin' }
   | { type: 'GameEnded'; winningTeam: Team }
-  | { type: 'PlayerFrozen'; playerId: bigint; cause: 'SnowWolf' }
+  | { type: 'PlayerFrozen'; playerId: bigint; cause: 'SnowWolf'; snowWolfId: bigint; flavor: FreezeFlavor }
   | { type: 'GuardianAngelBlockedFreeze'; targetId: bigint; snowWolfId: bigint }
   | { type: 'PlayerDoused'; playerId: bigint; arsonistId: bigint }
   | { type: 'GuardianAngelSavedFromBurning'; playerId: bigint }
@@ -36,7 +57,16 @@ export type GameEvent =
   | { type: 'GuardianAngelBlockedSerialKiller'; targetId: bigint }
   | { type: 'PlayerConvertedToCult'; playerId: bigint }
   | { type: 'CultConversionFailed'; targetId: bigint }
-  | { type: 'GuardianAngelCleanedDouse'; playerId: bigint }
+  | { type: 'GuardianAngelCleanedDouse'; gaId: bigint; playerId: bigint }
+  | { type: 'GuardianAngelSaved'; gaId: bigint; targetId: bigint }
+  | { type: 'GuardianAngelSavedTargetFromFire'; gaId: bigint; targetId: bigint }
+  | { type: 'GuardianAngelNoAttack'; gaId: bigint; targetId: bigint }
+  | { type: 'GuardianAngelTargetEmpty'; gaId: bigint; targetId: bigint }
+  | { type: 'GuardianAngelDiedProtecting'; gaId: bigint; targetId: bigint }
+  | { type: 'ChemistPoisoned'; chemistId: bigint; targetId: bigint }
+  | { type: 'ChemistTargetAlreadyDead'; chemistId: bigint; targetId: bigint }
+  | { type: 'ChemistTargetEmpty'; chemistId: bigint; targetId: bigint }
+  | { type: 'ChemistDiedVisiting'; chemistId: bigint; targetId: bigint }
   | { type: 'RoleStolen'; thiefId: bigint; targetId: bigint; stolenRole: Role }
   | { type: 'ThiefStealForced'; thiefId: bigint; targetId: bigint }
   | { type: 'WildChildTurnedWolf'; playerId: bigint; roleModelId: bigint }
