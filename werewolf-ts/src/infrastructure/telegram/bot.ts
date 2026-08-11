@@ -34,6 +34,20 @@ function spamBanDurationKey(tempBanCount: number): string {
   return SPAM_BAN_DURATION_KEYS[tempBanCount - 1] ?? 'SpamBanPermanent';
 }
 
+/**
+ * Whether the sender of `ctx`'s message is a group admin - `ctx.chat` must already be known to be
+ * a non-private chat. Mirrors the original's `AllowAnonymousAdmins` handling
+ * (`UpdateHandler.cs`'s `isAnonymousAdmin` check): a message sent "as the group" via Telegram's
+ * anonymous-admin feature has `sender_chat.id === chat.id`, and `ctx.from` in that case is the
+ * `GroupAnonymousBot` system account, which never has a real `ChatMember` status - so it has to be
+ * trusted directly instead of going through `getChatMember`/`getAuthor`.
+ */
+export async function isGroupAdminOrAnonymous(ctx: Context): Promise<boolean> {
+  if (ctx.chat && ctx.senderChat?.id === ctx.chat.id) return true;
+  const member = await ctx.getAuthor();
+  return member.status === 'creator' || member.status === 'administrator';
+}
+
 export interface BotDependencies {
   translator: Translator;
   gameManager: GameManager;
@@ -243,9 +257,7 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
 
   bot.command('config', async (ctx) => {
     if (!ctx.chat || ctx.chat.type === 'private' || !ctx.from) return;
-    const member = await ctx.getAuthor();
-    const isAdmin = member.status === 'creator' || member.status === 'administrator';
-    if (!isAdmin) return;
+    if (!(await isGroupAdminOrAnonymous(ctx))) return;
 
     const group = await deps.groupRepository.getOrCreate(BigInt(ctx.chat.id), ctx.chat.title ?? null, null);
     const screen = await configMenu.open(BigInt(ctx.chat.id));
@@ -289,8 +301,7 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
 
   bot.command('forcestart', async (ctx) => {
     if (!ctx.chat || ctx.chat.type === 'private' || !ctx.from) return;
-    const member = await ctx.getAuthor();
-    const isAdmin = member.status === 'creator' || member.status === 'administrator';
+    const isAdmin = await isGroupAdminOrAnonymous(ctx);
     await lobby.forceStart(BigInt(ctx.chat.id), isAdmin);
   });
 
@@ -307,8 +318,7 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
 
   bot.command('extend', async (ctx) => {
     if (!ctx.chat || ctx.chat.type === 'private' || !ctx.from) return;
-    const member = await ctx.getAuthor();
-    const isAdmin = member.status === 'creator' || member.status === 'administrator';
+    const isAdmin = await isGroupAdminOrAnonymous(ctx);
     const parsed = parseInt((ctx.match as string | undefined) ?? '', 10);
     const seconds = Number.isFinite(parsed) ? parsed : 30;
 
@@ -457,8 +467,7 @@ function registerModerationCommands(
 ): void {
   async function isGroupAdmin(ctx: Context): Promise<boolean> {
     if (!ctx.chat || ctx.chat.type === 'private') return false;
-    const member = await ctx.getAuthor();
-    return member.status === 'creator' || member.status === 'administrator';
+    return isGroupAdminOrAnonymous(ctx);
   }
   const isGlobalAdmin = (telegramId: bigint) => isGlobalAdminCheck(env, deps, telegramId);
 
@@ -1043,8 +1052,7 @@ function registerGifCommands(bot: Bot, env: Env, deps: BotDependencies): void {
 
   bot.command('usegifpack', async (ctx) => {
     if (!ctx.chat || ctx.chat.type === 'private' || !ctx.from) return;
-    const member = await ctx.getAuthor();
-    if (member.status !== 'creator' && member.status !== 'administrator') return;
+    if (!(await isGroupAdminOrAnonymous(ctx))) return;
 
     const group = await deps.groupRepository.getOrCreate(BigInt(ctx.chat.id), ctx.chat.title ?? null, null);
     const arg = (ctx.match as string | undefined)?.trim();
