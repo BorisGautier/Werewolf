@@ -63,7 +63,10 @@ function fakeGroup(overrides: Partial<GroupWithConfig> = {}): GroupWithConfig {
   };
 }
 
-function createHarness(options: { gifPacks?: import('../../src/infrastructure/persistence/gif-pack.repository.js').GifPackRepository } = {}) {
+function createHarness(options: {
+  gifPacks?: import('../../src/infrastructure/persistence/gif-pack.repository.js').GifPackRepository;
+  players?: import('../../src/infrastructure/persistence/player.repository.js').PlayerRepository;
+} = {}) {
   const sendMessage = vi.fn().mockResolvedValue({ message_id: 1 });
   const sendAnimation = vi.fn().mockResolvedValue({ message_id: 1 });
   const bot = { api: { sendMessage, sendAnimation } } as unknown as Bot;
@@ -90,9 +93,13 @@ function createHarness(options: { gifPacks?: import('../../src/infrastructure/pe
 
   const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as import('../../src/infrastructure/logging/logger.js').Logger;
 
-  const loop = new GameLoop(bot, gameManager, groups, gameRepo, achievements, translator, logger, options.gifPacks);
+  const players =
+    options.players ??
+    ({ findByTelegramId: vi.fn(async () => null) } as unknown as import('../../src/infrastructure/persistence/player.repository.js').PlayerRepository);
 
-  return { loop, bot, sendMessage, sendAnimation, gameManager, groups, gameRepo, achievements, group, logger };
+  const loop = new GameLoop(bot, gameManager, groups, gameRepo, achievements, translator, logger, players, options.gifPacks);
+
+  return { loop, bot, sendMessage, sendAnimation, gameManager, groups, gameRepo, achievements, group, logger, players };
 }
 
 /** A 5-player game (1 Wolf, 4 Villagers) already dealt and in Night 1, matching what
@@ -264,6 +271,45 @@ describe('GameLoop', () => {
     const summaryText = summaryCall![1] as string;
     for (const p of game.players) expect(summaryText).toContain(p.name);
     expect(summaryText).toContain('Game Length:');
+  });
+
+  it("end-of-game recap includes a donor badge for a player above the first donation tier", async () => {
+    const players = {
+      findByTelegramId: vi.fn(async (telegramId: bigint) => (telegramId === 1n ? { donationLevel: 2 } : null)),
+    } as unknown as import('../../src/infrastructure/persistence/player.repository.js').PlayerRepository;
+    const { loop, gameManager, sendMessage } = createHarness({ players });
+    const game = dealtGame(gameManager);
+    const wolf = game.players[0]!;
+
+    loop.start(game, 42);
+    await vi.advanceTimersByTimeAsync(0);
+
+    for (let i = 0; i < 20 && gameManager.get(game.chatId) !== undefined; i++) {
+      if (game.phase === 'Night') {
+        const target = game.players.find((p) => !p.isDead && p.id !== wolf.id);
+        if (target) await loop.handleCallback(wolf.id, wolf.id, `nt:${target.id.toString()}`);
+        await vi.advanceTimersByTimeAsync(5000);
+      } else if (game.phase === 'Day') {
+        await vi.advanceTimersByTimeAsync(5000);
+      } else if (game.phase === 'Lynch') {
+        const voteTarget = game.players.find((p) => !p.isDead && p.id !== wolf.id);
+        if (voteTarget) {
+          for (const voter of game.players.filter((p) => !p.isDead)) {
+            await loop.handleCallback(voter.id, game.chatId, `vote:${voteTarget.id.toString()}`);
+          }
+        }
+        await vi.advanceTimersByTimeAsync(5000);
+      } else {
+        break;
+      }
+      await vi.advanceTimersByTimeAsync(0);
+    }
+
+    const summaryCall = sendMessage.mock.calls.find(
+      (call) => typeof call[1] === 'string' && call[1].includes('Players Alive'),
+    );
+    const badgedPlayer = game.players.find((p) => p.id === 1n)!;
+    expect(summaryCall![1] as string).toContain(`${badgedPlayer.name} 🥈`);
   });
 
   it("passes the game's real-world duration and surviving/non-fled players as longHaul, for the LongHaul achievement", async () => {

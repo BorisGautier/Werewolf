@@ -362,4 +362,34 @@ describe('GameLobbyManager', () => {
     expect(sendMessage).toHaveBeenCalledWith(106, expect.stringContaining('admin'));
     expect(gameManager.get(chatId)!.phase).toBe('Joining');
   });
+
+  it("/players appends a donor badge to a player's name, matching their donation tier", async () => {
+    const { lobby, sendMessage, players } = createHarness();
+    const chatId = 109n;
+
+    await lobby.startGame(chatId, 'Group', { id: 1n, name: 'Starter' }, 'Normal');
+    await lobby.join(chatId, user(2, 'Alice'));
+    await lobby.join(chatId, user(3, 'Bob'));
+
+    (players.findByTelegramId as ReturnType<typeof vi.fn>).mockImplementation(async (telegramId: bigint) =>
+      telegramId === 2n ? { donationLevel: 3 } : { donationLevel: 0 },
+    );
+    sendMessage.mockClear();
+    await lobby.showPlayers(chatId);
+
+    expect(sendMessage).toHaveBeenCalledWith(109, expect.stringContaining('Alice 🥇'));
+    expect(sendMessage).not.toHaveBeenCalledWith(109, expect.stringContaining('Bob 🥇'));
+  });
+
+  it("/players shows plain names when nobody has donated", async () => {
+    const { lobby, sendMessage } = createHarness();
+    const chatId = 110n;
+
+    await lobby.startGame(chatId, 'Group', { id: 1n, name: 'Starter' }, 'Normal');
+    sendMessage.mockClear();
+    await lobby.showPlayers(chatId);
+
+    const call = sendMessage.mock.calls.find((c) => c[0] === 110);
+    expect(call?.[1]).not.toMatch(/🥉|🥈|🥇/);
+  });
 });

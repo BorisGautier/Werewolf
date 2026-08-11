@@ -80,4 +80,16 @@ describe('buildEndGameSummary', () => {
     const text = buildEndGameSummary([alice], 'NONE', 'en', translator, null);
     expect(text).not.toContain('Game Length');
   });
+
+  it("appends a donor badge to a player's name when one is provided", () => {
+    const alice = createPlayer(1n, 'Alice', ROLE_BIT.Villager, 'Village');
+    const bob = createPlayer(2n, 'Bob', ROLE_BIT.Villager, 'Village');
+    const badges = new Map([[1n, ' 🥇']]);
+
+    const text = buildEndGameSummary([alice, bob], 'NONE', 'en', translator, null, badges);
+
+    expect(text).toContain('Alice 🥇');
+    expect(text).not.toContain('Bob 🥇');
+    expect(text).toContain('Bob');
+  });
 });

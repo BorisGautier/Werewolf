@@ -72,6 +72,7 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     deps.achievementRepository,
     deps.translator,
     logger,
+    deps.playerRepository,
     deps.gifPackRepository,
   );
   const lobby = new GameLobbyManager(

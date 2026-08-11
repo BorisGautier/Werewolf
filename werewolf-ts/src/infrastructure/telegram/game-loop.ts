@@ -30,6 +30,7 @@ import { AchievementRepository } from '../persistence/achievement.repository.js'
 import { GameRepository } from '../persistence/game.repository.js';
 import { GroupRepository } from '../persistence/group.repository.js';
 import { GifPackRepository, type GifCategory } from '../persistence/gif-pack.repository.js';
+import { donorBadge, type PlayerRepository } from '../persistence/player.repository.js';
 import type { Translator } from '../i18n/translator.js';
 import type { Logger } from '../logging/logger.js';
 import { describeEvent } from './messages.js';
@@ -67,6 +68,7 @@ export class GameLoop {
     private readonly achievements: AchievementRepository,
     private readonly t: Translator,
     private readonly logger: Logger,
+    private readonly players?: PlayerRepository,
     private readonly gifPacks?: GifPackRepository,
   ) {}
 
@@ -402,7 +404,8 @@ export class GameLoop {
     try {
       const group = await this.groups.getOrCreate(game.chatId, null, null);
       const durationMs = startedAt ? Date.now() - startedAt.getTime() : null;
-      const summary = buildEndGameSummary(game.players, group.showRolesEnd, group.language, this.t, durationMs);
+      const donorBadges = await this.donorBadges(game.players.map((p) => p.id));
+      const summary = buildEndGameSummary(game.players, group.showRolesEnd, group.language, this.t, durationMs, donorBadges);
       await this.sendRaw(game.chatId, summary);
     } catch (err) {
       this.logger.error({ err, chatId: game.chatId.toString() }, 'Failed to send end-of-game summary');
@@ -742,6 +745,23 @@ export class GameLoop {
       if (err instanceof GrammyError) return;
       throw err;
     }
+  }
+
+  /**
+   * Looks up each player's donor badge (🥉/🥈/🥇, or none) for display in the end-of-game recap -
+   * mirrors `Extensions.cs`'s `GetName()` appending a medal wherever a player's name is shown, for
+   * whichever donation tier `player.DonationLevel` has reached. Returns an empty map (no badges)
+   * if this `GameLoop` wasn't wired up with a `PlayerRepository` (e.g. in tests that don't need it).
+   */
+  private async donorBadges(playerIds: readonly bigint[]): Promise<Map<bigint, string>> {
+    const badges = new Map<bigint, string>();
+    if (!this.players) return badges;
+    for (const id of playerIds) {
+      const dbPlayer = await this.players.findByTelegramId(id);
+      const badge = donorBadge(dbPlayer?.donationLevel ?? 0);
+      if (badge) badges.set(id, badge);
+    }
+    return badges;
   }
 
   /** Sends an already-built message verbatim (e.g. `buildEndGameSummary`'s output) instead of translating a key. */
