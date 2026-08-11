@@ -22,6 +22,12 @@ export async function loadLocales(dir: string = DEFAULT_LOCALES_DIR): Promise<Ma
     throw new Error('No locale is marked as isDefault: true - one master fallback language is required.');
   }
 
+  for (const locale of locales.values()) {
+    if (locale.base && !locales.has(locale.base)) {
+      throw new Error(`Locale "${locale.code}" declares base "${locale.base}", which isn't among the loaded locales.`);
+    }
+  }
+
   return locales;
 }
 

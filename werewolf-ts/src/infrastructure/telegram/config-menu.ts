@@ -153,6 +153,20 @@ export class ConfigMenu {
         return this.maxPlayersScreen(refreshed);
       }
 
+      case 'lang':
+        return this.languageScreen(group);
+
+      case 'langpacks':
+        return this.langPacksScreen(group, rest[0] ?? group.language);
+
+      case 'setlang': {
+        const code = rest[0];
+        if (!code) return null;
+        await this.groups.updateConfig(groupTelegramId, { language: code });
+        const refreshed = await this.groups.getOrCreate(groupTelegramId, null, null);
+        return this.mainScreen(refreshed);
+      }
+
       default:
         return null;
     }
@@ -168,7 +182,9 @@ export class ConfigMenu {
       .text(this.t.translate(lang, 'CfgMenuMode'), `cfg:${gid}:mode`)
       .text(this.t.translate(lang, 'CfgMenuTimers'), `cfg:${gid}:timers`)
       .row()
-      .text(this.t.translate(lang, 'CfgMenuMaxPlayers'), `cfg:${gid}:maxplayers`);
+      .text(this.t.translate(lang, 'CfgMenuMaxPlayers'), `cfg:${gid}:maxplayers`)
+      .row()
+      .text(this.t.translate(lang, 'CfgMenuLanguage'), `cfg:${gid}:lang`);
     return { text: this.t.translate(lang, 'CfgMainTitle', group.title ?? gid), keyboard };
   }
 
@@ -263,5 +279,42 @@ export class ConfigMenu {
     }
     keyboard.row().text(this.t.translate(lang, 'CfgBack'), `cfg:${gid}:main`);
     return { text: this.t.translate(lang, 'CfgMaxPlayersTitle', group.maxPlayers), keyboard };
+  }
+
+  /**
+   * Step 1 of language-pack selection (see `translator.ts`'s `listBaseLocales`): pick the base
+   * language. Only `en`/`fr` are shipped today, but this reads the loaded locale set rather than
+   * a hardcoded list, so a future third base language needs no code change here.
+   */
+  private languageScreen(group: GroupWithConfig): MenuScreen {
+    const lang = group.language;
+    const gid = group.telegramId.toString();
+    const currentBase = this.t.baseOf(group.language);
+    const keyboard = new InlineKeyboard();
+    for (const base of this.t.listBaseLocales()) {
+      const mark = base.code === currentBase ? '✅ ' : '';
+      keyboard.text(`${mark}${base.name}`, `cfg:${gid}:langpacks:${base.code}`).row();
+    }
+    keyboard.text(this.t.translate(lang, 'CfgBack'), `cfg:${gid}:main`);
+    return { text: this.t.translate(lang, 'CfgLanguageTitle'), keyboard };
+  }
+
+  /**
+   * Step 2: pick a pack of `baseCode` (or "Default", i.e. `baseCode` itself with no pack) - empty
+   * beyond "Default" until someone actually ships a `locales/<baseCode>-<pack>.json`.
+   */
+  private langPacksScreen(group: GroupWithConfig, baseCode: string): MenuScreen {
+    const lang = group.language;
+    const gid = group.telegramId.toString();
+    const packs = this.t.listPacksForBase(baseCode);
+    const keyboard = new InlineKeyboard();
+    const defaultMark = group.language === baseCode ? '✅ ' : '';
+    keyboard.text(`${defaultMark}${this.t.translate(lang, 'CfgLangPackDefault')}`, `cfg:${gid}:setlang:${baseCode}`).row();
+    for (const pack of packs) {
+      const mark = pack.code === group.language ? '✅ ' : '';
+      keyboard.text(`${mark}${pack.name}`, `cfg:${gid}:setlang:${pack.code}`).row();
+    }
+    keyboard.text(this.t.translate(lang, 'CfgBack'), `cfg:${gid}:lang`);
+    return { text: this.t.translate(lang, 'CfgLangPackTitle'), keyboard };
   }
 }

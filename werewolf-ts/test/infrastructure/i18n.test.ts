@@ -42,4 +42,24 @@ describe('Translator', () => {
     const t = new Translator(locales, en);
     expect(() => t.translate('fr', 'DoesNotExist')).toThrow(MissingLocaleStringError);
   });
+
+  // `fr` above sets `base: 'en'` purely as a missing-translation safety net (same as the real
+  // fr.json) - it's still a real base language, not a pack, since it has no `isPack` flag.
+  it('lists locales with no isPack flag as base locales, base fallback notwithstanding', () => {
+    const t = new Translator(locales, en);
+    expect(t.listBaseLocales().map((l) => l.code).sort()).toEqual(['en', 'fr']);
+  });
+
+  it('lists a pack registered against a base, and resolves its base back via baseOf', () => {
+    const packed = new Map(locales);
+    packed.set('fr-spooky', { code: 'fr-spooky', name: 'Français (Spooky)', base: 'fr', isPack: true, strings: {} });
+    const t = new Translator(packed, en);
+
+    expect(t.listBaseLocales().map((l) => l.code).sort()).toEqual(['en', 'fr']);
+    expect(t.listPacksForBase('fr')).toEqual([{ code: 'fr-spooky', name: 'Français (Spooky)' }]);
+    expect(t.listPacksForBase('en')).toEqual([]);
+    expect(t.baseOf('fr-spooky')).toBe('fr');
+    expect(t.baseOf('fr')).toBe('fr');
+    expect(t.baseOf('unknown-code')).toBe('unknown-code');
+  });
 });
