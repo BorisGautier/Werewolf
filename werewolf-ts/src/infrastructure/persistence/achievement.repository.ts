@@ -63,6 +63,20 @@ export class AchievementRepository {
     return result.count > 0;
   }
 
+  /**
+   * `/moveachv`: copies every achievement `fromTelegramId` has unlocked onto `toTelegramId`
+   * (e.g. a player who accidentally played under the wrong Telegram account). Already-unlocked
+   * codes on the target are left alone; returns how many were newly copied.
+   */
+  async transferAll(fromTelegramId: bigint, toTelegramId: bigint): Promise<number> {
+    const unlocked = await this.listForPlayer(fromTelegramId);
+    let moved = 0;
+    for (const { code } of unlocked) {
+      if (await this.unlock(toTelegramId, code)) moved++;
+    }
+    return moved;
+  }
+
   async listForPlayer(telegramId: bigint): Promise<UnlockedAchievement[]> {
     const rows = await this.prisma.playerAchievement.findMany({
       where: { player: { telegramId } },

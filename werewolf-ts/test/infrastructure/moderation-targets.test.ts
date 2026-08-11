@@ -5,8 +5,10 @@ import {
   numericIdTargets,
   replyTarget,
   resolveEntityTargets,
+  resolveGroupArg,
 } from '../../src/infrastructure/telegram/moderation-targets.js';
 import type { PlayerRepository } from '../../src/infrastructure/persistence/player.repository.js';
+import type { GroupRepository } from '../../src/infrastructure/persistence/group.repository.js';
 
 function fakeCtx(overrides: { text?: string; entities?: unknown[]; replyFrom?: { id: number; first_name: string } }): Context {
   return {
@@ -85,5 +87,40 @@ describe('resolveEntityTargets', () => {
     const players = { findByUsername: vi.fn(async () => null) } as unknown as PlayerRepository;
 
     expect(await resolveEntityTargets(ctx, players)).toEqual([]);
+  });
+});
+
+describe('resolveGroupArg', () => {
+  function fakeGroups(overrides: Partial<GroupRepository> = {}): GroupRepository {
+    return {
+      findByTelegramId: vi.fn(async () => null),
+      findByUsername: vi.fn(async () => null),
+      findByInviteLinkSuffix: vi.fn(async () => null),
+      ...overrides,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any as GroupRepository;
+  }
+
+  it('resolves a raw numeric telegram id via findByTelegramId', async () => {
+    const groups = fakeGroups({ findByTelegramId: vi.fn(async () => ({ id: 1 }) as never) });
+    expect(await resolveGroupArg(groups, '-100123456')).toEqual({ id: 1 });
+    expect(groups.findByTelegramId).toHaveBeenCalledWith(-100123456n);
+  });
+
+  it('resolves an @username via findByUsername', async () => {
+    const groups = fakeGroups({ findByUsername: vi.fn(async () => ({ id: 2 }) as never) });
+    expect(await resolveGroupArg(groups, '@somegroup')).toEqual({ id: 2 });
+    expect(groups.findByUsername).toHaveBeenCalledWith('somegroup');
+  });
+
+  it('resolves an invite link by its trailing hash via findByInviteLinkSuffix', async () => {
+    const groups = fakeGroups({ findByInviteLinkSuffix: vi.fn(async () => ({ id: 3 }) as never) });
+    expect(await resolveGroupArg(groups, 'https://t.me/+AbCdEf1234')).toEqual({ id: 3 });
+    expect(groups.findByInviteLinkSuffix).toHaveBeenCalledWith('me/+AbCdEf1234');
+  });
+
+  it('returns null for an argument that looks like neither an id, a username, nor a link', async () => {
+    const groups = fakeGroups();
+    expect(await resolveGroupArg(groups, 'not a valid group ref')).toBeNull();
   });
 });
