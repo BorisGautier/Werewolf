@@ -18,6 +18,19 @@ describe('resolveSnowWolfNight', () => {
     expect(events).toEqual([]);
   });
 
+  it('does nothing when the Blacksmith spread silver tonight, even with a valid choice pending', () => {
+    const sw = createPlayer(1n, 'SW', ROLE_BIT.SnowWolf, 'Wolf');
+    const target = createPlayer(2n, 'T', ROLE_BIT.Villager, 'Village');
+    sw.choice = target.id;
+
+    const state = initialNightState();
+    state.silverSpread = true;
+    const events = resolveSnowWolfNight([sw, target], state, baseCtx([sw, target]));
+
+    expect(events).toEqual([]);
+    expect(target.frozen).toBe(false);
+  });
+
   it('freezes the Serial Killer instead of killing them, on a successful visit', () => {
     const sw = createPlayer(1n, 'SW', ROLE_BIT.SnowWolf, 'Wolf');
     const sk = createPlayer(2n, 'SK', ROLE_BIT.SerialKiller, 'SerialKiller');

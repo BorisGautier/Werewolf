@@ -365,6 +365,58 @@ describe('GameLoop', () => {
     expect(hunter.pendingHunterShot).toBeNull();
   });
 
+  it("ends the game when a lynched Hunter's final shot itself kills the last Wolf", async () => {
+    // Regression test: the win condition was never re-checked after `handleHunterShots` resolved
+    // the shot, so a game-ending final shot would silently fall through into the next Night instead
+    // of finishing - this pins that the loop notices and tears the game down. (A wolf-eaten Hunter
+    // doesn't work for this: the original only grants the interactive final-shot menu to a Hunter
+    // who dies during the day - eaten at night, they get the automatic counter-attack roll instead,
+    // matching `hunterFinalShot: false` on every night-eat `KillPlayer` call in `Werewolf.cs`.)
+    const { loop, gameManager } = createHarness();
+    const game = gameManager.create(1n, { mode: 'Normal', minPlayers: 6 });
+    game.addPlayer(1n, 'Hunty');
+    game.addPlayer(2n, 'Wolfy');
+    game.addPlayer(3n, 'Villager3');
+    game.addPlayer(4n, 'Villager4');
+    game.addPlayer(5n, 'Villager5');
+    game.addPlayer(6n, 'Villager6');
+    game.start();
+    for (const p of game.players) {
+      p.role = ROLE_BIT.Villager;
+      p.team = 'Village';
+    }
+    const hunter = game.players[0]!;
+    hunter.role = ROLE_BIT.Hunter;
+    const wolf = game.players[1]!;
+    wolf.role = ROLE_BIT.Wolf;
+    wolf.team = 'Wolf';
+
+    loop.start(game, 42);
+    await vi.advanceTimersByTimeAsync(0); // night 1 menus
+    await vi.advanceTimersByTimeAsync(5000); // night 1 resolves, nobody dies
+    await vi.advanceTimersByTimeAsync(0); // day menus
+    await vi.advanceTimersByTimeAsync(5000); // day resolves, into Lynch
+
+    // Everyone votes to lynch the Hunter.
+    for (const voter of game.players.filter((p) => !p.isDead)) {
+      await loop.handleCallback(voter.id, game.chatId, `vote:${hunter.id.toString()}`);
+    }
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000); // lynch resolves - the Hunter dies and must shoot
+
+    expect(hunter.isDead).toBe(true);
+    expect(hunter.pendingHunterShot).not.toBeNull();
+    expect(game.phase).not.toBe('Ended'); // Wolf(1) < Village(4) - not over yet
+
+    // The Hunter shoots the Wolf with their dying breath - the last threat, so Village should win.
+    await loop.handleCallback(hunter.id, hunter.id, `shoot:${wolf.id.toString()}`);
+    await vi.advanceTimersByTimeAsync(5000); // the shot window
+
+    expect(wolf.isDead).toBe(true);
+    expect(game.phase).toBe('Ended');
+    expect(gameManager.has(game.chatId)).toBe(false);
+  });
+
   it('announces each lynch vote by name in a normal (non-secret) lynch', async () => {
     const { loop, gameManager, sendMessage } = createHarness();
     const game = dealtGame(gameManager);

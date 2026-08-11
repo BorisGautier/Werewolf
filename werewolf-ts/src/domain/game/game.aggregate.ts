@@ -262,8 +262,19 @@ export class Game {
     };
     const lynchResult = resolveLynchVotes(this.players, lynchOptions);
 
+    // Mirrors `CheckRoleChanges(true)` right before `CheckForGameEnd(true)` at the end of the
+    // original's LynchCycle: an idle-kill or the lynch itself may have just killed the Seer or a
+    // Wild Child/Doppelganger's role model, and that promotion/transformation has to land before
+    // the win condition is evaluated below - otherwise a freshly-promoted Apprentice Seer (etc.)
+    // could be missed in a same-round victory check.
+    const roleChangeEvents = checkRoleChanges(this.players, true);
+
     const win = this.checkWinCondition({ checkBitten: true });
-    return { ...lynchResult, ...win, events: [...lynchResult.events, ...win.events] };
+    return {
+      ...lynchResult,
+      ...win,
+      events: [...lynchResult.events, ...roleChangeEvents, ...win.events],
+    };
   }
 
   /** Starts a fresh vote (e.g. for a Troublemaker-forced double lynch) without leaving the Lynch phase. */
@@ -439,6 +450,8 @@ export class Game {
 
     const state = initialNightState(this.lastGraveDigAt, this.secondLastGraveDigAt);
     state.guardianAngel = findActingGuardianAngel(this.players);
+    state.silverSpread = this.silverSpread;
+    this.silverSpread = false; // consumed for tonight - mirrors the original resetting `_silverSpread` once menus for this night are settled
     const visitCtx: VisitContext = { players: this.players, dayNumber: this.dayNumber, thiefFull: this.thiefFull, random };
 
     events.push(...resolveSnowWolfNight(this.players, state, visitCtx));
@@ -502,6 +515,11 @@ export class Game {
    * dying shot (`GameLoop.handleHunterShots`). If that shot lands on the Wise Elder, the guilt
    * costs the Hunter their role entirely, mirroring the Gunner (`day-actions.ts`) and Chemist
    * (`night-resolution.ts`) equivalents against the same target.
+   *
+   * Mirrors the `CheckRoleChanges()` call the original makes right after resolving the shot
+   * (`HunterFinalShot`, "In case the hunter shot someone's role model / the seer / ..."): the
+   * target dying here can itself promote an Apprentice Seer or transform a Wild Child/Doppelganger,
+   * and that has to be reflected before the caller re-checks the win condition.
    */
   killPlayer(victimId: bigint, method: KillMethod, options: KillOptions = {}): GameEvent[] {
     if (this.phase === 'Ended') throw new GameError('The game has already ended.', 'GAME_OVER');
@@ -518,6 +536,7 @@ export class Game {
     }
 
     events.push(...killPlayer(this.players, victimId, method, options));
+    events.push(...checkRoleChanges(this.players));
     return events;
   }
 

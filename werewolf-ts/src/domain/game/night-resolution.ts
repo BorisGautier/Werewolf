@@ -53,19 +53,27 @@ import type { GameEvent } from './game-event.js';
  * `resolveWolfNight`, i.e. the original's `voteWolves` as it's left after
  * the wolf-night loop. The Cult's "did the wolves go eating tonight?" check
  * reads this exact leftover set, not a fresh recomputation.
+ *
+ * `silverSpread`: mirrors `_silverSpread` - the Blacksmith spread silver
+ * today, so neither the wolf pack nor the Snow Wolf can act tonight. The
+ * original only ever enforces this by withholding their menu (`SendNightActions`
+ * never asks, so they never have a choice to resolve); this is the same rule
+ * enforced again at resolution time so a stray/stale choice can't sneak a
+ * kill through.
  */
 export interface NightState {
   guardianAngel: Player | null;
   lastGraveDigAt: Date | null;
   secondLastGraveDigAt: Date | null;
   wolvesThatActed: Player[];
+  silverSpread: boolean;
 }
 
 export function initialNightState(
   lastGraveDigAt: Date | null = null,
   secondLastGraveDigAt: Date | null = null,
 ): NightState {
-  return { guardianAngel: null, lastGraveDigAt, secondLastGraveDigAt, wolvesThatActed: [] };
+  return { guardianAngel: null, lastGraveDigAt, secondLastGraveDigAt, wolvesThatActed: [], silverSpread: false };
 }
 
 /** Mirrors the original's `var ga = Players.FirstOrDefault(x => x.PlayerRole == IRole.GuardianAngel & !x.IsDead && x.Choice != 0 && x.Choice != -1);` */
@@ -84,6 +92,7 @@ export function resolveSnowWolfNight(
   visitCtx: VisitContext,
 ): GameEvent[] {
   const events: GameEvent[] = [];
+  if (state.silverSpread) return events;
   const random = visitCtx.random ?? Math.random;
 
   const snowWolf = players.find((p) => p.role === ROLE_BIT.SnowWolf && !p.isDead);
@@ -272,6 +281,7 @@ function tallyMostVoted(
 /** Port of the `#region Wolf Night - Non-snow wolves` block. */
 export function resolveWolfNight(players: Player[], state: NightState, visitCtx: VisitContext): GameEvent[] {
   const events: GameEvent[] = [];
+  if (state.silverSpread) return events;
   const random = visitCtx.random ?? Math.random;
 
   const wolves = players.filter((p) => !p.isDead && !p.drunk && WOLF_ROLES.includes(p.role));

@@ -132,6 +132,94 @@ describe('Game (full day/night/lynch cycle)', () => {
     expect(game.phase).toBe('Ended');
   });
 
+  it('promotes a Wild Child to Wolf from a lynched role model before evaluating the win condition', () => {
+    // Regression test: lynching the last Wolf must not hand Village an instant win when a Wild
+    // Child's role model was that Wolf - checkRoleChanges() has to turn the Wild Child into a
+    // Wolf *before* the win condition is evaluated, exactly like the original's
+    // `CheckRoleChanges(true)` right before `CheckForGameEnd(true)` at the end of LynchCycle.
+    const game = new Game({ chatId: 1n, mode: 'Normal', minPlayers: 4 });
+    game.addPlayer(1n, 'Wolf');
+    game.addPlayer(2n, 'WildChild');
+    game.addPlayer(3n, 'Villager1');
+    game.addPlayer(4n, 'Villager2');
+    game.start();
+
+    const [wolf, wildChild, v1, v2] = game.players;
+    wolf!.role = ROLE_BIT.Wolf;
+    wolf!.team = 'Wolf';
+    wildChild!.role = ROLE_BIT.WildChild;
+    wildChild!.team = 'Village';
+    wildChild!.roleModel = wolf!.id;
+    v1!.role = ROLE_BIT.Villager;
+    v1!.team = 'Village';
+    v2!.role = ROLE_BIT.Villager;
+    v2!.team = 'Village';
+
+    game.startDay();
+    game.startLynch();
+    v1!.choice = wolf!.id;
+    v2!.choice = wolf!.id;
+
+    const result = game.resolveLynch();
+
+    expect(result.events.some((e) => e.type === 'WildChildTurnedWolf' && e.playerId === wildChild!.id)).toBe(true);
+    expect(wildChild!.role).toBe(ROLE_BIT.Wolf);
+    // The Wild Child is now the last Wolf standing against 2 villagers - the game must NOT have
+    // ended as a Village win.
+    expect(result.finished).toBe(false);
+    expect(game.phase).not.toBe('Ended');
+  });
+
+  it('re-evaluates the win condition after the Hunter\'s final shot lands the killing blow', () => {
+    // Regression test: `game.killPlayer` (the Hunter final-shot entrypoint) must trigger a fresh
+    // win-condition check by itself - the caller (GameLoop.handleHunterShots) has no other signal
+    // that the shot just finished the game.
+    const game = new Game({ chatId: 1n, mode: 'Normal', minPlayers: 3 });
+    game.addPlayer(1n, 'Hunter');
+    game.addPlayer(2n, 'Wolf');
+    game.addPlayer(3n, 'Villager');
+    game.start();
+    const [hunter, wolf, villager] = game.players;
+    hunter!.role = ROLE_BIT.Hunter;
+    hunter!.team = 'Village';
+    hunter!.isDead = true; // the Hunter is dying/dead when their final shot fires
+    wolf!.role = ROLE_BIT.Wolf;
+    wolf!.team = 'Wolf';
+    villager!.role = ROLE_BIT.Villager;
+    villager!.team = 'Village';
+
+    // The Hunter's dying shot kills the last Wolf - Village should win right away.
+    game.killPlayer(wolf!.id, 'HunterShot', { killerIds: [hunter!.id] });
+    const win = game.checkWinCondition();
+
+    expect(win.finished).toBe(true);
+    expect(win.winningTeam).toBe('Village');
+    expect(game.phase).toBe('Ended');
+  });
+
+  it('promotes the Apprentice Seer when killPlayer (the Hunter final-shot entrypoint) kills the Seer', () => {
+    const game = new Game({ chatId: 1n, mode: 'Normal', minPlayers: 4 });
+    game.addPlayer(1n, 'Hunter');
+    game.addPlayer(2n, 'AppSeer');
+    game.addPlayer(3n, 'Seer');
+    game.addPlayer(4n, 'Villager');
+    game.start();
+    const [hunter, appSeer, seer, villager] = game.players;
+    hunter!.role = ROLE_BIT.Hunter;
+    hunter!.team = 'Village';
+    appSeer!.role = ROLE_BIT.ApprenticeSeer;
+    appSeer!.team = 'Village';
+    seer!.role = ROLE_BIT.Seer;
+    seer!.team = 'Village';
+    villager!.role = ROLE_BIT.Villager;
+    villager!.team = 'Village';
+
+    const events = game.killPlayer(seer!.id, 'HunterShot', { killerIds: [hunter!.id] });
+
+    expect(appSeer!.role).toBe(ROLE_BIT.Seer);
+    expect(events.some((e) => e.type === 'ApprenticeSeerPromoted' && e.playerId === appSeer!.id)).toBe(true);
+  });
+
   it('cannot resolve a lynch or advance phases once the game has ended', () => {
     const game = joinedGame(5);
     game.start();

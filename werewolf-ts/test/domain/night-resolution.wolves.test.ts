@@ -14,6 +14,17 @@ describe('resolveWolfNight', () => {
     expect(resolveWolfNight([wolf], initialNightState(), baseCtx([wolf]))).toEqual([]);
   });
 
+  it('does nothing when the Blacksmith spread silver tonight, even with a valid choice pending', () => {
+    const wolf = createPlayer(1n, 'W', ROLE_BIT.Wolf, 'Wolf');
+    const victim = createPlayer(2n, 'V', ROLE_BIT.Villager, 'Village');
+    wolf.choice = victim.id;
+
+    const state = initialNightState();
+    state.silverSpread = true;
+    expect(resolveWolfNight([wolf, victim], state, baseCtx([wolf, victim]))).toEqual([]);
+    expect(victim.isDead).toBe(false);
+  });
+
   it('eats the plain-majority target', () => {
     const w1 = createPlayer(1n, 'W1', ROLE_BIT.Wolf, 'Wolf');
     const w2 = createPlayer(2n, 'W2', ROLE_BIT.Wolf, 'Wolf');
