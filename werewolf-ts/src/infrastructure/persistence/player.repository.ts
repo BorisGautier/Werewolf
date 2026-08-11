@@ -21,6 +21,18 @@ export function donationLevelForTotal(totalStars: number): number {
   return level;
 }
 
+/**
+ * Port of `Extensions.cs`'s `GetName()` badge suffix: a medal for whichever donation tier a
+ * player has reached (🥉 10+, 🥈 50+, 🥇 100+ stars), or `''` below the first tier. A leading
+ * space is included so callers can just append it to a name.
+ */
+export function donorBadge(donationLevel: number): string {
+  if (donationLevel >= 3) return ' 🥇';
+  if (donationLevel >= 2) return ' 🥈';
+  if (donationLevel >= 1) return ' 🥉';
+  return '';
+}
+
 export interface RecordDonationResult {
   totalStars: number;
   level: number;

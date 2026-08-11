@@ -20,7 +20,7 @@ import { ROLE_META, roleName } from '../../domain/roles/role.js';
 import { GameRepository } from '../persistence/game.repository.js';
 import { groupToGameOptions, GroupRepository, resolveGameMode } from '../persistence/group.repository.js';
 import { NotifyGameRepository } from '../persistence/notify-game.repository.js';
-import { PlayerRepository } from '../persistence/player.repository.js';
+import { donorBadge, PlayerRepository } from '../persistence/player.repository.js';
 import type { Translator } from '../i18n/translator.js';
 import type { Logger } from '../logging/logger.js';
 import type { GameLoop } from './game-loop.js';
@@ -243,7 +243,17 @@ export class GameLobbyManager {
       return;
     }
 
-    const names = game.players.map((p) => p.name).join('\n') || '-';
+    // Mirrors `Extensions.cs`'s `GetName()` appending a donor-tier medal wherever a player's name
+    // is shown - here in the /players roster.
+    const names =
+      (
+        await Promise.all(
+          game.players.map(async (p) => {
+            const dbPlayer = await this.players.findByTelegramId(p.id);
+            return `${p.name}${donorBadge(dbPlayer?.donationLevel ?? 0)}`;
+          }),
+        )
+      ).join('\n') || '-';
     await this.send(chatId, language, 'PlayersInGame', game.players.length, names);
   }
 
