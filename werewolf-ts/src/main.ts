@@ -8,6 +8,7 @@ import { createLogger } from './infrastructure/logging/logger.js';
 import { AchievementRepository } from './infrastructure/persistence/achievement.repository.js';
 import { AdminRepository } from './infrastructure/persistence/admin.repository.js';
 import { GameRepository } from './infrastructure/persistence/game.repository.js';
+import { GifPackRepository } from './infrastructure/persistence/gif-pack.repository.js';
 import { GroupRepository } from './infrastructure/persistence/group.repository.js';
 import { NotifyGameRepository } from './infrastructure/persistence/notify-game.repository.js';
 import { PlayerRepository } from './infrastructure/persistence/player.repository.js';
@@ -40,6 +41,7 @@ async function main(): Promise<void> {
     adminRepository: new AdminRepository(prisma),
     notifyGameRepository: new NotifyGameRepository(prisma),
     achievementRepository,
+    gifPackRepository: new GifPackRepository(prisma),
   });
   await bot.init();
   logger.info({ username: bot.botInfo.username }, 'Bot initialized');

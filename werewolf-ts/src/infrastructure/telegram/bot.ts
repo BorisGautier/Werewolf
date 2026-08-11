@@ -8,6 +8,7 @@ import type { Translator } from '../i18n/translator.js';
 import { AchievementRepository } from '../persistence/achievement.repository.js';
 import { AdminRepository } from '../persistence/admin.repository.js';
 import { GameRepository } from '../persistence/game.repository.js';
+import { GIF_CATEGORIES, GifPackRepository } from '../persistence/gif-pack.repository.js';
 import { GroupRepository } from '../persistence/group.repository.js';
 import { NotifyGameRepository } from '../persistence/notify-game.repository.js';
 import { PlayerRepository } from '../persistence/player.repository.js';
@@ -34,6 +35,7 @@ export interface BotDependencies {
   adminRepository: AdminRepository;
   notifyGameRepository: NotifyGameRepository;
   achievementRepository: AchievementRepository;
+  gifPackRepository: GifPackRepository;
 }
 
 const INVITE_LINK_PATTERN = /^(https?:\/\/)?t(elegram)?\.me\/(\+|joinchat\/)([a-zA-Z0-9_-]+)$/;
@@ -62,6 +64,7 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     deps.achievementRepository,
     deps.translator,
     logger,
+    deps.gifPackRepository,
   );
   const lobby = new GameLobbyManager(
     bot,
@@ -285,6 +288,7 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
   registerAchievementCommands(bot, env, deps);
   registerUtilityCommands(bot, deps);
   registerDevCommands(bot, env, logger, deps, gameLoop, deps.gameManager, maintenance, startTime);
+  registerGifCommands(bot, env, deps);
 
   return bot;
 }
@@ -853,5 +857,127 @@ function registerDevCommands(
     const arg = (ctx.match as string | undefined)?.trim();
     if (!arg || !/^-?\d+$/.test(arg)) return;
     await ctx.api.sendMessage(Number(BigInt(arg)), "Please don't spam me like that");
+  });
+}
+
+/**
+ * Port of `GifCommands.cs`'s custom-gif-pack workflow, adapted for a `file_id`-based store
+ * instead of the original's CDN uploads: `/customgif` (submission status + instructions),
+ * `/setgif <category>` (reply to a video/animation to submit it), `/reviewgifs`/`/approvegifs`/
+ * `/disapprovegifs` (dev-only moderation, mirrors the original's admin approval queue), and
+ * `/usegifpack` (group-admin opt-in to a specific approved pack - the group-side equivalent of
+ * the original's per-group default gif pack setting). Not ported: `/dumpgifs`/`/fixgifs` (raw
+ * CDN file management with no meaning in a `file_id` store) and `/learngif` (a dev toggle to
+ * scrape gif ids out of arbitrary messages sent to the bot - `/setgif`'s explicit reply-based
+ * submission replaces the need for it).
+ */
+function registerGifCommands(bot: Bot, env: Env, deps: BotDependencies): void {
+  const isDev = (telegramId: bigint) => env.devUserIds.includes(telegramId);
+
+  bot.command('customgif', async (ctx) => {
+    if (!ctx.from) return;
+    const language = (await deps.playerRepository.findByTelegramId(BigInt(ctx.from.id)))?.languageCode ?? 'en';
+    const pack = await deps.gifPackRepository.findOwnPack(BigInt(ctx.from.id));
+
+    const status = !pack
+      ? 'GifPackNone'
+      : pack.approved
+        ? 'GifPackApproved'
+        : pack.submitted
+          ? 'GifPackPending'
+          : 'GifPackNone';
+    const filled = pack ? Object.keys(pack.fileIds).length : 0;
+    const lines = [
+      deps.translator.translate(language, status),
+      deps.translator.translate(language, 'GifPackFilledCount', filled, GIF_CATEGORIES.length),
+      deps.translator.translate(language, 'GifPackHowTo', GIF_CATEGORIES.join(', ')),
+    ];
+
+    try {
+      await ctx.api.sendMessage(ctx.from.id, lines.join('\n'));
+      if (ctx.chat && ctx.chat.type !== 'private') await ctx.reply(deps.translator.translate(language, 'CheckYourPM'));
+    } catch (err) {
+      if (err instanceof GrammyError) {
+        await ctx.reply(deps.translator.translate(language, 'CantPMYou'));
+        return;
+      }
+      throw err;
+    }
+  });
+
+  bot.command('setgif', async (ctx) => {
+    if (!ctx.from) return;
+    const language = (await deps.playerRepository.findByTelegramId(BigInt(ctx.from.id)))?.languageCode ?? 'en';
+
+    const categoryArg = ((ctx.match as string | undefined) ?? '').trim();
+    const category = GIF_CATEGORIES.find((c) => c.toLowerCase() === categoryArg.toLowerCase());
+    if (!category) {
+      await ctx.reply(deps.translator.translate(language, 'GifPackUnknownCategory', GIF_CATEGORIES.join(', ')));
+      return;
+    }
+
+    const media = ctx.message?.reply_to_message?.animation ?? ctx.message?.reply_to_message?.video;
+    if (!media) {
+      await ctx.reply(deps.translator.translate(language, 'GifPackReplyRequired'));
+      return;
+    }
+
+    await deps.gifPackRepository.submitGif(BigInt(ctx.from.id), category, media.file_id);
+    await ctx.reply(deps.translator.translate(language, 'GifPackSubmitted', category));
+  });
+
+  bot.command('reviewgifs', async (ctx) => {
+    if (!ctx.from || !isDev(BigInt(ctx.from.id))) return;
+    const pending = await deps.gifPackRepository.listPending();
+    if (pending.length === 0) {
+      await ctx.reply('No pending gif pack submissions.');
+      return;
+    }
+    const lines = pending.map(
+      (p) => `${p.ownerTelegramId.toString()}: ${Object.keys(p.fileIds).length}/${GIF_CATEGORIES.length} categories${p.nsfw ? ' [NSFW]' : ''}`,
+    );
+    await ctx.reply(['Pending gif pack submissions:', ...lines].join('\n'));
+  });
+
+  bot.command(['approvegifs', 'disapprovegifs'], async (ctx) => {
+    if (!ctx.from || !isDev(BigInt(ctx.from.id))) return;
+    const isApprove = ctx.message?.text?.startsWith('/approvegifs') ?? true;
+    const arg = (ctx.match as string | undefined)?.trim();
+    if (!arg || !/^-?\d+$/.test(arg)) {
+      await ctx.reply(`Use /${isApprove ? 'approvegifs' : 'disapprovegifs'} <telegram id>`);
+      return;
+    }
+    const target = BigInt(arg);
+    const ok = isApprove
+      ? await deps.gifPackRepository.approve(target, BigInt(ctx.from.id))
+      : await deps.gifPackRepository.disapprove(target);
+    await ctx.reply(ok ? `Gif pack ${isApprove ? 'approved' : 'disapproved'} for ${arg}.` : `No gif pack submission found for ${arg}.`);
+  });
+
+  bot.command('usegifpack', async (ctx) => {
+    if (!ctx.chat || ctx.chat.type === 'private' || !ctx.from) return;
+    const member = await ctx.getAuthor();
+    if (member.status !== 'creator' && member.status !== 'administrator') return;
+
+    const group = await deps.groupRepository.getOrCreate(BigInt(ctx.chat.id), ctx.chat.title ?? null, null);
+    const arg = (ctx.match as string | undefined)?.trim();
+
+    if (!arg || arg.toLowerCase() === 'none') {
+      await deps.groupRepository.setDefaultGifPack(BigInt(ctx.chat.id), null);
+      await ctx.reply(deps.translator.translate(group.language, 'GifPackGroupCleared'));
+      return;
+    }
+    if (!/^-?\d+$/.test(arg)) {
+      await ctx.reply(deps.translator.translate(group.language, 'GifPackUsageUsePack'));
+      return;
+    }
+
+    const packId = await deps.gifPackRepository.findApprovedPackId(BigInt(arg));
+    if (packId === null) {
+      await ctx.reply(deps.translator.translate(group.language, 'GifPackNotApproved'));
+      return;
+    }
+    await deps.groupRepository.setDefaultGifPack(BigInt(ctx.chat.id), packId);
+    await ctx.reply(deps.translator.translate(group.language, 'GifPackGroupSet'));
   });
 }

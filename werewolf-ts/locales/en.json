@@ -517,6 +517,19 @@
     ],
     "AboutAugur": [
       "You are the Augur. Every morning, you watch the birds and deduce a role that certainly is not in the game right now from their flight. They also will never tell you a role twice, so be sure you make use of that information!"
-    ]
+    ],
+
+    "GifPackNone": ["You don't have a custom gif pack yet. Reply to a gif or video with /setgif <category> to start submitting one."],
+    "GifPackApproved": ["Your custom gif pack is approved and in use!"],
+    "GifPackPending": ["Your custom gif pack is submitted and waiting for review."],
+    "GifPackFilledCount": ["Filled categories: {0}/{1}."],
+    "GifPackHowTo": ["Reply to a gif or video with /setgif <category> to fill a category. Available categories: {0}."],
+    "GifPackUnknownCategory": ["Unknown category. Available categories: {0}."],
+    "GifPackReplyRequired": ["Reply to a gif or video with this command to submit it."],
+    "GifPackSubmitted": ["Saved your {0} gif. It'll be reviewed before your pack goes live."],
+    "GifPackGroupCleared": ["This group no longer uses a custom gif pack."],
+    "GifPackUsageUsePack": ["Use /usegifpack <telegram id> to enable an approved gif pack for this group, or /usegifpack none to clear it."],
+    "GifPackNotApproved": ["That gif pack isn't approved yet."],
+    "GifPackGroupSet": ["This group will now use that custom gif pack."]
   }
 }
