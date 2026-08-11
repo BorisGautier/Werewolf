@@ -5,6 +5,7 @@ import {
   augurSees,
   foolSeesRandomRole,
   oracleSeesRandomRole,
+  resolveClairvoyanceNight,
   seerSees,
   sorcererDetects,
 } from '../../src/domain/game/clairvoyance.js';
@@ -128,5 +129,97 @@ describe('augurSees', () => {
     const seen = augurSees([augur, appSeer], augur, [ROLE_BIT.Seer]);
 
     expect(seen).toBe(ROLE_BIT.ApprenticeSeer);
+  });
+});
+
+describe('resolveClairvoyanceNight', () => {
+  it("emits the Seer's vision and marks a checked WolfMan trustworthy", () => {
+    const seer = createPlayer(1n, 'Seer', ROLE_BIT.Seer, 'Village');
+    const wolfMan = createPlayer(2n, 'WM', ROLE_BIT.WolfMan, 'Village');
+    seer.choice = wolfMan.id;
+
+    const events = resolveClairvoyanceNight([seer, wolfMan], []);
+
+    expect(events).toEqual([{ type: 'SeerVision', playerId: seer.id, targetId: wolfMan.id, shownRole: ROLE_BIT.Wolf }]);
+    expect(wolfMan.trustworthy).toBe(true);
+  });
+
+  it('gives every simultaneous Seer their own vision', () => {
+    const seer1 = createPlayer(1n, 'S1', ROLE_BIT.Seer, 'Village');
+    const seer2 = createPlayer(2n, 'S2', ROLE_BIT.Seer, 'Village');
+    const villager = createPlayer(3n, 'V', ROLE_BIT.Villager, 'Village');
+    seer1.choice = villager.id;
+    seer2.choice = villager.id;
+
+    const events = resolveClairvoyanceNight([seer1, seer2, villager], []);
+
+    expect(events.filter((e) => e.type === 'SeerVision')).toHaveLength(2);
+  });
+
+  it("emits the Sorcerer's detection, or SorcererVision with a null role for non-magical targets", () => {
+    const sorcerer = createPlayer(1n, 'Sorc', ROLE_BIT.Sorcerer, 'Village');
+    const wolf = createPlayer(2n, 'W', ROLE_BIT.Wolf, 'Wolf');
+    sorcerer.choice = wolf.id;
+
+    const events = resolveClairvoyanceNight([sorcerer, wolf], []);
+
+    expect(events).toEqual([
+      { type: 'SorcererVision', playerId: sorcerer.id, targetId: wolf.id, detectedRole: ROLE_BIT.Wolf },
+    ]);
+  });
+
+  it("tracks the Fool's correctness, Beholder hit, and impossible-vision flags", () => {
+    const fool = createPlayer(1n, 'F', ROLE_BIT.Fool, 'Village');
+    const beholder = createPlayer(2n, 'B', ROLE_BIT.Beholder, 'Village');
+    fool.choice = beholder.id;
+
+    // Force the "random" role pick deterministic: foolSeesRandomRole shuffles internally via
+    // node:crypto, so only the target/role-list shape (a single eligible role) makes it predictable.
+    const events = resolveClairvoyanceNight([fool, beholder], []);
+
+    const vision = events.find((e) => e.type === 'FoolVision');
+    expect(vision).toBeDefined();
+    if (vision?.type === 'FoolVision') {
+      expect(vision.shownRole).toBe(ROLE_BIT.Beholder);
+    }
+    expect(fool.foolCorrectSeeCount).toBe(1);
+    expect(fool.foolCorrectlySeenBH).toBe(true);
+    expect(fool.hasSeenImpossible).toBe(false);
+  });
+
+  it("emits the Oracle's vision, or a null shownRole when nothing else is eligible", () => {
+    const oracle = createPlayer(1n, 'O', ROLE_BIT.Oracle, 'Village');
+    const villager = createPlayer(2n, 'V', ROLE_BIT.Villager, 'Village');
+    oracle.choice = villager.id;
+
+    // Only the Oracle and their target exist, and both share no other role to show - shownRole is null.
+    const events = resolveClairvoyanceNight([oracle, villager], []);
+
+    expect(events).toEqual([{ type: 'OracleVision', playerId: oracle.id, targetId: villager.id, shownRole: null }]);
+  });
+
+  it("emits the Augur's vision using the game's possible-roles pool", () => {
+    const augur = createPlayer(1n, 'A', ROLE_BIT.Augur, 'Village');
+    const wolf = createPlayer(2n, 'W', ROLE_BIT.Wolf, 'Wolf');
+
+    const events = resolveClairvoyanceNight([augur, wolf], [ROLE_BIT.Villager]);
+
+    expect(events).toEqual([{ type: 'AugurVision', playerId: augur.id, shownRole: ROLE_BIT.Villager }]);
+  });
+
+  it('skips a frozen or dead informational role entirely', () => {
+    const seer = createPlayer(1n, 'S', ROLE_BIT.Seer, 'Village');
+    const villager = createPlayer(2n, 'V', ROLE_BIT.Villager, 'Village');
+    seer.choice = villager.id;
+    seer.frozen = true;
+
+    expect(resolveClairvoyanceNight([seer, villager], [])).toEqual([]);
+  });
+
+  it('produces no event when the role has no chosen target', () => {
+    const seer = createPlayer(1n, 'S', ROLE_BIT.Seer, 'Village');
+    const villager = createPlayer(2n, 'V', ROLE_BIT.Villager, 'Village');
+
+    expect(resolveClairvoyanceNight([seer, villager], [])).toEqual([]);
   });
 });

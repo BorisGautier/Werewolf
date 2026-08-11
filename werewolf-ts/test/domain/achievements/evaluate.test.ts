@@ -450,4 +450,255 @@ describe('evaluateGameAchievements', () => {
     const result = evaluateGameAchievements(ctx([blacksmith, sandman], { eventBatches: events }));
     expect(unlocksFor(result, 1n)).not.toContain('WastedSilver');
   });
+
+  it('grants Inconspicuous to a surviving player never voted against, only in 20+ player games', () => {
+    const untouched = createPlayer(1n, 'U', ROLE_BIT.Villager, 'Village');
+    const rest = Array.from({ length: 19 }, (_, i) => createPlayer(BigInt(i + 2), `P${i}`, ROLE_BIT.Villager, 'Village'));
+
+    expect(unlocksFor(evaluateGameAchievements(ctx([untouched, ...rest])), 1n)).toContain('Inconspicuous');
+    expect(unlocksFor(evaluateGameAchievements(ctx([untouched])), 1n)).not.toContain('Inconspicuous'); // too few players
+    untouched.hasBeenVoted = true;
+    expect(unlocksFor(evaluateGameAchievements(ctx([untouched, ...rest])), 1n)).not.toContain('Inconspicuous');
+  });
+
+  it('grants DoubleVision to every player simultaneously holding the Seer role', () => {
+    const s1 = createPlayer(1n, 'S1', ROLE_BIT.Seer, 'Village');
+    const s2 = createPlayer(2n, 'S2', ROLE_BIT.Seer, 'Village');
+    const other = createPlayer(3n, 'O', ROLE_BIT.Villager, 'Village');
+
+    const result = evaluateGameAchievements(ctx([s1, s2, other]));
+    expect(unlocksFor(result, 1n)).toContain('DoubleVision');
+    expect(unlocksFor(result, 2n)).toContain('DoubleVision');
+    expect(unlocksFor(result, 3n)).not.toContain('DoubleVision');
+  });
+
+  it("grants ShouldHaveKnown when the Seer's vision reveals the Beholder", () => {
+    const seer = createPlayer(1n, 'S', ROLE_BIT.Seer, 'Village');
+    const events: GameEvent[][] = [[{ type: 'SeerVision', playerId: 1n, targetId: 2n, shownRole: ROLE_BIT.Beholder }]];
+    expect(unlocksFor(evaluateGameAchievements(ctx([seer], { eventBatches: events })), 1n)).toContain('ShouldHaveKnown');
+  });
+
+  it('grants FirstStone at 5 first-votes and SmartGunner at 2 baddie-hitting bullets', () => {
+    const firstVoter = createPlayer(1n, 'V', ROLE_BIT.Villager, 'Village');
+    firstVoter.firstToVoteCount = 5;
+    const gunner = createPlayer(2n, 'G', ROLE_BIT.Gunner, 'Village');
+    gunner.bulletHitBaddies = 2;
+
+    const result = evaluateGameAchievements(ctx([firstVoter, gunner]));
+    expect(unlocksFor(result, 1n)).toContain('FirstStone');
+    expect(unlocksFor(result, 2n)).toContain('SmartGunner');
+  });
+
+  it('grants Streetwise from the streetwise flag', () => {
+    const detective = createPlayer(1n, 'D', ROLE_BIT.Detective, 'Village');
+    detective.streetwise = true;
+    expect(unlocksFor(evaluateGameAchievements(ctx([detective])), 1n)).toContain('Streetwise');
+  });
+
+  it('grants OnlineDating to a speed-dated lover but not their Cupid-chosen partner', () => {
+    const speedDated = createPlayer(1n, 'A', ROLE_BIT.Villager, 'Village');
+    speedDated.speedDating = true;
+    const chosen = createPlayer(2n, 'B', ROLE_BIT.Villager, 'Village');
+    const events: GameEvent[][] = [[{ type: 'LoversCreated', lover1Id: 1n, lover2Id: 2n }]];
+
+    const result = evaluateGameAchievements(ctx([speedDated, chosen], { eventBatches: events }));
+    expect(unlocksFor(result, 1n)).toContain('OnlineDating');
+    expect(unlocksFor(result, 2n)).not.toContain('OnlineDating');
+  });
+
+  it('grants BrokenClock at 2 correct Fool visions and AmIHallucinating from an impossible one', () => {
+    const fool = createPlayer(1n, 'F', ROLE_BIT.Fool, 'Village');
+    fool.foolCorrectSeeCount = 2;
+    fool.hasSeenImpossible = true;
+
+    const result = evaluateGameAchievements(ctx([fool]));
+    expect(unlocksFor(result, 1n)).toContain('BrokenClock');
+    expect(unlocksFor(result, 1n)).toContain('AmIHallucinating');
+  });
+
+  it('grants AmIYourSeer from the foolCorrectlySeenBH flag', () => {
+    const fool = createPlayer(1n, 'F', ROLE_BIT.Fool, 'Village');
+    fool.foolCorrectlySeenBH = true;
+    expect(unlocksFor(evaluateGameAchievements(ctx([fool])), 1n)).toContain('AmIYourSeer');
+  });
+
+  it('grants SoClose and TannerOverkill from their respective flags', () => {
+    const tanner = createPlayer(1n, 'T', ROLE_BIT.Tanner, 'Tanner');
+    tanner.soClose = true;
+    tanner.tannerOverkill = true;
+    const result = evaluateGameAchievements(ctx([tanner]));
+    expect(unlocksFor(result, 1n)).toContain('SoClose');
+    expect(unlocksFor(result, 1n)).toContain('TannerOverkill');
+  });
+
+  it('grants President at 3 post-reveal Mayor votes and ImNotDrunk at 3 correct Clumsy Guy votes', () => {
+    const mayor = createPlayer(1n, 'M', ROLE_BIT.Mayor, 'Village');
+    mayor.mayorLynchAfterRevealCount = 3;
+    const clumsy = createPlayer(2n, 'C', ROLE_BIT.ClumsyGuy, 'Village');
+    clumsy.clumsyCorrectLynchCount = 3;
+
+    const result = evaluateGameAchievements(ctx([mayor, clumsy]));
+    expect(unlocksFor(result, 1n)).toContain('President');
+    expect(unlocksFor(result, 2n)).toContain('ImNotDrunk');
+  });
+
+  it('grants DidYouGuardYourself at 3 wasted wolf guards', () => {
+    const ga = createPlayer(1n, 'GA', ROLE_BIT.GuardianAngel, 'Village');
+    ga.gaGuardWolfCount = 3;
+    expect(unlocksFor(evaluateGameAchievements(ctx([ga])), 1n)).toContain('DidYouGuardYourself');
+  });
+
+  it('grants IHelped to the most recently killed Wolf Cub and IncreaseThePack to the Alpha on a double-bite night', () => {
+    const cub = createPlayer(1n, 'C', ROLE_BIT.WolfCub, 'Wolf');
+    const alpha = createPlayer(2n, 'A', ROLE_BIT.AlphaWolf, 'Wolf');
+    const v1 = createPlayer(3n, 'V1', ROLE_BIT.Villager, 'Village');
+    const v2 = createPlayer(4n, 'V2', ROLE_BIT.Villager, 'Village');
+    const events: GameEvent[][] = [
+      [{ type: 'WolfCubKilled', playerId: 1n }],
+      [
+        { type: 'PlayerBitten', playerId: 3n, alphaId: 2n },
+        { type: 'PlayerBitten', playerId: 4n, alphaId: 2n },
+        { type: 'WolfPackAteTwice', alphaId: 2n },
+      ],
+    ];
+
+    const result = evaluateGameAchievements(ctx([cub, alpha, v1, v2], { eventBatches: events }));
+    expect(unlocksFor(result, 1n)).toContain('IHelped');
+    expect(unlocksFor(result, 2n)).toContain('IncreaseThePack');
+  });
+
+  it('does not grant IncreaseThePack when only one of the two attacks was a bite', () => {
+    const alpha = createPlayer(1n, 'A', ROLE_BIT.AlphaWolf, 'Wolf');
+    const v1 = createPlayer(2n, 'V1', ROLE_BIT.Villager, 'Village');
+    const events: GameEvent[][] = [
+      [
+        { type: 'PlayerBitten', playerId: 2n, alphaId: 1n },
+        { type: 'WolfPackAteTwice', alphaId: 1n },
+      ],
+    ];
+    expect(unlocksFor(evaluateGameAchievements(ctx([alpha, v1], { eventBatches: events })), 1n)).not.toContain(
+      'IncreaseThePack',
+    );
+  });
+
+  it('grants ItWasABusyNight and StrongestAlpha from their respective flags', () => {
+    const busy = createPlayer(1n, 'B', ROLE_BIT.Villager, 'Village');
+    busy.busyNight = true;
+    const alpha = createPlayer(2n, 'A', ROLE_BIT.AlphaWolf, 'Wolf');
+    alpha.strongestAlpha = true;
+
+    const result = evaluateGameAchievements(ctx([busy, alpha]));
+    expect(unlocksFor(result, 1n)).toContain('ItWasABusyNight');
+    expect(unlocksFor(result, 2n)).toContain('StrongestAlpha');
+  });
+
+  it('grants Trustworthy to a surviving, winning Wolf Man the real Seer checked', () => {
+    const wolfMan = createPlayer(1n, 'WM', ROLE_BIT.WolfMan, 'Village');
+    wolfMan.trustworthy = true;
+    wolfMan.won = true;
+    expect(unlocksFor(evaluateGameAchievements(ctx([wolfMan])), 1n)).toContain('Trustworthy');
+  });
+
+  it('does not grant Trustworthy to a Wolf Man who died even if checked and "won"', () => {
+    const wolfMan = createPlayer(1n, 'WM', ROLE_BIT.WolfMan, 'Village');
+    wolfMan.trustworthy = true;
+    wolfMan.won = true;
+    wolfMan.isDead = true;
+    expect(unlocksFor(evaluateGameAchievements(ctx([wolfMan])), 1n)).not.toContain('Trustworthy');
+  });
+
+  it('grants DeepLove to a Doppelganger whose role model is their own lover', () => {
+    const dg = createPlayer(1n, 'DG', ROLE_BIT.Doppelganger, 'Village');
+    dg.originalRole = ROLE_BIT.Doppelganger;
+    dg.loverId = 2n;
+    dg.roleModel = 2n;
+    expect(unlocksFor(evaluateGameAchievements(ctx([dg])), 1n)).toContain('DeepLove');
+  });
+
+  it('grants TimeToRetire to a surviving Sorcerer in a no-winner ending', () => {
+    const sorcerer = createPlayer(1n, 'S', ROLE_BIT.Sorcerer, 'Village');
+    expect(unlocksFor(evaluateGameAchievements(ctx([sorcerer], { winningTeam: undefined })), 1n)).toContain(
+      'TimeToRetire',
+    );
+  });
+
+  it('grants SeeingBetweenTeams to a Cupid-paired Seer/Sorcerer couple', () => {
+    const seer = createPlayer(1n, 'S', ROLE_BIT.Seer, 'Village');
+    const sorcerer = createPlayer(2n, 'So', ROLE_BIT.Sorcerer, 'Village');
+    const events: GameEvent[][] = [[{ type: 'LoversCreated', lover1Id: 1n, lover2Id: 2n }]];
+
+    const result = evaluateGameAchievements(ctx([seer, sorcerer], { eventBatches: events }));
+    expect(unlocksFor(result, 1n)).toContain('SeeingBetweenTeams');
+    expect(unlocksFor(result, 2n)).toContain('SeeingBetweenTeams');
+  });
+
+  it('grants JustABeardyGuy to a Wolf Man who got bitten and turned into a real wolf', () => {
+    const wolfMan = createPlayer(1n, 'WM', ROLE_BIT.Wolf, 'Wolf'); // already promoted by the time this fires
+    wolfMan.originalRole = ROLE_BIT.WolfMan;
+    const events: GameEvent[][] = [[{ type: 'BittenPlayerTurnedWolf', playerId: 1n }]];
+    expect(unlocksFor(evaluateGameAchievements(ctx([wolfMan], { eventBatches: events })), 1n)).toContain(
+      'JustABeardyGuy',
+    );
+  });
+
+  it('grants NowImBlind when the Oracle gets a null vision', () => {
+    const oracle = createPlayer(1n, 'O', ROLE_BIT.Oracle, 'Village');
+    const events: GameEvent[][] = [[{ type: 'OracleVision', playerId: 1n, targetId: 2n, shownRole: null }]];
+    expect(unlocksFor(evaluateGameAchievements(ctx([oracle], { eventBatches: events })), 1n)).toContain('NowImBlind');
+  });
+
+  it('grants EveryManForHimself/MySweetieSoStrong from their respective flags', () => {
+    const pacifist = createPlayer(1n, 'P', ROLE_BIT.Pacifist, 'Village');
+    pacifist.everyManForHimself = true;
+    const sweetie = createPlayer(2n, 'S', ROLE_BIT.Villager, 'Village');
+    sweetie.mySweetieSoStrong = true;
+
+    const result = evaluateGameAchievements(ctx([pacifist, sweetie]));
+    expect(unlocksFor(result, 1n)).toContain('EveryManForHimself');
+    expect(unlocksFor(result, 2n)).toContain('MySweetieSoStrong');
+  });
+
+  it('grants ILostMyWisdom to a Wise Elder who changed role', () => {
+    const elder = createPlayer(1n, 'E', ROLE_BIT.Wolf, 'Wolf'); // bitten and turned wolf
+    elder.originalRole = ROLE_BIT.WiseElder;
+    elder.changedRolesCount = 1;
+    expect(unlocksFor(evaluateGameAchievements(ctx([elder])), 1n)).toContain('ILostMyWisdom');
+  });
+
+  it("does not grant ILostMyWisdom to a Wise Elder whose role never changed", () => {
+    const elder = createPlayer(1n, 'E', ROLE_BIT.WiseElder, 'Village');
+    expect(unlocksFor(evaluateGameAchievements(ctx([elder])), 1n)).not.toContain('ILostMyWisdom');
+  });
+
+  it('grants LuckyDay to the Alpha Wolf from the AlphaWolfLuckyDay event', () => {
+    const alpha = createPlayer(1n, 'A', ROLE_BIT.AlphaWolf, 'Wolf');
+    const events: GameEvent[][] = [[{ type: 'AlphaWolfLuckyDay', alphaId: 1n }]];
+    expect(unlocksFor(evaluateGameAchievements(ctx([alpha], { eventBatches: events })), 1n)).toContain('LuckyDay');
+  });
+
+  it('grants ShouldveMentioned when a wolf eats their own lover on a night after the first', () => {
+    const wolf = createPlayer(1n, 'W', ROLE_BIT.Wolf, 'Wolf');
+    const lover = createPlayer(2n, 'L', ROLE_BIT.Villager, 'Village');
+    wolf.loverId = 2n;
+    lover.loverId = 1n;
+    const events: GameEvent[][] = [
+      [], // night 1 - nothing happens
+      [{ type: 'PlayerDied', playerId: 2n, method: 'Eat', killerIds: [1n], isNight: true }], // night 2
+    ];
+    expect(unlocksFor(evaluateGameAchievements(ctx([wolf, lover], { eventBatches: events })), 1n)).toContain(
+      'ShouldveMentioned',
+    );
+  });
+
+  it('does not grant ShouldveMentioned for a lover killed on the very first night (that is OhShi instead)', () => {
+    const wolf = createPlayer(1n, 'W', ROLE_BIT.Wolf, 'Wolf');
+    const lover = createPlayer(2n, 'L', ROLE_BIT.Villager, 'Village');
+    wolf.loverId = 2n;
+    lover.loverId = 1n;
+    const events: GameEvent[][] = [[{ type: 'PlayerDied', playerId: 2n, method: 'Eat', killerIds: [1n], isNight: true }]];
+
+    const result = evaluateGameAchievements(ctx([wolf, lover], { eventBatches: events }));
+    expect(unlocksFor(result, 1n)).toContain('OhShi');
+    expect(unlocksFor(result, 1n)).not.toContain('ShouldveMentioned');
+  });
 });

@@ -18,8 +18,8 @@ import { balance, WOLF_ROLES, type BalanceOptions } from './game-balancing.js';
 import { killPlayer, type KillOptions } from './kill.js';
 import { resetLynchState, resolveLynchVotes, type LynchOptions, type LynchResult } from './lynch.js';
 import { evaluateWinCondition, type WinConditionContext, type WinConditionResult } from './win-condition.js';
-import { augurSees } from './clairvoyance.js';
-import { resolveGunnerShot, resolveSpumpkinDetonate } from './day-actions.js';
+import { resolveClairvoyanceNight } from './clairvoyance.js';
+import { resolveDetectiveSnoop, resolveGunnerShot, resolveSpumpkinDetonate } from './day-actions.js';
 import {
   findActingGuardianAngel,
   initialNightState,
@@ -40,7 +40,7 @@ import { promoteToWolf } from './transform.js';
 import type { GameEvent } from './game-event.js';
 import type { GameMode } from './game-mode.js';
 import type { GamePhase } from './game-phase.js';
-import { ABSTAIN, createPlayer, type Player } from './player.js';
+import { ABSTAIN, alivePlayers, createPlayer, type Player } from './player.js';
 import { ROLE_BIT, type Role, type RoleFlags } from '../roles/role.js';
 import { getTeamForRole, type Team } from './team.js';
 import { shuffle } from '../shared/shuffle.js';
@@ -94,6 +94,8 @@ export class Game {
   /** Mirrors `_doubleLynch` as captured by `startLynch()`: how many lynch attempts this Lynch phase gets. */
   lynchAttemptsPlanned = 1;
   private doubleLynchPending = false;
+  /** Mirrors `NoOneCastLynch`: whether anyone has cast a live lynch vote yet this attempt (FirstStone). */
+  private noOneCastLynchVoteYet = true;
 
   /** Mirrors `lastGrave`/`secondLastGrave`: when the Grave Digger last (and second-last) dug, across nights. */
   private lastGraveDigAt: Date | null = null;
@@ -200,7 +202,20 @@ export class Game {
     this.lynchAttempt = 0;
     this.lynchAttemptsPlanned = this.doubleLynchPending ? 2 : 1;
     this.doubleLynchPending = false;
+    this.noOneCastLynchVoteYet = true;
     resetLynchState(this.players);
+  }
+
+  /**
+   * Called by the app layer when a live (non-abstain) lynch vote is cast - mirrors the original's
+   * inline `NoOneCastLynch` check feeding `FirstStone` (be the first to vote 5 times in a game).
+   * A no-op after the first vote of each attempt.
+   */
+  registerLynchVoteCast(voterId: bigint): void {
+    if (!this.noOneCastLynchVoteYet) return;
+    this.noOneCastLynchVoteYet = false;
+    const voter = this.players.find((p) => p.id === voterId);
+    if (voter) voter.firstToVoteCount++;
   }
 
   /**
@@ -219,6 +234,20 @@ export class Game {
 
     if (this.pacifistUsed) {
       this.pacifistUsed = false;
+      // Mirrors the original's EveryManForHimself/MySweetieSoStrong check: did the Pacifist's
+      // declaration cancel a lynch that already had a majority of votes cast against them (or
+      // their lover)?
+      const alive = alivePlayers(this.players);
+      const pacifist = alive.find((p) => p.role === ROLE_BIT.Pacifist);
+      if (pacifist) {
+        const votesFor = (id: bigint) => this.players.filter((p) => p.choice === id).length;
+        if (votesFor(pacifist.id) > alive.length / 2) {
+          pacifist.everyManForHimself = true;
+        } else if (pacifist.loverId !== null && votesFor(pacifist.loverId) > alive.length / 2) {
+          const lover = this.players.find((p) => p.id === pacifist.loverId);
+          if (lover) lover.mySweetieSoStrong = true;
+        }
+      }
       const win = this.checkWinCondition({ checkBitten: true });
       return {
         resolution: { outcome: 'PacifistPeace' },
@@ -240,6 +269,7 @@ export class Game {
   /** Starts a fresh vote (e.g. for a Troublemaker-forced double lynch) without leaving the Lynch phase. */
   restartLynchVote(): void {
     this.assertPhase('Lynch');
+    this.noOneCastLynchVoteYet = true;
     resetLynchState(this.players);
   }
 
@@ -419,8 +449,7 @@ export class Game {
     events.push(...resolveChemistNight(this.players, visitCtx));
     events.push(...resolveHarlotNight(this.players, visitCtx));
 
-    const augur = this.players.find((p) => p.role === ROLE_BIT.Augur && !p.isDead && !p.frozen);
-    if (augur) augurSees(this.players, augur, this.possibleRoles);
+    events.push(...resolveClairvoyanceNight(this.players, this.possibleRoles, random));
 
     events.push(...resolveGuardianAngelNight(this.players, state, visitCtx));
 
@@ -441,6 +470,8 @@ export class Game {
       p.wasSavedLastNight = false;
       p.choice = null;
       p.votes = 0;
+      if (p.beingVisitedSameNightCount >= 3) p.busyNight = true;
+      p.beingVisitedSameNightCount = 0;
     }
 
     return events;
@@ -450,7 +481,11 @@ export class Game {
   resolveDayActions(options: { random?: () => number } = {}): GameEvent[] {
     this.assertPhase('Day');
     const random = options.random ?? Math.random;
-    return [...resolveGunnerShot(this.players), ...resolveSpumpkinDetonate(this.players, random)];
+    return [
+      ...resolveGunnerShot(this.players),
+      ...resolveSpumpkinDetonate(this.players, random),
+      ...resolveDetectiveSnoop(this.players, random),
+    ];
   }
 
   /**

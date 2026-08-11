@@ -4,9 +4,10 @@
  * night-active role (Wolves, Serial Killer, Snow Wolf, Harlot, Guardian
  * Angel, Arsonist, Thief).
  *
- * Not ported: `BeingVisitedSameNightCount`/`BusyNight`/`InMiddleOfTrouble` -
- * verified against the original to be purely achievement-tracking, with no
- * effect on any other game logic.
+ * `beingVisitedSameNightCount` (feeding the `ItWasABusyNight` achievement -
+ * see `Game.enterNight()` for the per-night reset/threshold check) is the
+ * one piece of original state this mirrors purely for achievement tracking;
+ * it has no effect on any other game logic, same as in the original.
  */
 
 import { ROLE_BIT } from '../roles/role.js';
@@ -37,6 +38,7 @@ export function visitPlayer(ctx: VisitContext, visitor: Player, visited: Player 
   const roll = () => Math.floor(random() * 100);
 
   if (!visited) return { result: 'TargetNull', events };
+  visited.beingVisitedSameNightCount++;
 
   if (visited.isDead && !visited.burning && (thiefFull || visitor.role !== ROLE_BIT.Thief)) {
     return { result: 'AlreadyDead', events };

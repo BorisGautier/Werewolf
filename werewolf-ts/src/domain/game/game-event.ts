@@ -13,7 +13,7 @@ export type GameEvent =
   | { type: 'PlayerDied'; playerId: bigint; method: KillMethod; killerIds: bigint[]; isNight: boolean }
   | { type: 'LoverDiedOfGrief'; playerId: bigint; originalVictimId: bigint; isNight: boolean }
   | { type: 'HunterMustShoot'; hunterId: bigint; method: KillMethod; delayed: boolean }
-  | { type: 'WolfCubKilled' }
+  | { type: 'WolfCubKilled'; playerId: bigint }
   | { type: 'TraitorBecameWolf'; playerId: bigint }
   | { type: 'SnowWolfBecameWolf'; playerId: bigint }
   | { type: 'CultistAutoConverted'; playerId: bigint }
@@ -26,7 +26,7 @@ export type GameEvent =
   | { type: 'GuardianAngelBlockedFreeze'; targetId: bigint; snowWolfId: bigint }
   | { type: 'PlayerDoused'; playerId: bigint; arsonistId: bigint }
   | { type: 'GuardianAngelSavedFromBurning'; playerId: bigint }
-  | { type: 'PlayerBitten'; playerId: bigint }
+  | { type: 'PlayerBitten'; playerId: bigint; alphaId: bigint | null }
   | { type: 'GuardianAngelBlockedWolfAttack'; targetId: bigint }
   | { type: 'WolvesGotDrunk'; wolfIds: bigint[]; drunkVictimId: bigint }
   | { type: 'WiseElderSurvivedFirstAttack'; playerId: bigint }
@@ -49,4 +49,13 @@ export type GameEvent =
   | { type: 'BittenPlayerTurnedWolf'; playerId: bigint }
   | { type: 'GraveDug'; playerId: bigint; graveCount: number }
   | { type: 'BlacksmithSpreadSilver'; playerId: bigint; dayNumber: number }
-  | { type: 'SandmanUsedSleep'; playerId: bigint; dayNumber: number };
+  | { type: 'SandmanUsedSleep'; playerId: bigint; dayNumber: number }
+  | { type: 'WolfPackAteTwice'; alphaId: bigint | null }
+  | { type: 'AlphaWolfLuckyDay'; alphaId: bigint }
+  | { type: 'SeerVision'; playerId: bigint; targetId: bigint; shownRole: Role }
+  | { type: 'SorcererVision'; playerId: bigint; targetId: bigint; detectedRole: Role | null }
+  | { type: 'FoolVision'; playerId: bigint; targetId: bigint; shownRole: Role | null }
+  | { type: 'OracleVision'; playerId: bigint; targetId: bigint; shownRole: Role | null }
+  | { type: 'AugurVision'; playerId: bigint; shownRole: Role | null }
+  | { type: 'DetectiveSnoop'; playerId: bigint; targetId: bigint; targetRole: Role }
+  | { type: 'DetectiveCaught'; playerId: bigint };

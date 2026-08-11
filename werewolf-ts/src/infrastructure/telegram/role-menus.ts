@@ -19,6 +19,7 @@ export const NIGHT_TARGET_ROLES: readonly Role[] = [
   ROLE_BIT.Seer,
   ROLE_BIT.Sorcerer,
   ROLE_BIT.Oracle,
+  ROLE_BIT.Fool,
   ROLE_BIT.GuardianAngel,
   ROLE_BIT.Harlot,
   ROLE_BIT.SnowWolf,

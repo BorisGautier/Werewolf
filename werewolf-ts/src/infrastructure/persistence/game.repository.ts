@@ -34,8 +34,9 @@ export class GameRepository {
     if (rows.length > 0) await this.prisma.gamePlayer.createMany({ data: rows });
   }
 
-  async finalizeGame(gameId: number, winnerTeam: Team | undefined, players: readonly Player[]): Promise<void> {
-    await this.prisma.game.update({
+  /** Returns the game's `startedAt` so the caller can compute wall-clock duration (LongHaul). */
+  async finalizeGame(gameId: number, winnerTeam: Team | undefined, players: readonly Player[]): Promise<Date> {
+    const updated = await this.prisma.game.update({
       where: { id: gameId },
       data: { endedAt: new Date(), winnerTeam: winnerTeam ? teamToPrisma(winnerTeam) : null },
     });
@@ -46,6 +47,8 @@ export class GameRepository {
         data: { survived: !p.isDead, won: p.won },
       });
     }
+
+    return updated.startedAt;
   }
 
   /**

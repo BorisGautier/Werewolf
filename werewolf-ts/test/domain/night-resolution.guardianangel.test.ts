@@ -87,4 +87,43 @@ describe('resolveGuardianAngelNight', () => {
 
     expect(target.doused).toBe(false);
   });
+
+  it('counts guarding a wolf who was not actually under attack toward gaGuardWolfCount', () => {
+    const ga = createPlayer(1n, 'GA', ROLE_BIT.GuardianAngel, 'Village');
+    const wolf = createPlayer(2n, 'W', ROLE_BIT.Wolf, 'Wolf');
+    ga.choice = wolf.id;
+
+    const state = initialNightState();
+    state.guardianAngel = ga;
+    // Visiting an unattacked wolf is a 50/50 death roll for the GA - force survival (roll >= 50).
+    resolveGuardianAngelNight([ga, wolf], state, baseCtx([ga, wolf], () => 0.9));
+
+    expect(ga.isDead).toBe(false);
+    expect(ga.gaGuardWolfCount).toBe(1);
+  });
+
+  it('does not count guarding a wolf who WAS under attack (already saved) toward gaGuardWolfCount', () => {
+    const ga = createPlayer(1n, 'GA', ROLE_BIT.GuardianAngel, 'Village');
+    const wolf = createPlayer(2n, 'W', ROLE_BIT.Wolf, 'Wolf');
+    wolf.wasSavedLastNight = true;
+    ga.choice = wolf.id;
+
+    const state = initialNightState();
+    state.guardianAngel = ga;
+    resolveGuardianAngelNight([ga, wolf], state, baseCtx([ga, wolf]));
+
+    expect(ga.gaGuardWolfCount).toBe(0);
+  });
+
+  it('does not count guarding a non-wolf toward gaGuardWolfCount', () => {
+    const ga = createPlayer(1n, 'GA', ROLE_BIT.GuardianAngel, 'Village');
+    const villager = createPlayer(2n, 'V', ROLE_BIT.Villager, 'Village');
+    ga.choice = villager.id;
+
+    const state = initialNightState();
+    state.guardianAngel = ga;
+    resolveGuardianAngelNight([ga, villager], state, baseCtx([ga, villager]));
+
+    expect(ga.gaGuardWolfCount).toBe(0);
+  });
 });

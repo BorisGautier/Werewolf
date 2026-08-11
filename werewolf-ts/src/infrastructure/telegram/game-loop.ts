@@ -328,13 +328,14 @@ export class GameLoop {
     this.eventBatches.delete(game.chatId);
 
     if (gameId !== undefined) {
+      let startedAt: Date | undefined;
       try {
-        await this.gameRepo.finalizeGame(gameId, game.winningTeam, game.players);
+        startedAt = await this.gameRepo.finalizeGame(gameId, game.winningTeam, game.players);
       } catch (err) {
         this.logger.error({ err, chatId: game.chatId.toString(), gameId }, 'Failed to persist finished game');
       }
       try {
-        await this.awardAchievements(game, batches);
+        await this.awardAchievements(game, batches, startedAt);
       } catch (err) {
         this.logger.error({ err, chatId: game.chatId.toString(), gameId }, 'Failed to award achievements');
       }
@@ -348,7 +349,11 @@ export class GameLoop {
    * (`AchievementRepository.recordGameResult`, DB-backed) - then PMs each player who unlocked
    * something new.
    */
-  private async awardAchievements(game: Game, batches: readonly (readonly GameEvent[])[]): Promise<void> {
+  private async awardAchievements(
+    game: Game,
+    batches: readonly (readonly GameEvent[])[],
+    startedAt: Date | undefined,
+  ): Promise<void> {
     const group = await this.groups.getOrCreate(game.chatId, null, null);
     const allEvents = batches.flat();
 
@@ -374,10 +379,18 @@ export class GameLoop {
       }
     }
 
+    const longHaul = startedAt
+      ? {
+          durationMs: Date.now() - startedAt.getTime(),
+          survivingTelegramIds: game.players.filter((p) => !p.isDead && !p.fled).map((p) => p.id),
+        }
+      : null;
+
     const crossGameUnlocks = await this.achievements.recordGameResult(
       game.players.map((p) => p.id),
       firstLynchVictimId(batches),
       guardianAngel && gaSaves > 0 ? { telegramId: guardianAngel.id, savesThisGame: gaSaves } : null,
+      longHaul,
     );
     for (const [playerId, codes] of crossGameUnlocks) {
       const list = newUnlocks.get(playerId) ?? [];
@@ -520,6 +533,7 @@ export class GameLoop {
     if (!voter || voter.isDead) return null;
     const result = this.applyChoice(game, playerId, 'choice', rawTarget);
     if (result !== 'ChoiceRecorded' || rawTarget === 'abstain') return result;
+    game.registerLynchVoteCast(playerId);
 
     const group = await this.groups.getOrCreate(game.chatId, null, null);
     if (group.secretLynch) {
@@ -645,6 +659,7 @@ const NIGHT_PROMPT_KEY: Partial<Record<RoleName, string>> = {
   Seer: 'AskSeer',
   Sorcerer: 'AskSorcerer',
   Oracle: 'AskOracle',
+  Fool: 'AskFool',
   GuardianAngel: 'AskGuardianAngel',
   Harlot: 'AskHarlot',
   SnowWolf: 'AskSnowWolf',

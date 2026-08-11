@@ -9,17 +9,17 @@ export const ABSTAIN: bigint = -1n;
 export const SPARK: bigint = -2n;
 
 /**
- * Port of the gameplay-relevant fields of `Werewolf Node/Models/IPlayer.cs`.
- *
- * Deliberately excludes the ~40 achievement-tracking booleans/counters from
- * the original (e.g. `HasStayedHome`, `FoolCorrectSeeCount`) - those are a
- * cosmetic layer on top of the rules engine and can be reintroduced later
- * without touching the core state machine.
+ * Port of the gameplay-relevant fields of `Werewolf Node/Models/IPlayer.cs`, plus the subset of
+ * the original's achievement-tracking counters/flags that turned out to need real-time state
+ * (can't be reconstructed from the `GameEvent` log alone) - see the bottom of the interface.
  */
 export interface Player {
   id: bigint;
   name: string;
   role: Role;
+  /** The role they were dealt at game start, never rewritten - several achievements care what a
+   * player *started* as even after a Thief/Doppelganger swap, an infection, or a Wise Elder demotion. */
+  originalRole: Role;
   team: Team;
 
   isDead: boolean;
@@ -75,6 +75,49 @@ export interface Player {
   sawRoles: Role[];
   /** Thief/Doppelganger mechanic: id of the player whose role this one copied/stole, if any. */
   roleModel: bigint | null;
+
+  // --- Achievement-tracking counters/flags (mirrors the original's per-player achievement fields) ---
+  /** Ever received at least one lynch vote, across any attempt this game (Inconspicuous). */
+  hasBeenVoted: boolean;
+  /** Fool mechanic: how many nights their random vision happened to match the target's real role. */
+  foolCorrectSeeCount: number;
+  /** Fool mechanic: their random vision was specifically the Beholder, matching the target. */
+  foolCorrectlySeenBH: boolean;
+  /** Fool mechanic: their random vision landed on a role the real Seer can never show as-is (WolfMan/Traitor). */
+  hasSeenImpossible: boolean;
+  /** WolfMan mechanic: the real Seer checked them at some point. */
+  trustworthy: boolean;
+  /** Cupid mechanic: they were auto-picked as a lover because Cupid didn't choose in time. */
+  speedDating: boolean;
+  /** Gunner mechanic: how many of their two shots killed a wolf/Serial Killer/cultist. */
+  bulletHitBaddies: number;
+  /** Guardian Angel mechanic: how many times they guarded a wolf who wasn't actually under attack. */
+  gaGuardWolfCount: number;
+  /** Mayor mechanic: lynch votes cast after revealing (each worth double). */
+  mayorLynchAfterRevealCount: number;
+  /** Clumsy Guy mechanic: lynch votes that landed where they meant them to (not fumbled, or fumbled onto the same target by chance). */
+  clumsyCorrectLynchCount: number;
+  /** How many times they were the target of a night visit so far *this* night - reset every night. */
+  beingVisitedSameNightCount: number;
+  /** Ever visited by 3+ different actions in the same night. */
+  busyNight: boolean;
+  /** Alpha Wolf mechanic: successfully infected the Serial Killer. */
+  strongestAlpha: boolean;
+  /** Lynch mechanic: how many times they were the first to cast a vote this game (FirstStone). */
+  firstToVoteCount: number;
+  /** Detective mechanic: ids of bad-team targets correctly snooped in a row (a re-snoop of the
+   * same target, or a non-bad-team snoop, resets the streak - see `resolveDetectiveSnoop`). */
+  correctSnoopedIds: bigint[];
+  /** Detective mechanic: the streak above reached 4 (Streetwise). */
+  streetwise: boolean;
+  /** Tanner mechanic: tied for the most lynch votes (SoClose). */
+  soClose: boolean;
+  /** Tanner mechanic: literally everyone else alive voted to lynch them (TannerOverkill). */
+  tannerOverkill: boolean;
+  /** Pacifist mechanic: saved themselves from a majority-vote lynch by declaring peace (EveryManForHimself). */
+  everyManForHimself: boolean;
+  /** Pacifist's lover mechanic: saved from a majority-vote lynch by the Pacifist declaring peace (MySweetieSoStrong). */
+  mySweetieSoStrong: boolean;
 }
 
 export function createPlayer(id: bigint, name: string, role: Role, team: Team): Player {
@@ -82,6 +125,7 @@ export function createPlayer(id: bigint, name: string, role: Role, team: Team): 
     id,
     name,
     role,
+    originalRole: role,
     team,
     isDead: false,
     diedLastNight: false,
@@ -117,6 +161,26 @@ export function createPlayer(id: bigint, name: string, role: Role, team: Team): 
     dayCult: 0,
     sawRoles: [],
     roleModel: null,
+    hasBeenVoted: false,
+    foolCorrectSeeCount: 0,
+    foolCorrectlySeenBH: false,
+    hasSeenImpossible: false,
+    trustworthy: false,
+    speedDating: false,
+    bulletHitBaddies: 0,
+    gaGuardWolfCount: 0,
+    mayorLynchAfterRevealCount: 0,
+    clumsyCorrectLynchCount: 0,
+    beingVisitedSameNightCount: 0,
+    busyNight: false,
+    strongestAlpha: false,
+    firstToVoteCount: 0,
+    correctSnoopedIds: [],
+    streetwise: false,
+    soClose: false,
+    tannerOverkill: false,
+    everyManForHimself: false,
+    mySweetieSoStrong: false,
   };
 }
 

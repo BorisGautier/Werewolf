@@ -101,11 +101,18 @@ export class AchievementRepository {
    *
    * `firstLynchVictimTelegramId` and `guardianAngelSavesThisGame` come from the single-game event
    * log the caller (`GameLoop`) already has - see `firstLynchVictimId()` in `evaluate.ts`.
+   *
+   * `longHaul` carries what the pure evaluator can't see (wall-clock time): the game's real-world
+   * duration plus which players were still alive and hadn't fled by the end - an approximation of
+   * the original's "still alive at the 1-hour mark", checked periodically as the game went rather
+   * than only at the end (see `CheckLongHaul` - a player alive at the 1-hour mark who then died
+   * before the game ended would still have earned it there; here they wouldn't).
    */
   async recordGameResult(
     telegramIds: readonly bigint[],
     firstLynchVictimTelegramId: bigint | null,
     guardianAngel: { telegramId: bigint; savesThisGame: number } | null,
+    longHaul: { durationMs: number; survivingTelegramIds: readonly bigint[] } | null = null,
   ): Promise<Map<bigint, AchievementCode[]>> {
     const newUnlocks = new Map<bigint, AchievementCode[]>();
     const add = (telegramId: bigint, code: AchievementCode) => {
@@ -113,6 +120,12 @@ export class AchievementRepository {
       list.push(code);
       newUnlocks.set(telegramId, list);
     };
+
+    if (longHaul && longHaul.durationMs >= 60 * 60 * 1000) {
+      for (const telegramId of longHaul.survivingTelegramIds) {
+        if (await this.unlock(telegramId, 'LongHaul')) add(telegramId, 'LongHaul');
+      }
+    }
 
     for (const telegramId of telegramIds) {
       const player = await this.prisma.player.findUnique({ where: { telegramId } });

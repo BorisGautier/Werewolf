@@ -8,16 +8,12 @@
  * (`Dedicated`, `Explorer`, `BlackSheep`'s streak, ...) are intentionally not here - those are
  * computed from the `game_players`/`game_kills` tables directly in `AchievementRepository`.
  *
- * Not every one of the 102 catalog entries is implemented. Three kinds are deliberately skipped,
- * each marked in-line below:
- *   - features this migration explicitly left out of scope (language packs, the donor/dev-only
- *     easter eggs, calendar events - see the README/audit)
- *   - achievements whose trigger a `GameEvent` simply doesn't carry enough data for yet (e.g.
- *     `WolfCubKilled` has no `playerId`, so "2 kills after the cub died" can't be tied back to
- *     *which* cub); extending the event payload is a small, isolated follow-up
- *   - a couple of real *mechanics* gaps found while wiring this up (e.g. the Hunter's final shot
- *     doesn't yet demote them like the Chemist/Gunner do against the Wise Elder) - noted so
- *     they're not silently lost
+ * Not every one of the 102 catalog entries is implemented. What's left out, each marked in-line
+ * below, is either a feature this migration explicitly left out of scope (language packs, the
+ * donor/dev-only easter eggs, calendar events - see the README/audit) or a handful of achievements
+ * that need a full per-night visit-target history (the Harlot's/Chemist's specific targets each
+ * night) or a reconstructed near-miss win-condition chain this migration doesn't retain once a
+ * night resolves - both noted honestly as "best effort, deferred" where they come up.
  */
 
 import { ROLE_BIT, type Role } from '../roles/role.js';
@@ -107,9 +103,11 @@ export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigin
   for (const p of players) if (p.role === ROLE_BIT.Tanner && p.won) out.grant(p.id, 'Masochist');
   // #17 Wobble - survive a game as the drunk (10+ players).
   for (const p of players) if (p.role === ROLE_BIT.Drunk && !p.isDead && players.length >= 10) out.grant(p.id, 'Wobble');
-  // #18 Inconspicuous - needs a whole-game "votes ever received" tally; `Player.votes` only
-  // holds the most recent lynch's count. Deferred - would need a new per-game counter threaded
-  // through lynch.ts.
+  // #18 Inconspicuous - never received a single lynch vote all game, and survived (20+ player
+  // games only, mirroring the original's `Players.Count < 20` exemption).
+  if (players.length >= 20) {
+    for (const p of players) if (!p.hasBeenVoted && !p.isDead) out.grant(p.id, 'Inconspicuous');
+  }
   // #20 BlackSheep - cross-game "lynched first" streak, computed in AchievementRepository (using
   // the single-game "was this the game's first lynch victim" signal below).
   // #21 Promiscuous - needs the Harlot's full night-by-night visit history, which isn't tracked
@@ -141,8 +139,16 @@ export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigin
     const victim = findPlayer(death.playerId);
     if (victim?.role === ROLE_BIT.Harlot) out.grantAll(death.killerIds, 'DontStayHome');
   }
-  // #26 DoubleVision, #28 ShouldHaveKnown - no event captures a Seer's night-by-night targets/
-  // results (informational-only, matching messages.ts's own documented scope). Deferred.
+  // #26 DoubleVision - two players simultaneously hold the Seer role (a Doppelganger copied it
+  // without the original losing it).
+  {
+    const seers = players.filter((p) => p.role === ROLE_BIT.Seer);
+    if (seers.length > 1) out.grantAll(seers.map((p) => p.id), 'DoubleVision');
+  }
+  // #28 ShouldHaveKnown - the Seer's vision lands on the Beholder.
+  for (const event of allEvents) {
+    if (event.type === 'SeerVision' && event.shownRole === ROLE_BIT.Beholder) out.grant(event.playerId, 'ShouldHaveKnown');
+  }
   // #27 DoubleKill - be part of the Serial Killer/Hunter standoff-win ending.
   if (ctx.winningTeam === 'SKHunter') {
     for (const p of players) if (p.role === ROLE_BIT.SerialKiller || p.role === ROLE_BIT.Hunter) out.grant(p.id, 'DoubleKill');
@@ -173,16 +179,26 @@ export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigin
     }
   }
   // #33 Developer - meta (a merged PR), not a gameplay achievement. Out of scope here.
-  // #34 FirstStone, #35 SmartGunner - need per-shot/per-vote instrumentation this migration
-  // doesn't keep (votes reset every lynch attempt, and the Gunner's shots aren't logged
-  // individually beyond the resulting death). Deferred.
-  // #36 Streetwise - needs the Detective's night-by-night investigation results, which (like the
-  // Seer) are informational-only and not tracked as events. Deferred.
-  // #37 OnlineDating - needs to distinguish a Cupid-chosen pairing from a bot-auto-picked one;
-  // `LoversCreated` doesn't carry that distinction. Deferred.
-  // #38 BrokenClock - needs the Fool's night-by-night (randomized) vision results. Deferred.
-  // #39 SoClose, #43 TannerOverkill - need the final lynch's per-player vote tally, which isn't
-  // preserved once the phase resolves. Deferred.
+  // #34 FirstStone - first to cast a live lynch vote, 5 times in one game.
+  for (const p of players) if (p.firstToVoteCount >= 5) out.grant(p.id, 'FirstStone');
+  // #35 SmartGunner - both of the Gunner's bullets hit a wolf/Serial Killer/cultist.
+  for (const p of players) if (p.role === ROLE_BIT.Gunner && p.bulletHitBaddies >= 2) out.grant(p.id, 'SmartGunner');
+  // #36 Streetwise - snooped a different threat 4 nights running as the Detective.
+  for (const p of players) if (p.streetwise) out.grant(p.id, 'Streetwise');
+  // #37 OnlineDating - auto-picked as a lover because Cupid didn't choose in time.
+  for (const event of allEvents) {
+    if (event.type !== 'LoversCreated') continue;
+    const lover1 = findPlayer(event.lover1Id);
+    const lover2 = findPlayer(event.lover2Id);
+    if (lover1?.speedDating) out.grant(lover1.id, 'OnlineDating');
+    if (lover2?.speedDating) out.grant(lover2.id, 'OnlineDating');
+  }
+  // #38 BrokenClock - at least two of the Fool's (random) visions turned out correct.
+  for (const p of players) if (p.foolCorrectSeeCount >= 2) out.grant(p.id, 'BrokenClock');
+  // #39 SoClose - the Tanner was tied for the most lynch votes.
+  for (const p of players) if (p.soClose) out.grant(p.id, 'SoClose');
+  // #43 TannerOverkill - literally everyone else alive voted to lynch the Tanner.
+  for (const p of players) if (p.tannerOverkill) out.grant(p.id, 'TannerOverkill');
   // #40 CultCon - 10+ cultists alive at game end.
   {
     const cultists = players.filter((p) => p.team === 'Cult' && !p.isDead);
@@ -196,8 +212,21 @@ export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigin
     if (lover1?.role === ROLE_BIT.Cupid) out.grant(lover1.id, 'SelfLoving');
     if (lover2?.role === ROLE_BIT.Cupid) out.grant(lover2.id, 'SelfLoving');
   }
-  // #42 ShouldveMentioned - needs to know it wasn't the first night specifically; deferred since
-  // batch 0 isn't reliably "night 1" once Joining-phase batches are mixed in by the caller.
+  // #42 ShouldveMentioned - a wolf's pack ate their own lover on any night after the first
+  // (approximated the same way as #50 OhShi: batch 0 is night 1).
+  for (let i = 1; i < ctx.eventBatches.length; i++) {
+    for (const event of ctx.eventBatches[i]!) {
+      if (event.type !== 'PlayerDied' || !event.isNight || event.method === 'LoverDied') continue;
+      const victim = findPlayer(event.playerId);
+      if (victim?.loverId == null) continue;
+      for (const killerId of event.killerIds) {
+        if (killerId === victim.loverId) {
+          const killer = findPlayer(killerId);
+          if (killer && isWolf(killer.role)) out.grant(killerId, 'ShouldveMentioned');
+        }
+      }
+    }
+  }
   // #44 SerialSamaritan - the Serial Killer kills 3+ wolves in the game.
   {
     const skWolfKills = new Map<bigint, number>();
@@ -225,8 +254,9 @@ export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigin
   // #48 GunnerSaves - needs to reconstruct a near-miss win-condition check (wolves == villagers,
   // but the Gunner's remaining bullet keeps the game going); not a signal any event carries.
   // Deferred.
-  // #49 LongHaul - real-world wall-clock duration; the pure evaluator has no notion of time (see
-  // GameLoop for `startedAt`/`endedAt` if this gets picked up later). Deferred.
+  // #49 LongHaul - real-world wall-clock duration; the pure evaluator has no notion of time, so
+  // this is computed in `AchievementRepository.recordGameResult()` from the DB's
+  // `startedAt`/`endedAt` instead.
   // #50 OhShi - kill your own lover on the first night (approximated as the first batch).
   if (ctx.eventBatches[0]) {
     for (const event of ctx.eventBatches[0]) {
@@ -250,8 +280,10 @@ export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigin
     }
     for (const [id, count] of counts) if (count >= 3) out.grant(id, 'CultistTracker');
   }
-  // #54 ImNotDrunk, #56 DidYouGuardYourself - need per-lynch-vote-correctness and per-guard-target
-  // history this migration doesn't retain. Deferred.
+  // #54 ImNotDrunk - the Clumsy Guy's vote landed where they meant it to, 3+ times.
+  for (const p of players) if (p.role === ROLE_BIT.ClumsyGuy && p.clumsyCorrectLynchCount >= 3) out.grant(p.id, 'ImNotDrunk');
+  // #56 DidYouGuardYourself - guarded a wolf who wasn't actually under attack, 3+ times.
+  for (const p of players) if (p.role === ROLE_BIT.GuardianAngel && p.gaGuardWolfCount >= 3) out.grant(p.id, 'DidYouGuardYourself');
   // #55 WuffieCult - the Alpha Wolf successfully bites 3+ victims into wolves. `BittenPlayerTurnedWolf`
   // doesn't carry the biter's id, so this assumes the game's single AlphaWolf did the biting.
   {
@@ -271,16 +303,32 @@ export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigin
     const livingWolves = players.filter((p) => isWolf(p.role) && !p.isDead);
     if (sorcerer && livingWolves.length >= 3) out.grant(sorcerer.id, 'ThreeLittleWolves');
   }
-  // #59 President - needs to count the Mayor's post-reveal lynch votes specifically. Deferred.
-  // #60 IHelped, #93 IncreaseThePack - `WolfCubKilled` doesn't carry a `playerId`/pack id, so
-  // "after this specific cub died" can't be tied to anything. Deferred (small event-payload fix
-  // would unblock both).
-  // #61 ItWasABusyNight - needs a per-visit-role log (who visited whom each night), which the
-  // domain layer resolves internally but doesn't expose as events. Deferred.
-  // #62 StrongestAlpha - "infect the serial killer" - the Alpha Wolf's bite only ever targets
-  // wolf-pack victims in this port (there's no SK-specific infection branch), so this can never
-  // fire; not a gap worth chasing for a single achievement.
-  // #63 AmIYourSeer - needs the Fool's specific (randomized) vision result. Deferred (see #38).
+  // #59 President - the Mayor cast 3+ lynch votes after revealing (each worth double).
+  for (const p of players) if (p.role === ROLE_BIT.Mayor && p.mayorLynchAfterRevealCount >= 3) out.grant(p.id, 'President');
+  // #60 IHelped - the wolf pack scored two successful attacks in one night; grant to whichever
+  // Wolf Cub most recently died before that (mirrors `OrderByDescending(TimeDied)`).
+  // #93 IncreaseThePack - same night, and both attacks turned their targets into wolves (bites,
+  // not kills) - grant to the Alpha Wolf who did the biting.
+  {
+    let lastDeadCubId: bigint | null = null;
+    for (const batch of ctx.eventBatches) {
+      for (const event of batch) {
+        if (event.type === 'WolfCubKilled') lastDeadCubId = event.playerId;
+        if (event.type !== 'WolfPackAteTwice') continue;
+        if (lastDeadCubId !== null) out.grant(lastDeadCubId, 'IHelped');
+        if (event.alphaId !== null) {
+          const bitesThisBatch = batch.filter((e) => e.type === 'PlayerBitten').length;
+          if (bitesThisBatch === 2) out.grant(event.alphaId, 'IncreaseThePack');
+        }
+      }
+    }
+  }
+  // #61 ItWasABusyNight - visited by 3+ different actions in the same night.
+  for (const p of players) if (p.busyNight) out.grant(p.id, 'ItWasABusyNight');
+  // #62 StrongestAlpha - the Alpha Wolf successfully infected the Serial Killer.
+  for (const p of players) if (p.strongestAlpha) out.grant(p.id, 'StrongestAlpha');
+  // #63 AmIYourSeer - as the Fool, the random vision landed on the Beholder, matching the target.
+  for (const p of players) if (p.foolCorrectlySeenBH) out.grant(p.id, 'AmIYourSeer');
   // #64 DemotedByTheDeath - the Hunter's final shot kills the Wise Elder (Game.killPlayer demotes
   // them to Villager in the same call, mirroring the Gunner/Chemist equivalents).
   for (const event of allEvents) {
@@ -299,10 +347,35 @@ export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigin
       }
     }
   }
-  // #66 Trustworthy, #67 DeepLove, #68 TimeToRetire, #69 SeeingBetweenTeams, #70 JustABeardyGuy -
-  // need per-role Seer-check history or Doppelganger role-model choices that aren't tracked as
-  // events (RoleModelChosen only fires for WildChild/Doppelganger's initial pick - see #82 below
-  // for the one sub-case that IS covered).
+  // #66 Trustworthy - as the Wolf Man, survived and won after the real Seer checked them.
+  for (const p of players) if (p.role === ROLE_BIT.WolfMan && p.trustworthy && !p.isDead && p.won) out.grant(p.id, 'Trustworthy');
+  // #67 DeepLove - as the Doppelganger, chose their own lover as role model.
+  for (const p of players) {
+    if (p.originalRole === ROLE_BIT.Doppelganger && p.roleModel !== null && p.roleModel === p.loverId) {
+      out.grant(p.id, 'DeepLove');
+    }
+  }
+  // #68 TimeToRetire - the Sorcerer was the last one standing in a "no one wins" ending.
+  if (ctx.winningTeam === undefined) {
+    const sorcerer = players.find((p) => p.role === ROLE_BIT.Sorcerer && !p.isDead);
+    if (sorcerer) out.grant(sorcerer.id, 'TimeToRetire');
+  }
+  // #69 SeeingBetweenTeams - the two Cupid-created lovers are a Seer/Sorcerer pair.
+  for (const event of allEvents) {
+    if (event.type !== 'LoversCreated') continue;
+    const lover1 = findPlayer(event.lover1Id);
+    const lover2 = findPlayer(event.lover2Id);
+    const roles = new Set([lover1?.role, lover2?.role]);
+    if (roles.has(ROLE_BIT.Seer) && roles.has(ROLE_BIT.Sorcerer)) {
+      if (lover1) out.grant(lover1.id, 'SeeingBetweenTeams');
+      if (lover2) out.grant(lover2.id, 'SeeingBetweenTeams');
+    }
+  }
+  // #70 JustABeardyGuy - the Wolf Man got bitten by the Alpha Wolf and turned into a real werewolf.
+  for (const event of allEvents) {
+    if (event.type !== 'BittenPlayerTurnedWolf') continue;
+    if (findPlayer(event.playerId)?.originalRole === ROLE_BIT.WolfMan) out.grant(event.playerId, 'JustABeardyGuy');
+  }
   // #71 ThatCameUnexpected - the Tanner is lynched, wins, and 3 or fewer players remained
   // (approximated from the post-lynch survivor count).
   for (const death of deaths) {
@@ -312,9 +385,15 @@ export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigin
     const remaining = players.filter((p) => !p.isDead).length;
     if (remaining <= 3) out.grant(victim.id, 'ThatCameUnexpected');
   }
-  // #72 NowImBlind - needs the Oracle's specific vision outcome. Deferred (see #38).
-  // #73 EveryManForHimself, #74 MySweetieSoStrong - need the lynch-vote tally at the moment the
-  // Pacifist's peace declaration cancelled it. Deferred (see #39).
+  // #72 NowImBlind - the Oracle failed to get a vision because every other role is already
+  // accounted for.
+  for (const event of allEvents) {
+    if (event.type === 'OracleVision' && event.shownRole === null) out.grant(event.playerId, 'NowImBlind');
+  }
+  // #73 EveryManForHimself, #74 MySweetieSoStrong - the Pacifist's peace declaration cancelled a
+  // lynch that already had a majority of votes against them (or their lover).
+  for (const p of players) if (p.everyManForHimself) out.grant(p.id, 'EveryManForHimself');
+  for (const p of players) if (p.mySweetieSoStrong) out.grant(p.id, 'MySweetieSoStrong');
   // #75 CultLeader - a founding cultist (converted on day 0, i.e. never converted at all) who
   // survives and wins.
   for (const p of players) if (p.role === ROLE_BIT.Cultist && p.dayCult === 0 && !p.isDead && p.won) out.grant(p.id, 'CultLeader');
@@ -326,12 +405,16 @@ export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigin
       players.map((p) => p.id),
       'DeathVillage',
     );
-  // #78 ILostMyWisdom - needs to know the Wise Elder specifically *changed role* (as opposed to
-  // just dying); `changedRolesCount` doesn't distinguish who/why. Deferred (a targeted check
-  // could use role !== WiseElder && changedRolesCount >= 1, but nothing marks the *original*
-  // role, so it's not reliable enough to ship).
-  // #79 Affectionate, #80 LuckyDay - need per-night visit-target/infection history not retained
-  // once resolved. Deferred.
+  // #78 ILostMyWisdom - the Wise Elder changed role (turned wolf via a bite - the only way a Wise
+  // Elder's role changes in this port).
+  for (const p of players) if (p.originalRole === ROLE_BIT.WiseElder && p.changedRolesCount >= 1) out.grant(p.id, 'ILostMyWisdom');
+  // #79 Affectionate - needs the Harlot's per-night visit history (only the current night's choice
+  // survives resolution in this port). Deferred.
+  // #80 LuckyDay - the Alpha Wolf bit the Drunk instead of eating them (staying sober, since only
+  // the eat path puts the pack to sleep).
+  for (const event of allEvents) {
+    if (event.type === 'AlphaWolfLuckyDay') out.grant(event.alphaId, 'LuckyDay');
+  }
   // #81 ConditionRed - the game's last wolf eats the Traitor (approximated: some wolf ate the
   // Traitor, and only one wolf-team player is left alive at game end).
   for (const death of deaths) {
@@ -491,8 +574,9 @@ export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigin
     const ga = players.find((p) => p.role === ROLE_BIT.GuardianAngel && !p.isDead);
     if (ga) out.grant(ga.id, 'InTheMiddleOfTheTrouble');
   }
-  // #102 AmIHallucinating - needs the Fool's specific vision outcome vs. what the Seer could
-  // ever see. Deferred (see #38).
+  // #102 AmIHallucinating - the Fool's random vision landed on a role the real Seer can never
+  // show as-is (WolfMan/Traitor are always disguised by `seerSees`).
+  for (const p of players) if (p.hasSeenImpossible) out.grant(p.id, 'AmIHallucinating');
 
   return out.toMap();
 }

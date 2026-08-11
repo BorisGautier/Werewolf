@@ -200,9 +200,48 @@ export function describeEvent(
     case 'SerialKillerRandomKill':
     case 'PlayerBitten':
     case 'RoleModelChosen':
+    case 'WolfPackAteTwice':
+    case 'AlphaWolfLuckyDay':
     case 'HunterMustShoot': // handled separately by the game loop (triggers the final-shot menu)
       return [];
+
+    case 'SeerVision':
+      return [{ audience: event.playerId, key: 'SeerSees', args: [name(event.targetId), displayRole(event.shownRole)] }];
+
+    case 'SorcererVision':
+      return event.detectedRole !== null
+        ? [{ audience: event.playerId, key: 'SorcererDetects', args: [name(event.targetId), displayRole(event.detectedRole)] }]
+        : [{ audience: event.playerId, key: 'SorcererNothing', args: [name(event.targetId)] }];
+
+    case 'FoolVision':
+      return event.shownRole !== null
+        ? [{ audience: event.playerId, key: 'FoolSees', args: [name(event.targetId), displayRole(event.shownRole)] }]
+        : [{ audience: event.playerId, key: 'FoolSeesNothing', args: [name(event.targetId)] }];
+
+    case 'OracleVision':
+      return event.shownRole !== null
+        ? [{ audience: event.playerId, key: 'OracleSees', args: [name(event.targetId), displayRole(event.shownRole)] }]
+        : [{ audience: event.playerId, key: 'OracleNothing', args: [name(event.targetId)] }];
+
+    case 'AugurVision':
+      return event.shownRole !== null
+        ? [{ audience: event.playerId, key: 'AugurSees', args: [displayRole(event.shownRole)] }]
+        : [{ audience: event.playerId, key: 'AugurNothing', args: [] }];
+
+    case 'DetectiveSnoop':
+      return [{ audience: event.playerId, key: 'DetectiveSnoop', args: [name(event.targetId), displayRole(event.targetRole)] }];
+
+    case 'DetectiveCaught':
+      return wolfPackPms(players, name(event.playerId), 'DetectiveCaught');
   }
+}
+
+/** PMs every wolf-pack member (Wolf/AlphaWolf/WolfCub/Lycan/SnowWolf) the same message. */
+function wolfPackPms(players: readonly Player[], detectiveName: string, key: string): OutgoingMessage[] {
+  const pack = players.filter((p) =>
+    [ROLE_BIT.Wolf, ROLE_BIT.AlphaWolf, ROLE_BIT.WolfCub, ROLE_BIT.Lycan, ROLE_BIT.SnowWolf].includes(p.role),
+  );
+  return pack.map((w) => ({ audience: w.id, key, args: [detectiveName] }));
 }
 
 /** The four "your protection worked" events don't all carry the Guardian Angel's own id - look them up. */

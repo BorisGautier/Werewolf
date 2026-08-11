@@ -76,7 +76,7 @@ function createHarness() {
   const gameRepo = {
     createGame: vi.fn(async () => 42),
     recordPlayers: vi.fn(async () => {}),
-    finalizeGame: vi.fn(async () => {}),
+    finalizeGame: vi.fn(async () => new Date()),
     recordKill: vi.fn(async () => {}),
   } as unknown as GameRepository;
 
@@ -200,6 +200,47 @@ describe('GameLoop', () => {
     // Achievements are evaluated (both single-game and cross-game) once the game ends.
     expect(achievements.unlock).toHaveBeenCalledWith(wolf.id, 'WelcomeToHell');
     expect(achievements.recordGameResult).toHaveBeenCalledTimes(1);
+  });
+
+  it("passes the game's real-world duration and surviving/non-fled players as longHaul, for the LongHaul achievement", async () => {
+    const { loop, gameManager, gameRepo, achievements } = createHarness();
+    const oldStart = new Date(Date.now() - 65 * 60 * 1000); // over an hour ago
+    (gameRepo.finalizeGame as ReturnType<typeof vi.fn>).mockResolvedValue(oldStart);
+
+    const game = dealtGame(gameManager);
+    const wolf = game.players[0]!;
+
+    loop.start(game, 42);
+    await vi.advanceTimersByTimeAsync(0);
+
+    for (let i = 0; i < 20 && gameManager.get(game.chatId) !== undefined; i++) {
+      if (game.phase === 'Night') {
+        const target = game.players.find((p) => !p.isDead && p.id !== wolf.id);
+        if (target) await loop.handleCallback(wolf.id, wolf.id, `nt:${target.id.toString()}`);
+        await vi.advanceTimersByTimeAsync(5000);
+      } else if (game.phase === 'Day') {
+        await vi.advanceTimersByTimeAsync(5000);
+      } else if (game.phase === 'Lynch') {
+        const voteTarget = game.players.find((p) => !p.isDead && p.id !== wolf.id);
+        if (voteTarget) {
+          for (const voter of game.players.filter((p) => !p.isDead)) {
+            await loop.handleCallback(voter.id, game.chatId, `vote:${voteTarget.id.toString()}`);
+          }
+        }
+        await vi.advanceTimersByTimeAsync(5000);
+      } else {
+        break;
+      }
+      await vi.advanceTimersByTimeAsync(0);
+    }
+
+    expect(achievements.recordGameResult).toHaveBeenCalledTimes(1);
+    const call = (achievements.recordGameResult as ReturnType<typeof vi.fn>).mock.calls[0]!;
+    const longHaul = call[3] as { durationMs: number; survivingTelegramIds: bigint[] };
+    const expectedSurvivors = game.players.filter((p) => !p.isDead && !p.fled).map((p) => p.id);
+    expect(longHaul.durationMs).toBeGreaterThanOrEqual(60 * 60 * 1000);
+    expect(longHaul.survivingTelegramIds).toEqual(expectedSurvivors);
+    expect(expectedSurvivors).toContain(wolf.id); // the wolf always survives to the win in this scenario
   });
 
   it('rejects a night-target callback from a player not in any active game', async () => {

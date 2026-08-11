@@ -134,9 +134,9 @@ export function resolveSnowWolfNight(
   return events;
 }
 
-function bitePlayer(target: Player): GameEvent[] {
+function bitePlayer(target: Player, alphaId: bigint | null): GameEvent[] {
   target.bitten = true;
-  return [{ type: 'PlayerBitten', playerId: target.id }];
+  return [{ type: 'PlayerBitten', playerId: target.id, alphaId }];
 }
 
 function defaultBiteOrEat(
@@ -144,8 +144,9 @@ function defaultBiteOrEat(
   target: Player,
   voteWolves: readonly Player[],
   bitten: boolean,
+  alphaId: bigint | null,
 ): GameEvent[] {
-  if (bitten) return bitePlayer(target);
+  if (bitten) return bitePlayer(target, alphaId);
   return killPlayer(players, target.id, 'Eat', {
     killerIds: voteWolves.map((w) => w.id),
     killedByRole: ROLE_BIT.Wolf,
@@ -156,16 +157,20 @@ function defaultBiteOrEat(
 /**
  * Resolves what happens to a single wolf-pack target on a successful visit
  * (i.e. `ga` didn't block it). Mirrors the big `switch (target.PlayerRole)`
- * inside the Wolf Night block's `case VisitResult.Success`. The Harlot,
- * Serial Killer and Traitor cases are mechanically identical to `default`
- * in the original (their special-casing is achievement-only, via `goto
- * default`), so they're not listed separately here.
+ * inside the Wolf Night block's `case VisitResult.Success`. The Harlot and
+ * Traitor cases are mechanically identical to `default` in the original
+ * (their special-casing is achievement-only, via `goto default`), so
+ * they're not listed separately here. The Serial Killer case *is* listed -
+ * a successful bite there is the "infect the Serial Killer" mechanic
+ * (`StrongestAlpha`), which the original special-cases even though the
+ * actual bite/kill logic is identical to `default`.
  */
 function resolveWolfVictim(
   players: Player[],
   target: Player,
   voteWolves: readonly Player[],
   bitten: boolean,
+  alphaId: bigint | null,
   random: () => number,
 ): GameEvent[] {
   switch (target.role) {
@@ -175,7 +180,11 @@ function resolveWolfVictim(
       return [{ type: 'CursedTurnedWolf', playerId: target.id }];
 
     case ROLE_BIT.Drunk: {
-      if (bitten) return bitePlayer(target);
+      if (bitten) {
+        const events = bitePlayer(target, alphaId);
+        if (alphaId !== null) events.push({ type: 'AlphaWolfLuckyDay', alphaId });
+        return events;
+      }
       const events = killPlayer(players, target.id, 'Eat', {
         killerIds: voteWolves.map((w) => w.id),
         killedByRole: ROLE_BIT.Wolf,
@@ -211,17 +220,27 @@ function resolveWolfVictim(
         events.push({ type: 'HunterCounterAttack', hunterId: target.id, shotWolfId: shotWolf.id, hunterAlsoDied });
         return events;
       }
-      return defaultBiteOrEat(players, target, voteWolves, bitten);
+      return defaultBiteOrEat(players, target, voteWolves, bitten, alphaId);
     }
 
     case ROLE_BIT.WiseElder:
-      if (bitten) return bitePlayer(target);
-      if (target.hasUsedAbility) return defaultBiteOrEat(players, target, voteWolves, false);
+      if (bitten) return bitePlayer(target, alphaId);
+      if (target.hasUsedAbility) return defaultBiteOrEat(players, target, voteWolves, false, alphaId);
       target.hasUsedAbility = true; // survives their first attack, once
       return [{ type: 'WiseElderSurvivedFirstAttack', playerId: target.id }];
 
+    case ROLE_BIT.SerialKiller: {
+      if (!bitten) return defaultBiteOrEat(players, target, voteWolves, false, alphaId);
+      const events = bitePlayer(target, alphaId);
+      if (alphaId !== null) {
+        const alpha = players.find((p) => p.id === alphaId);
+        if (alpha) alpha.strongestAlpha = true;
+      }
+      return events;
+    }
+
     default:
-      return defaultBiteOrEat(players, target, voteWolves, bitten);
+      return defaultBiteOrEat(players, target, voteWolves, bitten, alphaId);
   }
 }
 
@@ -270,6 +289,8 @@ export function resolveWolfNight(players: Player[], state: NightState, visitCtx:
   for (const p of players) p.votes = 0;
 
   const choices = [firstChoiceId, secondChoiceId].filter((c): c is bigint => c !== null);
+  let successCount = 0;
+  let lastAlphaId: bigint | null = null;
 
   for (const choiceId of choices) {
     voteWolves = votingWolves();
@@ -281,13 +302,15 @@ export function resolveWolfNight(players: Player[], state: NightState, visitCtx:
     events.push(...visitEvents);
 
     if (result === 'Success' && target) {
+      successCount++;
       if (state.guardianAngel?.choice === target.id) {
         target.wasSavedLastNight = true;
         events.push({ type: 'GuardianAngelBlockedWolfAttack', targetId: target.id });
       } else {
-        const alphaPresent = voteWolves.some((w) => w.role === ROLE_BIT.AlphaWolf);
-        const bitten = alphaPresent && Math.floor(random() * 100) < 20; // Settings.AlphaWolfConversionChance
-        events.push(...resolveWolfVictim(players, target, voteWolves, bitten, random));
+        const alpha = voteWolves.find((w) => w.role === ROLE_BIT.AlphaWolf) ?? null;
+        lastAlphaId = alpha?.id ?? lastAlphaId;
+        const bitten = alpha !== null && Math.floor(random() * 100) < 20; // Settings.AlphaWolfConversionChance
+        events.push(...resolveWolfVictim(players, target, voteWolves, bitten, alpha?.id ?? null, random));
       }
     }
 
@@ -307,6 +330,10 @@ export function resolveWolfNight(players: Player[], state: NightState, visitCtx:
       }
     }
   }
+
+  // Mirrors `if (eatCount == 2)`: both pack attacks tonight succeeded (visited without dying,
+  // whether or not the target actually ended up bitten/eaten) - feeds IHelped/IncreaseThePack.
+  if (successCount === 2) events.push({ type: 'WolfPackAteTwice', alphaId: lastAlphaId });
 
   state.wolvesThatActed = voteWolves;
   return events;
@@ -677,6 +704,7 @@ export function resolveGuardianAngelNight(
   events.push(...visitEvents);
 
   if ((result === 'Success' || result === 'AlreadyDead') && save) {
+    if (WOLF_ROLES.includes(save.role) && !save.wasSavedLastNight) ga.gaGuardWolfCount++;
     if (save.wasSavedLastNight) {
       const arsonist = players.find((p) => p.role === ROLE_BIT.Arsonist);
       if (save.doused && arsonist?.choice === SPARK) {
