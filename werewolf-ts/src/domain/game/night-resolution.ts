@@ -32,7 +32,7 @@ import { ABSTAIN, SPARK, type Player } from './player.js';
 import { visitPlayer, graveDiggerDetectionChance, type VisitContext } from './night-visit.js';
 import { promoteToCultist, promoteToWolf } from './transform.js';
 import { getTeamForRole } from './team.js';
-import type { GameEvent } from './game-event.js';
+import type { FreezeFlavor, GameEvent } from './game-event.js';
 
 /**
  * Cross-role mutable state for a single night's resolution.
@@ -105,7 +105,7 @@ export function resolveSnowWolfNight(
 
   if (target.role === ROLE_BIT.SerialKiller) {
     target.frozen = true;
-    events.push({ type: 'PlayerFrozen', playerId: target.id, cause: 'SnowWolf' });
+    events.push({ type: 'PlayerFrozen', playerId: target.id, cause: 'SnowWolf', snowWolfId: snowWolf.id, flavor: 'SerialKiller' });
     return events;
   }
 
@@ -118,7 +118,8 @@ export function resolveSnowWolfNight(
   if (target.role === ROLE_BIT.Hunter) {
     if (Math.floor(random() * 100) < 50) {
       target.frozen = true;
-      events.push({ type: 'PlayerFrozen', playerId: target.id, cause: 'SnowWolf' });
+      // Mirrors the original sending the generic `DefaultFrozen` text here, not a Hunter-specific one.
+      events.push({ type: 'PlayerFrozen', playerId: target.id, cause: 'SnowWolf', snowWolfId: snowWolf.id, flavor: 'Default' });
     } else {
       events.push(
         ...killPlayer(players, snowWolf.id, 'HunterShot', {
@@ -130,16 +131,52 @@ export function resolveSnowWolfNight(
     return events;
   }
 
-  // Every other role: freeze them. A frozen Grave Digger who dug at least once tonight has that dig undone.
+  // Every other role: freeze them. A frozen Grave Digger who dug at least once tonight has that dig
+  // undone; a frozen Thief only gets their own flavor text in a "ThiefFull" game (matches
+  // `case IRole.Thief: ... : GetLocaleString("DefaultFrozen")` otherwise).
   target.frozen = true;
-  if (target.role === ROLE_BIT.GraveDigger && target.dugGravesLastNight >= 1) {
-    state.lastGraveDigAt = state.secondLastGraveDigAt;
-    target.dugGravesLastNight = 0;
+  let flavor: FreezeFlavor = 'Default';
+  switch (target.role) {
+    case ROLE_BIT.Harlot:
+      flavor = 'Harlot';
+      break;
+    case ROLE_BIT.Chemist:
+      flavor = 'Chemist';
+      break;
+    case ROLE_BIT.Cultist:
+      flavor = 'Cultist';
+      break;
+    case ROLE_BIT.CultistHunter:
+      flavor = 'CultistHunter';
+      break;
+    case ROLE_BIT.Fool:
+    case ROLE_BIT.Seer:
+    case ROLE_BIT.Sorcerer:
+    case ROLE_BIT.Oracle:
+    case ROLE_BIT.Augur:
+      flavor = 'Seeing';
+      break;
+    case ROLE_BIT.GuardianAngel:
+      flavor = 'GuardianAngel';
+      state.guardianAngel = null;
+      break;
+    case ROLE_BIT.Thief:
+      flavor = visitCtx.thiefFull ? 'Thief' : 'Default';
+      break;
+    case ROLE_BIT.GraveDigger:
+      if (target.dugGravesLastNight >= 1) {
+        flavor = 'GraveDiggerDug';
+        state.lastGraveDigAt = state.secondLastGraveDigAt;
+        target.dugGravesLastNight = 0;
+      }
+      break;
+    case ROLE_BIT.Arsonist:
+      flavor = 'Arsonist';
+      break;
+    default:
+      flavor = 'Default';
   }
-  if (target.role === ROLE_BIT.GuardianAngel) {
-    state.guardianAngel = null;
-  }
-  events.push({ type: 'PlayerFrozen', playerId: target.id, cause: 'SnowWolf' });
+  events.push({ type: 'PlayerFrozen', playerId: target.id, cause: 'SnowWolf', snowWolfId: snowWolf.id, flavor });
   return events;
 }
 
@@ -644,12 +681,22 @@ export function resolveChemistNight(players: Player[], visitCtx: VisitContext): 
         chemist.changedRolesCount++;
         events.push({ type: 'ChemistLostPowerToWiseElder', playerId: chemist.id });
       }
+      events.push({ type: 'ChemistPoisoned', chemistId: chemist.id, targetId: target.id });
       events.push(...killPlayer(players, target.id, 'Chemistry', { killerIds: [chemist.id] }));
     } else {
       // Oops - the Chemist blew themselves up instead.
       events.push({ type: 'ChemistBackfired', chemistId: chemist.id, targetId: target.id });
       events.push(...killPlayer(players, chemist.id, 'Chemistry', { killerIds: [chemist.id] }));
     }
+  } else if (result === 'AlreadyDead' && target) {
+    events.push({ type: 'ChemistTargetAlreadyDead', chemistId: chemist.id, targetId: target.id });
+  } else if (result === 'Fail' && target) {
+    events.push({ type: 'ChemistTargetEmpty', chemistId: chemist.id, targetId: target.id });
+  } else if (result === 'VisitorDied' && target && (target.role === ROLE_BIT.SerialKiller || target.role === ROLE_BIT.GraveDigger)) {
+    // Mirrors the original's `switch (target.PlayerRole) { case SerialKiller: ...; case GraveDigger: ...; }`
+    // with no default - dying to some other visit-death cause (e.g. a burning target) tells neither
+    // party anything beyond the public death announcement, same silent gap as the original.
+    events.push({ type: 'ChemistDiedVisiting', chemistId: chemist.id, targetId: target.id });
   }
 
   return events;
@@ -707,10 +754,11 @@ export function resolveHarlotNight(players: Player[], visitCtx: VisitContext): G
  * accurate, this is almost entirely messages. The one real state change is
  * clearing `doused` off whoever the GA protected, and *only* in two of the
  * three narrative branches: when they weren't otherwise attacked tonight
- * (preventive cleaning), or when they were specifically saved from a spark
- * (the Arsonist chose SPARK). A player saved from a wolf/Serial Killer
- * attack who happens to also be doused does *not* get cleaned here - that
- * asymmetry is exactly what the original's nested if/else encodes.
+ * (preventive cleaning, the only branch that counts towards `Firefighter`),
+ * or when they were specifically saved from a spark (the Arsonist chose
+ * SPARK). A player saved from a wolf/Serial Killer attack who happens to
+ * also be doused does *not* get cleaned here - that asymmetry is exactly
+ * what the original's nested if/else encodes.
  */
 export function resolveGuardianAngelNight(
   players: Player[],
@@ -727,16 +775,29 @@ export function resolveGuardianAngelNight(
 
   if ((result === 'Success' || result === 'AlreadyDead') && save) {
     if (WOLF_ROLES.includes(save.role) && !save.wasSavedLastNight) ga.gaGuardWolfCount++;
+    let cleanedDoused = false;
     if (save.wasSavedLastNight) {
       const arsonist = players.find((p) => p.role === ROLE_BIT.Arsonist);
       if (save.doused && arsonist?.choice === SPARK) {
         save.doused = false;
-        events.push({ type: 'GuardianAngelCleanedDouse', playerId: save.id });
+        events.push({ type: 'GuardianAngelSavedTargetFromFire', gaId: ga.id, targetId: save.id });
+      } else {
+        events.push({ type: 'GuardianAngelSaved', gaId: ga.id, targetId: save.id });
       }
     } else if (save.doused) {
       save.doused = false;
-      events.push({ type: 'GuardianAngelCleanedDouse', playerId: save.id });
+      cleanedDoused = true;
+      events.push({ type: 'GuardianAngelCleanedDouse', gaId: ga.id, playerId: save.id });
     }
+    // Mirrors `if (!save.WasSavedLastNight && !save.DiedLastNight && !cleanedDoused)`: only told
+    // "nothing happened" when the target wasn't attacked, didn't die, and wasn't just doused.
+    if (!save.wasSavedLastNight && !save.diedLastNight && !cleanedDoused) {
+      events.push({ type: 'GuardianAngelNoAttack', gaId: ga.id, targetId: save.id });
+    }
+  } else if (result === 'Fail' && save) {
+    events.push({ type: 'GuardianAngelTargetEmpty', gaId: ga.id, targetId: save.id });
+  } else if (result === 'VisitorDied' && save) {
+    events.push({ type: 'GuardianAngelDiedProtecting', gaId: ga.id, targetId: save.id });
   }
 
   return events;

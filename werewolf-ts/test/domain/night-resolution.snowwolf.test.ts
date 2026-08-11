@@ -42,7 +42,12 @@ describe('resolveSnowWolfNight', () => {
     expect(sk.frozen).toBe(true);
     expect(sk.isDead).toBe(false);
     expect(sw.isDead).toBe(false);
-    expect(events.some((e) => e.type === 'PlayerFrozen' && e.playerId === sk.id)).toBe(true);
+    expect(
+      events.some(
+        (e) =>
+          e.type === 'PlayerFrozen' && e.playerId === sk.id && e.snowWolfId === sw.id && e.flavor === 'SerialKiller',
+      ),
+    ).toBe(true);
   });
 
   it('kills the Snow Wolf visiting a Serial Killer who has not committed to a target', () => {
@@ -122,11 +127,12 @@ describe('resolveSnowWolfNight', () => {
     state.lastGraveDigAt = new Date('2024-01-02T00:00:00Z');
     state.secondLastGraveDigAt = previousDig;
 
-    resolveSnowWolfNight([sw, gd], state, baseCtx([sw, gd]));
+    const events = resolveSnowWolfNight([sw, gd], state, baseCtx([sw, gd]));
 
     expect(gd.frozen).toBe(true);
     expect(gd.dugGravesLastNight).toBe(0);
     expect(state.lastGraveDigAt).toBe(previousDig);
+    expect(events.some((e) => e.type === 'PlayerFrozen' && e.flavor === 'GraveDiggerDug')).toBe(true);
   });
 
   it("does not touch grave-digging state when freezing a Grave Digger who didn't dig", () => {
@@ -139,10 +145,65 @@ describe('resolveSnowWolfNight', () => {
     const lastDig = new Date('2024-01-02T00:00:00Z');
     state.lastGraveDigAt = lastDig;
 
-    resolveSnowWolfNight([sw, gd], state, baseCtx([sw, gd]));
+    const events = resolveSnowWolfNight([sw, gd], state, baseCtx([sw, gd]));
 
     expect(gd.frozen).toBe(true);
     expect(state.lastGraveDigAt).toBe(lastDig);
+    expect(events.some((e) => e.type === 'PlayerFrozen' && e.flavor === 'Default')).toBe(true);
+  });
+
+  it('picks the Thief-specific flavor only in a ThiefFull game, otherwise the default flavor', () => {
+    const sw = createPlayer(1n, 'SW', ROLE_BIT.SnowWolf, 'Wolf');
+    const thief = createPlayer(2n, 'T', ROLE_BIT.Thief, 'Thief');
+    sw.choice = thief.id;
+
+    const notFull = resolveSnowWolfNight([sw, thief], initialNightState(), {
+      players: [sw, thief],
+      dayNumber: 1,
+      thiefFull: false,
+    });
+    expect(notFull.some((e) => e.type === 'PlayerFrozen' && e.flavor === 'Default')).toBe(true);
+
+    const sw2 = createPlayer(3n, 'SW2', ROLE_BIT.SnowWolf, 'Wolf');
+    const thief2 = createPlayer(4n, 'T2', ROLE_BIT.Thief, 'Thief');
+    sw2.choice = thief2.id;
+    const full = resolveSnowWolfNight([sw2, thief2], initialNightState(), {
+      players: [sw2, thief2],
+      dayNumber: 1,
+      thiefFull: true,
+    });
+    expect(full.some((e) => e.type === 'PlayerFrozen' && e.flavor === 'Thief')).toBe(true);
+  });
+
+  it('picks the Harlot/Chemist/Cultist/CultistHunter/Seeing/Arsonist flavors by role', () => {
+    const cases: [ReturnType<typeof createPlayer>, 'Harlot' | 'Chemist' | 'Cultist' | 'CultistHunter' | 'Seeing' | 'Arsonist'][] = [
+      [createPlayer(1n, 'Ha', ROLE_BIT.Harlot, 'Village'), 'Harlot'],
+      [createPlayer(1n, 'Ch', ROLE_BIT.Chemist, 'Village'), 'Chemist'],
+      [createPlayer(1n, 'Cu', ROLE_BIT.Cultist, 'Cult'), 'Cultist'],
+      [createPlayer(1n, 'CH', ROLE_BIT.CultistHunter, 'Village'), 'CultistHunter'],
+      [createPlayer(1n, 'Se', ROLE_BIT.Seer, 'Village'), 'Seeing'],
+      [createPlayer(1n, 'Ar', ROLE_BIT.Arsonist, 'Arsonist'), 'Arsonist'],
+    ];
+    for (const [target, expectedFlavor] of cases) {
+      const sw = createPlayer(99n, 'SW', ROLE_BIT.SnowWolf, 'Wolf');
+      sw.choice = target.id;
+      const events = resolveSnowWolfNight([sw, target], initialNightState(), baseCtx([sw, target]));
+      expect(events.some((e) => e.type === 'PlayerFrozen' && e.flavor === expectedFlavor)).toBe(true);
+    }
+  });
+
+  it('picks the GuardianAngel flavor and still nulls out the shared GA state when freezing the GA itself', () => {
+    const sw = createPlayer(1n, 'SW', ROLE_BIT.SnowWolf, 'Wolf');
+    const ga = createPlayer(2n, 'GA', ROLE_BIT.GuardianAngel, 'Village');
+    ga.choice = 3n;
+    sw.choice = ga.id;
+
+    const state = initialNightState();
+    state.guardianAngel = ga;
+    const events = resolveSnowWolfNight([sw, ga], state, baseCtx([sw, ga]));
+
+    expect(events.some((e) => e.type === 'PlayerFrozen' && e.flavor === 'GuardianAngel')).toBe(true);
+    expect(state.guardianAngel).toBeNull();
   });
 });
 

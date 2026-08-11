@@ -12,9 +12,32 @@
 
 import { ROLE_BIT, ROLE_META, roleName } from '../../domain/roles/role.js';
 import { findById, type Player } from '../../domain/game/player.js';
-import type { GameEvent } from '../../domain/game/game-event.js';
+import type { FreezeFlavor, GameEvent } from '../../domain/game/game-event.js';
 import type { Team } from '../../domain/game/team.js';
 import { deathFlavorKey } from './death-messages.js';
+
+/** The Snow Wolf's target's own "you woke up frozen" locale key, keyed by `FreezeFlavor`. */
+const FREEZE_FLAVOR_KEY: Record<FreezeFlavor, string> = {
+  SerialKiller: 'SKFrozen',
+  Harlot: 'HarlotFrozen',
+  Chemist: 'ChemistFrozen',
+  Cultist: 'CultistFrozen',
+  CultistHunter: 'CHFrozen',
+  Seeing: 'SeeingFrozen',
+  GuardianAngel: 'GAFrozen',
+  Thief: 'ThiefFrozen',
+  GraveDiggerDug: 'GraveDiggerFrozen',
+  Arsonist: 'ArsonistNotFrozen',
+  Default: 'DefaultFrozen',
+};
+
+const WOLF_TEAM_ROLES: ReadonlySet<bigint> = new Set([
+  ROLE_BIT.Wolf,
+  ROLE_BIT.AlphaWolf,
+  ROLE_BIT.WolfCub,
+  ROLE_BIT.Lycan,
+  ROLE_BIT.SnowWolf,
+]);
 
 export interface OutgoingMessage {
   /** `'group'` broadcasts to the game's chat; a `bigint` PMs that one player. */
@@ -167,16 +190,76 @@ export function describeEvent(
       ];
 
     case 'PlayerFrozen':
-      return [{ audience: event.playerId, key: 'YouWereFrozen', args: [] }];
+      return [
+        { audience: event.playerId, key: FREEZE_FLAVOR_KEY[event.flavor], args: [] },
+        { audience: event.snowWolfId, key: 'SuccessfulFreeze', args: [name(event.playerId)] },
+      ];
 
     case 'PlayerDoused':
       return [{ audience: event.playerId, key: 'YouWereDoused', args: [] }];
 
+    // Mirrors `GuardBlockedSnowWolf` in the original: the Snow Wolf, not the Guardian Angel, is
+    // who gets told the freeze was blocked - the GA's own "you saved someone" PM comes later, from
+    // `GuardianAngelSaved`/`GuardianAngelSavedTargetFromFire` (the original's `#region GA Night`
+    // block runs after the attacker regions and is the *only* place the GA is ever messaged).
     case 'GuardianAngelBlockedFreeze':
+      return [{ audience: event.snowWolfId, key: 'GuardBlockedSnowWolf', args: [name(event.targetId)] }];
+
+    // Purely state-flagging (sets `wasSavedLastNight`) in the original too - no message fires here,
+    // only later from the GA's own night-resolution block (see above).
     case 'GuardianAngelBlockedWolfAttack':
     case 'GuardianAngelBlockedSerialKiller':
     case 'GuardianAngelSavedFromBurning':
-      return guardianAngelPm(players);
+      return [];
+
+    case 'GuardianAngelSaved':
+      return [
+        { audience: event.gaId, key: 'GuardSaved', args: [name(event.targetId)] },
+        { audience: event.targetId, key: 'GuardSavedYou', args: [] },
+      ];
+
+    case 'GuardianAngelSavedTargetFromFire':
+      return [
+        { audience: event.gaId, key: 'GuardSavedFromFire', args: [name(event.targetId)] },
+        { audience: event.targetId, key: 'GuardSavedYouFromFire', args: [] },
+      ];
+
+    case 'GuardianAngelNoAttack':
+      return [{ audience: event.gaId, key: 'GuardNoAttack', args: [name(event.targetId)] }];
+
+    case 'GuardianAngelTargetEmpty':
+      return [{ audience: event.gaId, key: 'GuardEmptyHouse', args: [name(event.targetId)] }];
+
+    case 'GuardianAngelDiedProtecting': {
+      const target = findById(players, event.targetId);
+      const key = WOLF_TEAM_ROLES.has(target?.role ?? 0n)
+        ? 'GuardWolf'
+        : target?.role === ROLE_BIT.SerialKiller
+          ? 'GuardKiller'
+          : 'GAFell';
+      return [{ audience: event.gaId, key, args: key === 'GAFell' ? [name(event.targetId)] : [] }];
+    }
+
+    case 'ChemistPoisoned':
+      return [
+        { audience: event.chemistId, key: 'ChemistSuccess', args: [name(event.targetId)] },
+        { audience: event.targetId, key: 'ChemistVisitYouSuccess', args: [] },
+      ];
+
+    case 'ChemistTargetAlreadyDead':
+      return [{ audience: event.chemistId, key: 'ChemistTargetDead', args: [name(event.targetId)] }];
+
+    case 'ChemistTargetEmpty':
+      return [{ audience: event.chemistId, key: 'ChemistTargetEmpty', args: [name(event.targetId)] }];
+
+    case 'ChemistDiedVisiting': {
+      const target = findById(players, event.targetId);
+      const dug = target?.role === ROLE_BIT.GraveDigger;
+      return [
+        { audience: event.chemistId, key: dug ? 'ChemistFell' : 'ChemistSK', args: [name(event.targetId)] },
+        { audience: event.targetId, key: dug ? 'ChemistFellDigger' : 'ChemistVisitYouSK', args: [name(event.chemistId)] },
+      ];
+    }
 
     case 'WiseElderSurvivedFirstAttack':
       return [{ audience: event.playerId, key: 'WiseElderSurvived', args: [] }];
@@ -208,17 +291,24 @@ export function describeEvent(
         },
       ];
 
+    case 'GuardianAngelCleanedDouse':
+      return [{ audience: event.gaId, key: 'CleanDoused', args: [name(event.playerId)] }];
+
+    case 'ChemistBackfired':
+      return [
+        { audience: event.chemistId, key: 'ChemistFail', args: [name(event.targetId)] },
+        { audience: event.targetId, key: 'ChemistVisitYouFail', args: [name(event.chemistId)] },
+      ];
+
     // Internal bookkeeping / achievement-only in the original - no player-visible text.
     case 'WolfCubKilled':
     case 'CultConversionFailed':
-    case 'GuardianAngelCleanedDouse':
     case 'SerialKillerRandomKill':
     case 'PlayerBitten':
     case 'RoleModelChosen':
     case 'WolfPackAteTwice':
     case 'AlphaWolfLuckyDay':
     case 'HarlotVisited':
-    case 'ChemistBackfired':
     case 'WolfPackHasDrunkMembers':
     case 'HunterMustShoot': // handled separately by the game loop (triggers the final-shot menu)
       return [];
@@ -262,9 +352,3 @@ function wolfPackPms(players: readonly Player[], detectiveName: string, key: str
   return pack.map((w) => ({ audience: w.id, key, args: [detectiveName] }));
 }
 
-/** The four "your protection worked" events don't all carry the Guardian Angel's own id - look them up. */
-function guardianAngelPm(players: readonly Player[]): OutgoingMessage[] {
-  const ga = players.find((p) => !p.isDead && p.role === ROLE_BIT.GuardianAngel);
-  if (!ga) return [];
-  return [{ audience: ga.id, key: 'ProtectionWorked', args: [] }];
-}
