@@ -4,6 +4,12 @@
   "base": "en",
   "strings": {
     "Pong": ["pong"],
+    "SpamWarning": ["Merci de ne pas me spammer. La prochaine fois, ce sera un bannissement automatique."],
+    "SpamBanned": ["Tu as été banni(e) pour spam. Ta durée de bannissement est : {0}"],
+    "SpamBanDuration12h": ["12 heures"],
+    "SpamBanDuration24h": ["24 heures"],
+    "SpamBanDuration3d": ["3 jours"],
+    "SpamBanPermanent": ["Permanent. Tu as atteint la limite maximale de bannissements temporaires pour spam."],
     "WelcomeMessage": [
       "Bienvenue sur Loup-Garou ! Ajoute-moi à un groupe et utilise /startgame pour jouer.",
       "Salut, je suis le bot Loup-Garou. Ajoute-moi à un groupe et tape /startgame pour commencer une partie."
