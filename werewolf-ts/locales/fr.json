@@ -512,6 +512,19 @@
     ],
     "AboutAugur": [
       "Vous êtes l'Augure 🦅. Chaque matin, vous pouvez regarder le vol des oiseaux et deviner un rôle qui n'est pas présent dans le village. Les oiseaux ne vous montreront jamais deux fois le même rôle, usez bien de cette information !"
-    ]
+    ],
+
+    "GifPackNone": ["Vous n'avez pas encore de pack de gifs personnalisé. Répondez à un gif ou une vidéo avec /setgif <catégorie> pour commencer à en soumettre un."],
+    "GifPackApproved": ["Votre pack de gifs personnalisé est approuvé et utilisé !"],
+    "GifPackPending": ["Votre pack de gifs personnalisé est soumis et en attente de validation."],
+    "GifPackFilledCount": ["Catégories remplies : {0}/{1}."],
+    "GifPackHowTo": ["Répondez à un gif ou une vidéo avec /setgif <catégorie> pour remplir une catégorie. Catégories disponibles : {0}."],
+    "GifPackUnknownCategory": ["Catégorie inconnue. Catégories disponibles : {0}."],
+    "GifPackReplyRequired": ["Répondez à un gif ou une vidéo avec cette commande pour le soumettre."],
+    "GifPackSubmitted": ["Votre gif pour {0} a été enregistré. Il sera vérifié avant que votre pack soit actif."],
+    "GifPackGroupCleared": ["Ce groupe n'utilise plus de pack de gifs personnalisé."],
+    "GifPackUsageUsePack": ["Utilisez /usegifpack <identifiant telegram> pour activer un pack de gifs approuvé dans ce groupe, ou /usegifpack none pour le désactiver."],
+    "GifPackNotApproved": ["Ce pack de gifs n'est pas encore approuvé."],
+    "GifPackGroupSet": ["Ce groupe utilisera désormais ce pack de gifs personnalisé."]
   }
 }

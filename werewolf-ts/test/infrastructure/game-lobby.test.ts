@@ -53,6 +53,7 @@ function fakeGroup(telegramId: bigint, title: string | null, overrides: Partial<
     memberCount: null,
     preferred: false,
     inviteLink: null,
+    defaultGifPackId: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     disabledRoles: [],

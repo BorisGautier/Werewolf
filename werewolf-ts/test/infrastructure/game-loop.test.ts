@@ -54,6 +54,7 @@ function fakeGroup(overrides: Partial<GroupWithConfig> = {}): GroupWithConfig {
     memberCount: null,
     preferred: false,
     inviteLink: null,
+    defaultGifPackId: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     disabledRoles: [],
@@ -61,9 +62,10 @@ function fakeGroup(overrides: Partial<GroupWithConfig> = {}): GroupWithConfig {
   };
 }
 
-function createHarness() {
+function createHarness(options: { gifPacks?: import('../../src/infrastructure/persistence/gif-pack.repository.js').GifPackRepository } = {}) {
   const sendMessage = vi.fn().mockResolvedValue({ message_id: 1 });
-  const bot = { api: { sendMessage } } as unknown as Bot;
+  const sendAnimation = vi.fn().mockResolvedValue({ message_id: 1 });
+  const bot = { api: { sendMessage, sendAnimation } } as unknown as Bot;
 
   const gameManager = new GameManager();
 
@@ -87,9 +89,9 @@ function createHarness() {
 
   const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as import('../../src/infrastructure/logging/logger.js').Logger;
 
-  const loop = new GameLoop(bot, gameManager, groups, gameRepo, achievements, translator, logger);
+  const loop = new GameLoop(bot, gameManager, groups, gameRepo, achievements, translator, logger, options.gifPacks);
 
-  return { loop, bot, sendMessage, gameManager, groups, gameRepo, achievements, group, logger };
+  return { loop, bot, sendMessage, sendAnimation, gameManager, groups, gameRepo, achievements, group, logger };
 }
 
 /** A 5-player game (1 Wolf, 4 Villagers) already dealt and in Night 1, matching what
@@ -130,6 +132,41 @@ describe('GameLoop', () => {
     expect(victim.isDead).toBe(true);
     expect(game.phase).toBe('Day');
     expect(sendMessage).toHaveBeenCalled();
+  });
+
+  it("sends the dying player's approved gif alongside the night-kill announcement, when a gif pack repository is wired in", async () => {
+    const getApprovedFileId = vi.fn(async () => 'FILE_ID_123');
+    const gifPacks = { getApprovedFileId } as unknown as import('../../src/infrastructure/persistence/gif-pack.repository.js').GifPackRepository;
+    const { loop, gameManager, sendAnimation } = createHarness({ gifPacks });
+    const game = dealtGame(gameManager);
+    const wolf = game.players[0]!;
+    const victim = game.players[1]!;
+
+    loop.start(game, 42);
+    await vi.advanceTimersByTimeAsync(0);
+
+    await loop.handleCallback(wolf.id, wolf.id, `nt:${victim.id.toString()}`);
+    await vi.advanceTimersByTimeAsync(5000); // night timer
+
+    expect(victim.isDead).toBe(true);
+    expect(getApprovedFileId).toHaveBeenCalledWith('VillagerDie', null, victim.id);
+    expect(sendAnimation).toHaveBeenCalledWith(Number(game.chatId), 'FILE_ID_123');
+  });
+
+  it('skips the gif send entirely when no gif pack repository is wired in (default behavior)', async () => {
+    const { loop, gameManager, sendAnimation } = createHarness();
+    const game = dealtGame(gameManager);
+    const wolf = game.players[0]!;
+    const victim = game.players[1]!;
+
+    loop.start(game, 42);
+    await vi.advanceTimersByTimeAsync(0);
+
+    await loop.handleCallback(wolf.id, wolf.id, `nt:${victim.id.toString()}`);
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(victim.isDead).toBe(true);
+    expect(sendAnimation).not.toHaveBeenCalled();
   });
 
   it("clears drunk/frozen/burning once that night's menus are sent, so none of them linger forever", async () => {

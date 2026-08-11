@@ -22,12 +22,14 @@ import { ROLE_BIT, roleName, type Role, type RoleName } from '../../domain/roles
 import { WOLF_ROLES } from '../../domain/game/game-balancing.js';
 import { ABSTAIN, SPARK, alivePlayers, type Player } from '../../domain/game/player.js';
 import type { GameEvent } from '../../domain/game/game-event.js';
+import type { Team } from '../../domain/game/team.js';
 import { evaluateGameAchievements, firstLynchVictimId } from '../../domain/achievements/evaluate.js';
 import { ACHIEVEMENTS, type AchievementCode } from '../../domain/achievements/catalog.js';
 import type { GroupWithConfig } from '../persistence/group.repository.js';
 import { AchievementRepository } from '../persistence/achievement.repository.js';
 import { GameRepository } from '../persistence/game.repository.js';
 import { GroupRepository } from '../persistence/group.repository.js';
+import { GifPackRepository, type GifCategory } from '../persistence/gif-pack.repository.js';
 import type { Translator } from '../i18n/translator.js';
 import type { Logger } from '../logging/logger.js';
 import { describeEvent } from './messages.js';
@@ -60,6 +62,7 @@ export class GameLoop {
     private readonly achievements: AchievementRepository,
     private readonly t: Translator,
     private readonly logger: Logger,
+    private readonly gifPacks?: GifPackRepository,
   ) {}
 
   /**
@@ -630,7 +633,38 @@ export class GameLoop {
           await this.send(msg.audience, group.language, msg.key, ...msg.args);
         }
       }
+      await this.sendGifForEvent(game, group, event);
       await this.recordKillEvent(game, phase, event);
+    }
+  }
+
+  /**
+   * Port of the original's custom-gif-pack broadcasting: alongside the text announcement, send
+   * whichever video/animation `file_id` the group's default pack (or, for a death, the dying
+   * player's own approved pack) has configured for this event - a no-op until someone actually
+   * submits and gets a pack approved, matching today's text-only behavior exactly.
+   */
+  private async sendGifForEvent(game: Game, group: GroupWithConfig, event: GameEvent): Promise<void> {
+    if (!this.gifPacks) return;
+
+    let category: GifCategory | null = null;
+    let playerId: bigint | undefined;
+
+    if (event.type === 'PlayerDied' && event.isNight) {
+      category = event.method === 'Burn' ? 'BurnToDeath' : event.method === 'SerialKilled' ? 'SKKilled' : 'VillagerDie';
+      playerId = event.playerId;
+    } else if (event.type === 'GameEnded') {
+      category = WIN_TEAM_GIF_CATEGORY[event.winningTeam] ?? null;
+    }
+    if (!category) return;
+
+    const fileId = await this.gifPacks.getApprovedFileId(category, group.defaultGifPackId, playerId);
+    if (!fileId) return;
+
+    try {
+      await this.bot.api.sendAnimation(chatNumber(game.chatId), fileId);
+    } catch (err) {
+      this.logger.warn({ err, chatId: game.chatId.toString(), category }, 'Failed to send gif pack animation');
     }
   }
 
@@ -664,6 +698,20 @@ export class GameLoop {
     }
   }
 }
+
+/** Maps a `GameEnded` winning team to its custom-gif-pack category - mirrors `CustomGifData`'s
+ * per-outcome fields. Team outcomes with no original equivalent (this port's `SKHunter` standoff
+ * win, `Neutral`/`Thief`) are left out - they simply never trigger a gif, same as today. */
+const WIN_TEAM_GIF_CATEGORY: Partial<Record<Team, GifCategory>> = {
+  Village: 'VillagersWin',
+  Wolf: 'WolvesWin',
+  Tanner: 'TannerWin',
+  Cult: 'CultWins',
+  SerialKiller: 'SerialKillerWins',
+  Arsonist: 'ArsonistWins',
+  Lovers: 'LoversWin',
+  NoOne: 'NoWinner',
+};
 
 const NIGHT_PROMPT_KEY: Partial<Record<RoleName, string>> = {
   Seer: 'AskSeer',

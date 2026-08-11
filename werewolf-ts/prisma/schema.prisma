@@ -164,6 +164,7 @@ model Player {
   achievements   PlayerAchievement[]
   globalBans     GlobalBan[]
   adminGrants    AdminUser[]
+  gifPack        CustomGifPack?
 
   @@map("players")
 }
@@ -205,6 +206,11 @@ model Group {
   preferred    Boolean  @default(false)
   inviteLink   String?
 
+  /// Which approved gif pack (if any) this group broadcasts with. Optional even when the owner
+  /// has other approved packs elsewhere - a group only uses one it explicitly opted into.
+  defaultGifPackId Int?
+  defaultGifPack   CustomGifPack? @relation(fields: [defaultGifPackId], references: [id])
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -213,6 +219,46 @@ model Group {
   dailyStats    DailyStat[]
 
   @@map("groups")
+}
+
+/// Port of `CustomGifData`: one custom gif pack per player, one Telegram `file_id` per
+/// announcement type. Unlike the original there's no CDN - each field holds whatever
+/// video/animation `file_id` Telegram gave the bot when the owner submitted it (via `/setgif`),
+/// which Telegram can resend indefinitely without re-uploading. No pack ships with any field
+/// populated by default; until a group opts into one (`/config` -> gif pack, or a player's own
+/// approved pack while they're `hasUsedAbility`-style "active" - see `game-loop.ts`), broadcasts
+/// are text-only, identical to before this feature existed.
+model CustomGifPack {
+  id         Int      @id @default(autoincrement())
+  ownerId    Int      @unique
+  owner      Player   @relation(fields: [ownerId], references: [id])
+
+  submitted  Boolean  @default(false)
+  approved   Boolean  @default(false)
+  nsfw       Boolean  @default(false)
+  approvedBy BigInt?
+
+  villagerDie     String?
+  wolfWin         String?
+  wolvesWin       String?
+  villagersWin    String?
+  noWinner        String?
+  startGame       String?
+  startChaosGame  String?
+  tannerWin       String?
+  cultWins        String?
+  serialKillerWins String?
+  loversWin       String?
+  skKilled        String?
+  arsonistWins    String?
+  burnToDeath     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  groupsUsingAsDefault Group[]
+
+  @@map("custom_gif_packs")
 }
 
 model GroupDisabledRole {

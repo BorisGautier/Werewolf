@@ -52,6 +52,11 @@ export class GroupRepository {
   async markBotLeft(telegramId: bigint): Promise<void> {
     await this.prisma.group.update({ where: { telegramId }, data: { botInGroup: false } });
   }
+
+  /** `/usegifpack`: opts (or un-opts, via `null`) this group into an approved custom gif pack. */
+  async setDefaultGifPack(telegramId: bigint, gifPackId: number | null): Promise<void> {
+    await this.prisma.group.update({ where: { telegramId }, data: { defaultGifPackId: gifPackId } });
+  }
 }
 
 /** The `Game` construction options a `GroupWithConfig` maps to (mode/timers are read separately per call site). */
