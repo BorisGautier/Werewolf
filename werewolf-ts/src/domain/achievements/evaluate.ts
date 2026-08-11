@@ -110,8 +110,10 @@ export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigin
   }
   // #20 BlackSheep - cross-game "lynched first" streak, computed in AchievementRepository (using
   // the single-game "was this the game's first lynch victim" signal below).
-  // #21 Promiscuous - needs the Harlot's full night-by-night visit history, which isn't tracked
-  // (only the current night's choice survives). Deferred.
+  // #21 Promiscuous - as the Harlot, 5+ distinct visits, never staying home or repeating one.
+  for (const p of players) {
+    if (!p.hasStayedHome && !p.hasRepeatedVisit && p.playersVisited.size >= 5) out.grant(p.id, 'Promiscuous');
+  }
   // #22 MasonBrother - two or more surviving masons.
   {
     const masons = players.filter((p) => p.role === ROLE_BIT.Mason && !p.isDead);
@@ -397,8 +399,11 @@ export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigin
   // #75 CultLeader - a founding cultist (converted on day 0, i.e. never converted at all) who
   // survives and wins.
   for (const p of players) if (p.role === ROLE_BIT.Cultist && p.dayCult === 0 && !p.isDead && p.won) out.grant(p.id, 'CultLeader');
-  // #76 ThanksJunior - needs to know the pack was drunk and this specific wolf still tried to
-  // eat; the domain's drunk-pack skip doesn't emit a distinguishing event. Deferred.
+  // #76 ThanksJunior - a still-sober wolf can act while the rest of the pack sleeps off eating
+  // the Drunk.
+  for (const event of allEvents) {
+    if (event.type === 'WolfPackHasDrunkMembers') out.grantAll(event.soberWolfIds, 'ThanksJunior');
+  }
   // #77 DeathVillage - the game ends with no winner.
   if (ctx.winningTeam === undefined)
     out.grantAll(
@@ -408,8 +413,12 @@ export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigin
   // #78 ILostMyWisdom - the Wise Elder changed role (turned wolf via a bite - the only way a Wise
   // Elder's role changes in this port).
   for (const p of players) if (p.originalRole === ROLE_BIT.WiseElder && p.changedRolesCount >= 1) out.grant(p.id, 'ILostMyWisdom');
-  // #79 Affectionate - needs the Harlot's per-night visit history (only the current night's choice
-  // survives resolution in this port). Deferred.
+  // #79 Affectionate - the Harlot visits their own lover.
+  for (const event of allEvents) {
+    if (event.type !== 'HarlotVisited') continue;
+    const harlot = findPlayer(event.harlotId);
+    if (harlot?.loverId === event.targetId) out.grant(harlot.id, 'Affectionate');
+  }
   // #80 LuckyDay - the Alpha Wolf bit the Drunk instead of eating them (staying sober, since only
   // the eat path puts the pack to sleep).
   for (const event of allEvents) {
@@ -479,8 +488,18 @@ export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigin
     const snowWolf = players.find((p) => p.role === ROLE_BIT.SnowWolf);
     if (froze && snowWolf) out.grant(snowWolf.id, 'ColdAsIce');
   }
-  // #92 GoodChoiceForYou - needs the Chemist's per-visit survival history across the game.
-  // Deferred.
+  // #92 GoodChoiceForYou - the Chemist successfully poisons a target (and survives, implicit in a
+  // 'Chemistry' death that isn't their own) 3 times in the game.
+  {
+    const counts = new Map<bigint, number>();
+    for (const death of deaths) {
+      if (death.method !== 'Chemistry' || death.killerIds.length === 0) continue;
+      const chemistId = death.killerIds[0]!;
+      if (death.playerId === chemistId) continue; // the backfire case - the "victim" is the Chemist themselves
+      counts.set(chemistId, (counts.get(chemistId) ?? 0) + 1);
+    }
+    for (const [id, count] of counts) if (count >= 3) out.grant(id, 'GoodChoiceForYou');
+  }
   // #94 Firefighter - the Guardian Angel cleans kerosene off 3+ houses in the game.
   {
     const cleans = allEvents.filter((e) => e.type === 'GuardianAngelCleanedDouse').length;
@@ -563,8 +582,19 @@ export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigin
       if (poisonedAfterSave) out.grant(ga.id, 'AtLeastYouTried');
     }
   }
-  // #100 LuckyNight - needs to know the Harlot visited a specific player the same night the
-  // Chemist visited them too; visit targets aren't retained after resolution. Deferred.
+  // #100 LuckyNight - the same player survives both the Chemist's backfired poison and a Harlot
+  // visit on the same night.
+  for (const batch of ctx.eventBatches) {
+    const backfiredTargets = new Set(
+      batch.filter((e): e is Extract<GameEvent, { type: 'ChemistBackfired' }> => e.type === 'ChemistBackfired').map((e) => e.targetId),
+    );
+    if (backfiredTargets.size === 0) continue;
+    for (const event of batch) {
+      if (event.type !== 'HarlotVisited' || !backfiredTargets.has(event.targetId)) continue;
+      const target = findPlayer(event.targetId);
+      if (target && !target.isDead) out.grant(target.id, 'LuckyNight');
+    }
+  }
   // #101 InTheMiddleOfTheTrouble - the Guardian Angel blocks a wolf attack (and survives, which
   // is implicit - the GA only gets hurt on a 50% roll while guarding, tracked separately).
   for (const event of allEvents) {

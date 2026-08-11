@@ -202,6 +202,9 @@ export function describeEvent(
     case 'RoleModelChosen':
     case 'WolfPackAteTwice':
     case 'AlphaWolfLuckyDay':
+    case 'HarlotVisited':
+    case 'ChemistBackfired':
+    case 'WolfPackHasDrunkMembers':
     case 'HunterMustShoot': // handled separately by the game loop (triggers the final-shot menu)
       return [];
 

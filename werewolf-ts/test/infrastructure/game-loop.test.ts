@@ -132,6 +132,22 @@ describe('GameLoop', () => {
     expect(sendMessage).toHaveBeenCalled();
   });
 
+  it("clears drunk/frozen/burning once that night's menus are sent, so none of them linger forever", async () => {
+    const { loop, gameManager } = createHarness();
+    const game = dealtGame(gameManager);
+    const villager = game.players[1]!;
+    villager.drunk = true;
+    villager.frozen = true;
+    villager.burning = true;
+
+    loop.start(game, 42);
+    await vi.advanceTimersByTimeAsync(0); // menu-sending microtasks flush, including the reset
+
+    expect(villager.drunk).toBe(false);
+    expect(villager.frozen).toBe(false);
+    expect(villager.burning).toBe(false);
+  });
+
   it("a lynch vote via callback gets tallied and the lynched player's death is announced", async () => {
     const { loop, gameManager, sendMessage } = createHarness();
     const game = dealtGame(gameManager);
