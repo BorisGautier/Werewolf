@@ -44,6 +44,7 @@ function fakeGroup(overrides: Partial<GroupWithConfig> = {}): GroupWithConfig {
     thiefFull: false,
     burningOverkill: false,
     showRolesOnDeath: true,
+    showRolesEnd: 'ALL',
     showIds: false,
     shufflePlayerList: false,
     randomMode: false,
@@ -211,7 +212,7 @@ describe('GameLoop', () => {
   });
 
   it('finalizes and removes the game from the registry once it ends, without creating a second DB row', async () => {
-    const { loop, gameManager, gameRepo, achievements } = createHarness();
+    const { loop, gameManager, gameRepo, achievements, sendMessage } = createHarness();
     const game = dealtGame(gameManager);
     const wolf = game.players[0]!;
 
@@ -253,6 +254,16 @@ describe('GameLoop', () => {
     // Achievements are evaluated (both single-game and cross-game) once the game ends.
     expect(achievements.unlock).toHaveBeenCalledWith(wolf.id, 'WelcomeToHell');
     expect(achievements.recordGameResult).toHaveBeenCalledTimes(1);
+
+    // The end-of-game recap (fakeGroup defaults to showRolesEnd: 'ALL') lists every player by
+    // name, including the game's duration since finalizeGame resolved a start time.
+    const summaryCall = sendMessage.mock.calls.find(
+      (call) => typeof call[1] === 'string' && call[1].includes('Players Alive'),
+    );
+    expect(summaryCall).toBeDefined();
+    const summaryText = summaryCall![1] as string;
+    for (const p of game.players) expect(summaryText).toContain(p.name);
+    expect(summaryText).toContain('Game Length:');
   });
 
   it("passes the game's real-world duration and surviving/non-fled players as longHaul, for the LongHaul achievement", async () => {

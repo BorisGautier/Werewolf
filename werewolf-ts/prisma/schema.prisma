@@ -39,6 +39,15 @@ enum GamePhase {
   NIGHT
 }
 
+/// Mirrors `DbGroup.ShowRolesEnd` ("None"/"Living"/"All"): how much of the end-of-game recap
+/// (`GameLoop.finish`) reveals. NONE lists just player names, LIVING lists surviving players with
+/// their roles, ALL lists every player (dead or alive) with their role and outcome.
+enum ShowRolesEndMode {
+  NONE
+  LIVING
+  ALL
+}
+
 enum Team {
   VILLAGE
   CULT
@@ -197,6 +206,7 @@ model Group {
   thiefFull                Boolean @default(false)
   burningOverkill          Boolean @default(false)
   showRolesOnDeath         Boolean @default(true)
+  showRolesEnd             ShowRolesEndMode @default(ALL)
   showIds                  Boolean @default(false)
   shufflePlayerList        Boolean @default(false)
   randomMode               Boolean @default(false)

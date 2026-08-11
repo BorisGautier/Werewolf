@@ -34,6 +34,7 @@ import type { Translator } from '../i18n/translator.js';
 import type { Logger } from '../logging/logger.js';
 import { describeEvent } from './messages.js';
 import { dayOneTargets, DAY_ABILITY_ROLES, DAY_TARGET_ROLES, NIGHT_TARGET_ROLES, nightTargets } from './role-menus.js';
+import { buildEndGameSummary } from './end-game-summary.js';
 
 const NIGHT_ONE_MIN_SECONDS = 120;
 
@@ -350,8 +351,8 @@ export class GameLoop {
     const batches = this.eventBatches.get(game.chatId) ?? [];
     this.eventBatches.delete(game.chatId);
 
+    let startedAt: Date | undefined;
     if (gameId !== undefined) {
-      let startedAt: Date | undefined;
       try {
         startedAt = await this.gameRepo.finalizeGame(gameId, game.winningTeam, game.players);
       } catch (err) {
@@ -363,6 +364,19 @@ export class GameLoop {
         this.logger.error({ err, chatId: game.chatId.toString(), gameId }, 'Failed to award achievements');
       }
     }
+
+    // Mirrors the recap `DoGameEnd` sends right after the win announcement (`switch
+    // (DbGroup.ShowRolesEnd) { ... }` plus the trailing `EndTime` line): who was who, who's still
+    // standing, and how long the game ran.
+    try {
+      const group = await this.groups.getOrCreate(game.chatId, null, null);
+      const durationMs = startedAt ? Date.now() - startedAt.getTime() : null;
+      const summary = buildEndGameSummary(game.players, group.showRolesEnd, group.language, this.t, durationMs);
+      await this.sendRaw(game.chatId, summary);
+    } catch (err) {
+      this.logger.error({ err, chatId: game.chatId.toString() }, 'Failed to send end-of-game summary');
+    }
+
     this.games.remove(game.chatId);
   }
 
@@ -693,6 +707,16 @@ export class GameLoop {
   private async send(chatId: bigint, language: string, key: string, ...args: unknown[]): Promise<void> {
     try {
       await this.bot.api.sendMessage(chatNumber(chatId), this.t.translate(language, key, ...args));
+    } catch (err) {
+      if (err instanceof GrammyError) return;
+      throw err;
+    }
+  }
+
+  /** Sends an already-built message verbatim (e.g. `buildEndGameSummary`'s output) instead of translating a key. */
+  private async sendRaw(chatId: bigint, text: string): Promise<void> {
+    try {
+      await this.bot.api.sendMessage(chatNumber(chatId), text);
     } catch (err) {
       if (err instanceof GrammyError) return;
       throw err;
