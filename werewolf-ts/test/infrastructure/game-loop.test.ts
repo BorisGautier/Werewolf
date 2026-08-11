@@ -400,4 +400,27 @@ describe('GameLoop', () => {
       false,
     );
   });
+
+  it('skipVote() resolves the current night immediately, without waiting out the timer', async () => {
+    const { loop, gameManager } = createHarness();
+    const game = dealtGame(gameManager);
+    const wolf = game.players[0]!;
+    const victim = game.players[1]!;
+
+    loop.start(game, 42);
+    await vi.advanceTimersByTimeAsync(0);
+    await loop.handleCallback(wolf.id, wolf.id, `nt:${victim.id.toString()}`);
+
+    const skipped = loop.skipVote(game.chatId);
+    expect(skipped).toBe(true);
+    await vi.advanceTimersByTimeAsync(0); // let the now-resolved sleep's continuation run
+
+    expect(victim.isDead).toBe(true);
+    expect(game.phase).toBe('Day');
+  });
+
+  it('skipVote() returns false when no phase is currently waiting on a timer for that chat', () => {
+    const { loop } = createHarness();
+    expect(loop.skipVote(999n)).toBe(false);
+  });
 });

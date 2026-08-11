@@ -28,6 +28,11 @@ export class GroupRepository {
     return this.prisma.group.findFirst({ where: { username: { equals: username, mode: 'insensitive' } }, include: { disabledRoles: true } });
   }
 
+  /** Resolves an invite-link argument (e.g. `/leavegroup`) by matching its trailing hash. */
+  async findByInviteLinkSuffix(hash: string): Promise<GroupWithConfig | null> {
+    return this.prisma.group.findFirst({ where: { inviteLink: { endsWith: hash } }, include: { disabledRoles: true } });
+  }
+
   async updateConfig(telegramId: bigint, data: Partial<Group>): Promise<void> {
     await this.prisma.group.update({ where: { telegramId }, data });
   }

@@ -1,3 +1,5 @@
+import { exec } from 'node:child_process';
+import * as os from 'node:os';
 import { Bot, GrammyError, HttpError, InlineKeyboard, type Context } from 'grammy';
 import { GameManager } from '../../application/game-manager.js';
 import type { Env } from '../config/env.js';
@@ -12,9 +14,15 @@ import { PlayerRepository } from '../persistence/player.repository.js';
 import { GameLobbyManager } from './game-lobby.js';
 import { GameLoop } from './game-loop.js';
 import { ConfigMenu } from './config-menu.js';
-import { nonNumericWords, numericIdTargets, replyTarget, resolveEntityTargets } from './moderation-targets.js';
+import {
+  nonNumericWords,
+  numericIdTargets,
+  replyTarget,
+  resolveEntityTargets,
+  resolveGroupArg,
+} from './moderation-targets.js';
 import { ABOUT_ROLE_BY_TRIGGER, aboutLocaleKey } from './role-info.js';
-import { ROLE_META } from '../../domain/roles/role.js';
+import { ROLE_META, roleName } from '../../domain/roles/role.js';
 import { ACHIEVEMENT_CODES, ACHIEVEMENTS } from '../../domain/achievements/catalog.js';
 
 export interface BotDependencies {
@@ -43,6 +51,9 @@ const INVITE_LINK_PATTERN = /^(https?:\/\/)?t(elegram)?\.me\/(\+|joinchat\/)([a-
  */
 export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot {
   const bot = new Bot(env.botToken);
+  const startTime = new Date();
+  /** Toggled by the dev-only `/maintenance` command; blocks new games while true. */
+  const maintenance = { on: false };
   const gameLoop = new GameLoop(
     bot,
     deps.gameManager,
@@ -154,6 +165,10 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
 
   bot.command(['startgame', 'startchaos'], async (ctx) => {
     if (!ctx.chat || ctx.chat.type === 'private' || !ctx.from) return;
+    if (maintenance.on) {
+      await ctx.reply('Sorry, we are about to start maintenance.  Please check @greywolfdev for more information.');
+      return;
+    }
     const mode = ctx.message?.text?.startsWith('/startchaos') ? 'Chaos' : 'Normal';
     const name = `${ctx.from.first_name} ${ctx.from.last_name ?? ''}`.trim();
     await lobby.startGame(BigInt(ctx.chat.id), ctx.chat.title ?? null, { id: BigInt(ctx.from.id), name }, mode);
@@ -268,6 +283,8 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
   registerModerationCommands(bot, env, deps, lobby);
   registerRoleInfoCommands(bot, deps);
   registerAchievementCommands(bot, env, deps);
+  registerUtilityCommands(bot, deps);
+  registerDevCommands(bot, env, logger, deps, gameLoop, deps.gameManager, maintenance, startTime);
 
   return bot;
 }
@@ -648,5 +665,193 @@ function registerAchievementCommands(bot: Bot, env: Env, deps: BotDependencies):
       const key = removed ? 'AchRemoved' : 'AchDidntHave';
       await ctx.reply(deps.translator.translate(language, key, ACHIEVEMENTS[code].name, target.name));
     }
+  });
+}
+
+/** `/chatid` and `/myidles` - self-service utility commands any player can run, no admin check. */
+function registerUtilityCommands(bot: Bot, deps: BotDependencies): void {
+  bot.command('chatid', async (ctx) => {
+    if (!ctx.chat) return;
+    await ctx.reply(ctx.chat.id.toString());
+  });
+
+  bot.command('myidles', async (ctx) => {
+    if (!ctx.from) return;
+    const isGroup = ctx.chat != null && ctx.chat.type !== 'private';
+    const group = isGroup ? await deps.groupRepository.getOrCreate(BigInt(ctx.chat!.id), ctx.chat!.title ?? null, null) : null;
+    const language =
+      group?.language ?? (await deps.playerRepository.findByTelegramId(BigInt(ctx.from.id)))?.languageCode ?? 'en';
+
+    const [overall, inGroup] = await Promise.all([
+      deps.gameRepository.getIdleKills24Hours(BigInt(ctx.from.id)),
+      group ? deps.gameRepository.getIdleKills24Hours(BigInt(ctx.from.id), group.id) : Promise.resolve(0),
+    ]);
+
+    let reply = deps.translator.translate(language, 'IdleCount', ctx.from.id.toString(), overall);
+    if (group) reply += ' ' + deps.translator.translate(language, 'GroupIdleCount', inGroup);
+
+    try {
+      await ctx.api.sendMessage(ctx.from.id, reply);
+      if (isGroup) await ctx.reply(deps.translator.translate(language, 'CheckYourPM'));
+    } catch (err) {
+      if (err instanceof GrammyError) {
+        await ctx.reply(deps.translator.translate(language, 'CantPMYou'));
+        return;
+      }
+      throw err;
+    }
+  });
+}
+
+function formatUptime(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000);
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return `${days}d ${hours}h ${minutes}m ${seconds}s`;
+}
+
+/**
+ * Port of `DevCommands.cs`'s remaining dev-only surface, minus everything that's about the
+ * original's multi-node/multi-process topology (`/stopnode`, `/killnode`, `/replacenodes`,
+ * `/broadcast`'s per-node loop, `/sql` - see README for why `/sql` in particular is skipped) or
+ * the companion website (`/checkgroups`). Like the original's dev commands, these reply with raw
+ * (untranslated) English - they're operator tooling, not player-facing.
+ */
+function registerDevCommands(
+  bot: Bot,
+  env: Env,
+  logger: Logger,
+  deps: BotDependencies,
+  gameLoop: GameLoop,
+  gameManager: GameManager,
+  maintenance: { on: boolean },
+  startTime: Date,
+): void {
+  const isDev = (telegramId: bigint) => env.devUserIds.includes(telegramId);
+
+  bot.command('leavegroup', async (ctx) => {
+    if (!ctx.from) return;
+    if (!(await isGlobalAdminCheck(env, deps, BigInt(ctx.from.id)))) return;
+
+    const arg = (ctx.match as string | undefined)?.trim();
+    if (!arg) {
+      await ctx.reply('Use /leavegroup <id|link|username>');
+      return;
+    }
+    const group = await resolveGroupArg(deps.groupRepository, arg);
+    if (!group) {
+      await ctx.reply("Couldn't find the group. Is the id/link valid?");
+      return;
+    }
+
+    try {
+      await ctx.api.sendMessage(
+        Number(group.telegramId),
+        "Para said I can't play with you guys anymore, you are a bad influence! *runs out the door*",
+      );
+      await ctx.api.leaveChat(Number(group.telegramId));
+    } catch (err) {
+      await ctx.reply(`An error occurred.\n${err instanceof Error ? err.message : String(err)}`);
+      return;
+    }
+    await ctx.reply(`Bot successfully left from group${group.title ? ` ${group.title}.` : '.'}`);
+  });
+
+  bot.command('getroles', async (ctx) => {
+    if (!ctx.from || !isDev(BigInt(ctx.from.id))) return;
+    const arg = (ctx.match as string | undefined)?.trim();
+    const group = arg ? await resolveGroupArg(deps.groupRepository, arg) : null;
+    const game = group ? gameManager.get(group.telegramId) : undefined;
+    if (!game) {
+      await ctx.reply('No active game found for that group.');
+      return;
+    }
+    await ctx.reply(game.players.map((p) => `${p.name}: ${roleName(p.role)}`).join('\n'));
+  });
+
+  bot.command('skipvote', async (ctx) => {
+    if (!ctx.chat || ctx.chat.type === 'private' || !ctx.from) return;
+    if (!isDev(BigInt(ctx.from.id))) return;
+    const skipped = gameLoop.skipVote(BigInt(ctx.chat.id));
+    await ctx.reply(skipped ? 'Skipping current phase timer...' : 'No phase is currently waiting on a timer here.');
+  });
+
+  bot.command('whois', async (ctx) => {
+    if (!ctx.from || !isDev(BigInt(ctx.from.id))) return;
+    const arg = (ctx.match as string | undefined)?.trim();
+    if (!arg || !/^-?\d+$/.test(arg)) {
+      await ctx.reply('Use /whois <telegram id>');
+      return;
+    }
+    const player = await deps.playerRepository.findByTelegramId(BigInt(arg));
+    if (player) await ctx.reply(`User: ${player.displayName}\nUserName: @${player.username ?? ''}`);
+  });
+
+  bot.command('moveachv', async (ctx) => {
+    if (!ctx.from || !isDev(BigInt(ctx.from.id))) return;
+    const words = ((ctx.match as string | undefined) ?? '').trim().split(/\s+/).filter(Boolean);
+    if (words.length !== 2 || !/^-?\d+$/.test(words[0]!) || !/^-?\d+$/.test(words[1]!)) {
+      await ctx.reply('Command syntax: /moveachv FROM_USERID TO_USERID');
+      return;
+    }
+    const from = BigInt(words[0]!);
+    const to = BigInt(words[1]!);
+    const moved = await deps.achievementRepository.transferAll(from, to);
+    await ctx.reply(`Moved ${moved} achievement(s) from ${from.toString()} to ${to.toString()}.`);
+  });
+
+  bot.command('maintenance', async (ctx) => {
+    if (!ctx.from || !isDev(BigInt(ctx.from.id))) return;
+    maintenance.on = !maintenance.on;
+    await ctx.reply(`Maintenance Mode: ${maintenance.on}`);
+  });
+
+  bot.command('runinfo', async (ctx) => {
+    if (!ctx.from || !isDev(BigInt(ctx.from.id))) return;
+    const chatIds = gameManager.activeChatIds();
+    const playerCount = chatIds.reduce((sum, id) => sum + (gameManager.get(id)?.players.length ?? 0), 0);
+    await ctx.reply(
+      `Run information\nUptime: ${formatUptime(Date.now() - startTime.getTime())}\n` +
+        `Current Games: ${chatIds.length}\nCurrent Players: ${playerCount}`,
+    );
+  });
+
+  bot.command('usage', async (ctx) => {
+    if (!ctx.from || !isDev(BigInt(ctx.from.id))) return;
+    const mem = process.memoryUsage();
+    const load = os.loadavg();
+    await ctx.reply(
+      `CPU load (1m/5m/15m): ${load.map((n) => n.toFixed(2)).join(' / ')}\n` +
+        `RSS: ${(mem.rss / 1024 / 1024).toFixed(1)}MB, Heap used: ${(mem.heapUsed / 1024 / 1024).toFixed(1)}MB\n` +
+        `Free system memory: ${(os.freemem() / 1024 / 1024).toFixed(0)}MB`,
+    );
+  });
+
+  bot.command('update', async (ctx) => {
+    if (!ctx.from || !isDev(BigInt(ctx.from.id))) return;
+    await ctx.reply('Pulling latest code and rebuilding - the process will restart shortly if this succeeds...');
+    exec('git pull && npm run build', { cwd: process.cwd() }, (err) => {
+      if (err) {
+        logger.error({ err }, 'Update failed');
+        return;
+      }
+      process.exit(0);
+    });
+  });
+
+  bot.command('notifyban', async (ctx) => {
+    if (!ctx.from || !isDev(BigInt(ctx.from.id))) return;
+    const arg = (ctx.match as string | undefined)?.trim();
+    if (!arg || !/^-?\d+$/.test(arg)) return;
+    await ctx.api.sendMessage(Number(BigInt(arg)), 'You have been banned.  You may appeal your ban in @werewolfbanappeal');
+  });
+
+  bot.command('notifyspam', async (ctx) => {
+    if (!ctx.from || !isDev(BigInt(ctx.from.id))) return;
+    const arg = (ctx.match as string | undefined)?.trim();
+    if (!arg || !/^-?\d+$/.test(arg)) return;
+    await ctx.api.sendMessage(Number(BigInt(arg)), "Please don't spam me like that");
   });
 }

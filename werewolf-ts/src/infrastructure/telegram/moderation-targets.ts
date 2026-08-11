@@ -1,5 +1,6 @@
 import type { Context } from 'grammy';
 import type { PlayerRepository } from '../persistence/player.repository.js';
+import type { GroupRepository, GroupWithConfig } from '../persistence/group.repository.js';
 
 export interface ModTarget {
   id: bigint;
@@ -51,4 +52,17 @@ export function nonNumericWords(argText: string | undefined): string {
     .split(/\s+/)
     .filter((token) => token.length > 0 && !/^-?\d+$/.test(token))
     .join(' ');
+}
+
+/**
+ * Port of `Helpers.GetGroup()`: resolves a `/leavegroup`/`/getroles` argument that may be a raw
+ * Telegram chat id, an `@username`, or an invite link (matched by its trailing hash).
+ */
+export async function resolveGroupArg(groups: GroupRepository, arg: string): Promise<GroupWithConfig | null> {
+  const trimmed = arg.trim();
+  if (/^-?\d+$/.test(trimmed)) return groups.findByTelegramId(BigInt(trimmed));
+  if (trimmed.startsWith('@')) return groups.findByUsername(trimmed.slice(1));
+  const index = trimmed.lastIndexOf('me/');
+  if (index === -1) return null;
+  return groups.findByInviteLinkSuffix(trimmed.slice(index));
 }

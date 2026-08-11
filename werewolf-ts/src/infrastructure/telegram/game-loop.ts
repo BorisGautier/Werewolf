@@ -48,6 +48,9 @@ export class GameLoop {
   /** Every night/day/lynch resolution's events, one batch per call to `broadcast()` - the
    * history `evaluateGameAchievements()` needs at game end (see `finish()`). Cleared there. */
   private readonly eventBatches = new Map<bigint, GameEvent[][]>();
+  /** One entry per chat currently waiting out a night/day/lynch timer, letting `/skipvote`
+   * (see `skipVote()`) resolve it immediately instead of waiting for `setTimeout` to fire. */
+  private readonly phaseSkips = new Map<bigint, () => void>();
 
   constructor(
     private readonly bot: Bot,
@@ -71,6 +74,29 @@ export class GameLoop {
     });
   }
 
+  /**
+   * Port of `Werewolf.cs`'s `/skipvote`: forces whichever night/day/lynch timer this chat is
+   * currently waiting out to resolve immediately, same as if it had just naturally elapsed.
+   * Returns false if no phase is currently in its wait window (e.g. between phases, or no game).
+   */
+  skipVote(chatId: bigint): boolean {
+    const resolve = this.phaseSkips.get(chatId);
+    if (!resolve) return false;
+    resolve();
+    return true;
+  }
+
+  private async phaseSleep(chatId: bigint, ms: number): Promise<void> {
+    await new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, ms);
+      this.phaseSkips.set(chatId, () => {
+        clearTimeout(timer);
+        resolve();
+      });
+    });
+    this.phaseSkips.delete(chatId);
+  }
+
   // ---------------------------------------------------------------- Night
 
   private async runNight(game: Game): Promise<void> {
@@ -85,7 +111,7 @@ export class GameLoop {
       const seconds = this.nightSeconds(game, group);
       await this.send(game.chatId, group.language, 'NightBeginsTimed', game.dayNumber, seconds);
       await this.sendNightMenus(game, group.language);
-      await sleep(seconds * 1000);
+      await this.phaseSleep(game.chatId, seconds * 1000);
     }
 
     const events = game.resolveNightActions();
@@ -167,7 +193,7 @@ export class GameLoop {
     await this.send(game.chatId, group.language, 'DayTime', seconds);
     await this.sendDayMenus(game, group.language);
 
-    await sleep(seconds * 1000);
+    await this.phaseSleep(game.chatId, seconds * 1000);
 
     const events = game.resolveDayActions();
     await this.broadcast(game, group, events, 'Day');
@@ -205,7 +231,7 @@ export class GameLoop {
       if (attempt > 1) game.restartLynchVote();
 
       await this.sendLynchVoteMenu(game, group.language, seconds);
-      await sleep(seconds * 1000);
+      await this.phaseSleep(game.chatId, seconds * 1000);
 
       const result = game.resolveLynch();
       await this.sendSecretLynchSummary(game, group);
