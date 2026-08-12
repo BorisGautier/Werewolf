@@ -57,7 +57,7 @@ sudo usermod -aG docker $USER   # puis se reconnecter
 
 ```bash
 git clone <url-du-depot>
-cd Werewolf/werewolf-ts
+cd Werewolf
 
 cp .env.example .env
 nano .env   # ou vim/éditeur de ton choix

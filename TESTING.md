@@ -8,7 +8,6 @@ bugs que le précédent ne peut pas voir.
 ## 0. Installation
 
 ```bash
-cd werewolf-ts
 npm install
 ```
 
