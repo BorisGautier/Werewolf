@@ -48,6 +48,22 @@ mémoire. Organisation (`test/`) :
   utilisé (un faux `bot.api` qui enregistre les appels au lieu de les
   exécuter).
 - `test/application/**` — `GameManager` (registre en mémoire).
+- `test/simulation/full-game-stress.test.ts` — joue des parties complètes,
+  aléatoires, de bout en bout (répartition des rôles réelle via `balance()`,
+  chaque menu nuit/jour/vote répondu avec un choix valide au hasard via
+  `GameLoop.handleCallback()`, exactement l'appel qu'un vrai clic Telegram
+  déclenche) sans jamais toucher le réseau. Utile pour détecter ce que les
+  tests unitaires ciblés ne voient pas : une exception non gérée à grande
+  échelle, une partie qui ne se termine jamais (le garde-fou anti-boucle-
+  infinie des timers simulés de vitest le détecte), ou une partie qui se
+  termine sans camp vainqueur. Par défaut 40 parties (rapide, fait partie de
+  `npm test`) ; pour un balayage plus profond :
+  ```bash
+  SIM_GAMES=1000 npx vitest run test/simulation
+  ```
+  Le résumé affiché en console liste les rôles jamais distribués et la
+  répartition des camps vainqueurs — utile pour repérer une combinaison de
+  rôles qui plante systématiquement.
 
 Pour lancer un seul fichier ou filtrer par nom :
 
@@ -180,14 +196,17 @@ au long du développement de ce projet avant chaque commit.
 
 Honnêteté totale, pour éviter toute fausse impression de couverture totale :
 
-- **Aucun test end-to-end automatisé** ne fait tourner un vrai bot Telegram
-  contre une vraie base de données dans ce dépôt — ce serait un test
-  d'intégration nécessitant un token Telegram valide et un réseau sortant,
-  ce que l'intégration continue ne peut pas garantir de façon fiable et
-  reproductible. Les tests `test/infrastructure/*.test.ts` mockent l'objet
-  `bot` (aucun appel réseau réel), ce qui couvre la logique de câblage
-  mais pas le comportement réel de l'API Telegram (limites de débit,
-  formats de clavier, etc.).
+- **Aucun test automatisé n'appelle jamais la vraie API Telegram.** Ce
+  serait un test d'intégration nécessitant un token Telegram valide et un
+  réseau sortant, ce que l'intégration continue ne peut pas garantir de
+  façon fiable et reproductible. Les tests `test/infrastructure/*.test.ts`
+  et `test/simulation/full-game-stress.test.ts` mockent l'objet `bot`
+  (aucun appel réseau réel) — ce qui couvre exhaustivement la logique du
+  moteur de jeu et son câblage (voir §2, `full-game-stress.test.ts` fait
+  tourner des centaines de parties complètes de bout en bout), mais jamais
+  le comportement réel de l'API Telegram elle-même (limites de débit,
+  formats de clavier effectivement rendus dans l'appli, latence réseau) ni
+  l'expérience d'un vrai joueur humain qui clique dans Telegram.
 - Les mécaniques annotées "best effort" dans le code (reconstruction fine
   de certaines séquences pour les succès `GunnerSaves`/`ReallyBadLuck`, voir
   `src/domain/achievements/evaluate.ts`) n'ont pas de garantie de fidélité
