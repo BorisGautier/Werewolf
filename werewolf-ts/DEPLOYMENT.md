@@ -226,7 +226,22 @@ portable d'un token de bot à un autre. Il n'existe donc aucun jeu de GIFs
 avec le workflow ci-dessous (déjà entièrement fonctionnel, il suffit de
 l'utiliser).
 
-### Ajouter tes propres GIFs
+### Méthode A (recommandée) : GIFs par défaut, aucune commande
+
+Dépose directement tes fichiers dans `assets/gifs/` (voir le
+[`README.md`](./assets/gifs/README.md) de ce dossier pour la convention de
+nommage exacte, ex. `VillagerDie.mp4`, `WolvesWin.mp4`) puis redéploie
+(`git pull && docker compose up -d --build`, voir §5) — pas de compte
+donateur, pas de `/setgif`, pas d'approbation à faire : `sendGifForEvent`
+(`game-loop.ts`) envoie automatiquement le fichier trouvé pour chaque
+catégorie dès qu'il existe. Un pack de groupe ou de joueur approuvé (méthode
+B ci-dessous) reste prioritaire sur ce fichier par défaut si les deux
+existent.
+
+### Méthode B : workflow donateur (`/setgif`), pour laisser tes joueurs personnaliser
+
+Utile si tu veux que différents groupes/joueurs aient chacun leurs propres
+GIFs plutôt qu'un seul jeu par défaut pour toute l'instance.
 
 1. **Débloque la fonctionnalité pour toi-même** (normalement réservée aux
    donateurs, mais il existe un contournement dev prévu pour ça — même
@@ -264,7 +279,6 @@ l'utiliser).
    ```
    `/usegifpack none` désactive le pack du groupe.
 
-À partir de là, le bot envoie automatiquement l'animation correspondante
+Dans les deux cas, le bot envoie automatiquement l'animation correspondante
 en plus du message texte habituel (mort de nuit, victoire, etc.) — aucune
-autre configuration nécessaire, c'est le même mécanisme que
-`sendGifForEvent` dans `game-loop.ts`.
+autre configuration nécessaire.

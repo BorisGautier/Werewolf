@@ -1,8 +1,12 @@
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Bot } from 'grammy';
+import { InputFile, type Bot } from 'grammy';
 import { GameManager } from '../../src/application/game-manager.js';
 import { ROLE_BIT } from '../../src/domain/roles/role.js';
 import { GameLoop } from '../../src/infrastructure/telegram/game-loop.js';
+import { LocalGifPack } from '../../src/infrastructure/telegram/local-gif-pack.js';
 import { getDefaultLocale, loadLocales } from '../../src/infrastructure/i18n/locale-loader.js';
 import { Translator } from '../../src/infrastructure/i18n/translator.js';
 import type { GroupRepository, GroupWithConfig } from '../../src/infrastructure/persistence/group.repository.js';
@@ -67,6 +71,7 @@ function fakeGroup(overrides: Partial<GroupWithConfig> = {}): GroupWithConfig {
 function createHarness(options: {
   gifPacks?: import('../../src/infrastructure/persistence/gif-pack.repository.js').GifPackRepository;
   players?: import('../../src/infrastructure/persistence/player.repository.js').PlayerRepository;
+  localGifPack?: import('../../src/infrastructure/telegram/local-gif-pack.js').LocalGifPack;
 } = {}) {
   const sendMessage = vi.fn().mockResolvedValue({ message_id: 1 });
   const sendAnimation = vi.fn().mockResolvedValue({ message_id: 1 });
@@ -98,7 +103,9 @@ function createHarness(options: {
     options.players ??
     ({ findByTelegramId: vi.fn(async () => null) } as unknown as import('../../src/infrastructure/persistence/player.repository.js').PlayerRepository);
 
-  const loop = new GameLoop(bot, gameManager, groups, gameRepo, achievements, translator, logger, players, options.gifPacks);
+  const loop = options.localGifPack
+    ? new GameLoop(bot, gameManager, groups, gameRepo, achievements, translator, logger, players, options.gifPacks, options.localGifPack)
+    : new GameLoop(bot, gameManager, groups, gameRepo, achievements, translator, logger, players, options.gifPacks);
 
   return { loop, bot, sendMessage, sendAnimation, gameManager, groups, gameRepo, achievements, group, logger, players };
 }
@@ -176,6 +183,55 @@ describe('GameLoop', () => {
 
     expect(victim.isDead).toBe(true);
     expect(sendAnimation).not.toHaveBeenCalled();
+  });
+
+  it('falls back to a bundled local gif when no approved custom pack covers the category', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'werewolf-gifs-'));
+    try {
+      await writeFile(path.join(dir, 'VillagerDie.mp4'), 'fake-mp4-bytes');
+      const localGifPack = new LocalGifPack(dir);
+      const { loop, gameManager, sendAnimation } = createHarness({ localGifPack });
+      const game = dealtGame(gameManager);
+      const wolf = game.players[0]!;
+      const victim = game.players[1]!;
+
+      loop.start(game, 42);
+      await vi.advanceTimersByTimeAsync(0);
+
+      await loop.handleCallback(wolf.id, wolf.id, `nt:${victim.id.toString()}`);
+      await vi.advanceTimersByTimeAsync(5000);
+
+      expect(victim.isDead).toBe(true);
+      expect(sendAnimation).toHaveBeenCalledTimes(1);
+      expect(sendAnimation.mock.calls[0]![0]).toBe(Number(game.chatId));
+      expect(sendAnimation.mock.calls[0]![1]).toBeInstanceOf(InputFile);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("prefers an approved custom pack's file_id over the bundled local gif when both exist", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'werewolf-gifs-'));
+    try {
+      await writeFile(path.join(dir, 'VillagerDie.mp4'), 'fake-mp4-bytes');
+      const localGifPack = new LocalGifPack(dir);
+      const getApprovedFileId = vi.fn(async () => 'FILE_ID_123');
+      const gifPacks = { getApprovedFileId } as unknown as import('../../src/infrastructure/persistence/gif-pack.repository.js').GifPackRepository;
+      const { loop, gameManager, sendAnimation } = createHarness({ gifPacks, localGifPack });
+      const game = dealtGame(gameManager);
+      const wolf = game.players[0]!;
+      const victim = game.players[1]!;
+
+      loop.start(game, 42);
+      await vi.advanceTimersByTimeAsync(0);
+
+      await loop.handleCallback(wolf.id, wolf.id, `nt:${victim.id.toString()}`);
+      await vi.advanceTimersByTimeAsync(5000);
+
+      expect(sendAnimation).toHaveBeenCalledWith(Number(game.chatId), 'FILE_ID_123');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it("clears drunk/frozen/burning once that night's menus are sent, so none of them linger forever", async () => {
