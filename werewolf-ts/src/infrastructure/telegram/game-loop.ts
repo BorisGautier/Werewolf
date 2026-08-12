@@ -120,6 +120,12 @@ export class GameLoop {
     return true;
   }
 
+  /** Indirection around `game.phase === 'Ended'` so TS doesn't narrow the literal type across the
+   * call - see the comment at its call site in `handleHunterShots()`. */
+  private hasEnded(game: Game): boolean {
+    return game.phase === 'Ended';
+  }
+
   private async phaseSleep(chatId: bigint, ms: number): Promise<void> {
     await new Promise<void>((resolve) => {
       const timer = setTimeout(resolve, ms);
@@ -342,6 +348,17 @@ export class GameLoop {
       (e): e is Extract<GameEvent, { type: 'HunterMustShoot' }> => e.type === 'HunterMustShoot',
     );
     for (const shot of shooters) {
+      // The same resolution that produced this shot (e.g. a lynch that both killed the Hunter
+      // *and* immediately decided the win condition) may have already ended the game - nothing
+      // left to affect, and `killPlayer()` below would reject on a phase that's already 'Ended'.
+      // The caller's own post-call `if (game.phase === 'Ended') return this.finish(game);` still
+      // runs right after this returns `false`, so the game-end flow is handled correctly either way.
+      // (Routed through `hasEnded()` rather than comparing `game.phase` directly - a plain
+      // `=== 'Ended'` here would make TS narrow the literal type for the rest of the loop body,
+      // wrongly flagging the still-necessary re-check after `killPlayer()`/`checkWinCondition()`
+      // below as unreachable, even though those calls can genuinely flip the phase.)
+      if (this.hasEnded(game)) break;
+
       const hunter = game.players.find((p) => p.id === shot.hunterId);
       if (!hunter) continue;
 
@@ -368,7 +385,7 @@ export class GameLoop {
       const win = game.checkWinCondition();
       await this.broadcast(game, group, win.events, phase);
 
-      if (game.phase === 'Ended') {
+      if (this.hasEnded(game)) {
         await this.finish(game);
         return true;
       }

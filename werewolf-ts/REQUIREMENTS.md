@@ -48,8 +48,18 @@ une variable obligatoire manque ou est invalide) :
 
 - ✅ Compilation TypeScript stricte (`npm run build`) sans erreur.
 - ✅ Lint (`eslint`) sans erreur sur `src/` et `test/`.
-- ✅ 485/485 tests unitaires verts (`npm test`), couvrant le moteur de jeu,
+- ✅ 486/486 tests unitaires verts (`npm test`), couvrant le moteur de jeu,
   les 43 rôles, l'i18n, les achievements, la modération, etc.
+- ✅ **1 500 parties complètes simulées de bout en bout**
+  (`test/simulation/full-game-stress.test.ts`) : répartition des rôles
+  réelle via le même algorithme d'équilibrage qu'en production, tailles de
+  5 à 30 joueurs, chaque menu nuit/jour/vote répondu par un choix valide
+  aléatoire via le même point d'entrée qu'un vrai clic Telegram
+  (`GameLoop.handleCallback()`). **0 crash, 0 partie bloquée, 100 % des
+  parties terminées sur un camp vainqueur valide.** Cette campagne a
+  d'ailleurs trouvé et corrigé un vrai bug pendant cet audit (voir plus
+  bas) — la preuve que ce test a une vraie valeur, pas juste une case
+  cochée.
 - ✅ Migration Prisma initiale générée et **appliquée avec succès sur une
   vraie base PostgreSQL 16 vide** via `prisma migrate deploy` (la commande
   exacte lancée par `docker-entrypoint.sh`) — un déploiement neuf crée
@@ -59,21 +69,45 @@ une variable obligatoire manque ou est invalide) :
 - ✅ Parité complète des clés de traduction FR/EN (397 clés, aucune
   manquante des deux côtés).
 
+### Un vrai bug trouvé et corrigé grâce à la simulation
+
+La toute première campagne de simulation a fait planter le bot en 15
+parties : quand un Chasseur (`Hunter`) meurt lors d'un tour de vote qui
+décide *en même temps* la victoire (ex. le lynchage tranche aussi le
+camp gagnant), le moteur terminait la partie et proposait le tir final du
+Chasseur dans le même lot d'événements — le code qui traite ce tir
+essayait alors de tuer sur une partie déjà terminée et plantait
+(`GameError: The game has already ended`, dans `game-loop.ts`). Corrigé
+(`handleHunterShots` reconnaît maintenant ce cas et laisse le
+gestionnaire normal de fin de partie s'en occuper), puis re-vérifié sur
+1 500 parties supplémentaires sans aucune récidive. C'est exactement le
+genre de bug qu'aucun test unitaire ciblé n'aurait trouvé — il ne survient
+que quand deux mécaniques se chevauchent au bon (mauvais) moment — et
+exactement le genre de chose qu'une vraie partie Telegram aurait aussi pu
+déclencher en production sans cette campagne.
+
 ## 5. Ce qui n'a PAS pu être testé dans cet environnement (à vérifier toi-même)
 
-Ce sont les seules zones d'incertitude réelles sur la mise en production :
+La simulation ci-dessus élimine l'essentiel du risque côté **logique de
+jeu**. Ce qui reste hors de portée dans cet environnement est plus étroit
+qu'avant, mais toujours réel :
 
 - ❌ **Aucun appel réel à l'API Telegram** n'a été fait : pas de `BOT_TOKEN`
   disponible dans cet environnement, et le bac à sable de développement
   bloque de toute façon les appels sortants vers `api.telegram.org`. Le
   code du client `grammy` n'a donc jamais été exercé contre le vrai
-  serveur Telegram (webhooks, rate limits, formats de clavier inline,
-  épinglage de message, etc.) — seulement contre des mocks dans les tests.
-- ❌ **Aucune partie complète jouée par de vrais humains** dans un vrai
-  groupe Telegram (créer un groupe, ajouter le bot, `/startgame`, `/join`
-  ×5, cycle nuit/vote/jour jusqu'à la victoire). Les tests unitaires
-  couvrent la logique du moteur de jeu isolément, pas l'expérience
-  utilisateur bout en bout dans l'interface Telegram réelle.
+  serveur Telegram (webhooks, rate limits, formats de clavier inline tels
+  qu'ils s'affichent vraiment, épinglage de message, etc.) — seulement
+  contre des mocks, aussi poussés soient-ils.
+- ❌ **Aucune partie jouée par de vrais humains** dans un vrai groupe
+  Telegram. Techniquement, ce point ne peut pas non plus être comblé en te
+  fournissant simplement un `BOT_TOKEN` (voir la réponse détaillée donnée
+  dans la conversation) : jouer une partie exige plusieurs comptes
+  Telegram humains distincts qui rejoignent le groupe et cliquent — un
+  agent IA ne peut pas se faire passer pour plusieurs joueurs humains
+  différents. Un token permettrait seulement de vérifier que le bot se
+  connecte réellement à Telegram (`getMe`, réception d'updates réelle) —
+  utile, mais ce n'est pas la même chose que jouer.
 - ❌ **`docker compose up --build` n'a pas pu être exécuté tel quel** : le
   pull de l'image `postgres:16-alpine` / `node:20-alpine` depuis Docker Hub
   est bloqué par le réseau du bac à sable (limite de l'environnement de
