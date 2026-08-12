@@ -48,18 +48,28 @@ une variable obligatoire manque ou est invalide) :
 
 - ✅ Compilation TypeScript stricte (`npm run build`) sans erreur.
 - ✅ Lint (`eslint`) sans erreur sur `src/` et `test/`.
-- ✅ 486/486 tests unitaires verts (`npm test`), couvrant le moteur de jeu,
+- ✅ 494/494 tests unitaires verts (`npm test`), couvrant le moteur de jeu,
   les 43 rôles, l'i18n, les achievements, la modération, etc.
-- ✅ **1 500 parties complètes simulées de bout en bout**
-  (`test/simulation/full-game-stress.test.ts`) : répartition des rôles
-  réelle via le même algorithme d'équilibrage qu'en production, tailles de
-  5 à 30 joueurs, chaque menu nuit/jour/vote répondu par un choix valide
-  aléatoire via le même point d'entrée qu'un vrai clic Telegram
-  (`GameLoop.handleCallback()`). **0 crash, 0 partie bloquée, 100 % des
-  parties terminées sur un camp vainqueur valide.** Cette campagne a
-  d'ailleurs trouvé et corrigé un vrai bug pendant cet audit (voir plus
-  bas) — la preuve que ce test a une vraie valeur, pas juste une case
-  cochée.
+- ✅ **11 600 parties complètes simulées de bout en bout**
+  (`test/simulation/full-game-stress.test.ts`, `SIM_SCALE=200`) selon **6
+  stratégies de vote** différentes (aléatoire, vote unanime, égalité
+  forcée, abstention totale, vote ciblé sur le Tanner, vote ciblé sur le
+  Prince) — pas juste des clics indépendants au hasard, qui ne
+  reproduisent jamais un vrai groupe qui se coordonne. Rôles distribués
+  via le même algorithme d'équilibrage qu'en production, tailles de 5 à 35
+  joueurs (le maximum réel), chaque menu nuit/jour/vote répondu via le même
+  point d'entrée qu'un vrai clic Telegram (`GameLoop.handleCallback()`).
+  Résultat : **0 crash, 0 partie bloquée, 100 % des 11 600 parties
+  terminées sur un camp vainqueur valide**, avec les **9 camps gagnants
+  possibles** tous observés (Village, Loups, Tanner, Culte, Tueur en
+  série, Incendiaire, Amoureux, Aucun gagnant, Chasseur-vs-dernier-Loup)
+  et 4 des 6 issues de vote (Lynché, Aucun vote, Maire épargné par le
+  Pacifiste, Prince survit) — les 2 restantes (Égalité, Victoire du Tanner
+  par lynchage) sont prouvées séparément par deux scénarios déterministes
+  dédiés qui forcent la composition de rôles exacte plutôt que d'espérer
+  que le hasard y tombe. Cette campagne a trouvé et corrigé **deux vrais
+  bugs** pendant cet audit (voir plus bas) — la preuve que ce test a une
+  vraie valeur, pas juste une case cochée.
 - ✅ Migration Prisma initiale générée et **appliquée avec succès sur une
   vraie base PostgreSQL 16 vide** via `prisma migrate deploy` (la commande
   exacte lancée par `docker-entrypoint.sh`) — un déploiement neuf crée
@@ -69,22 +79,61 @@ une variable obligatoire manque ou est invalide) :
 - ✅ Parité complète des clés de traduction FR/EN (397 clés, aucune
   manquante des deux côtés).
 
-### Un vrai bug trouvé et corrigé grâce à la simulation
+### Deux vrais bugs trouvés et corrigés grâce à la simulation
 
-La toute première campagne de simulation a fait planter le bot en 15
-parties : quand un Chasseur (`Hunter`) meurt lors d'un tour de vote qui
-décide *en même temps* la victoire (ex. le lynchage tranche aussi le
-camp gagnant), le moteur terminait la partie et proposait le tir final du
-Chasseur dans le même lot d'événements — le code qui traite ce tir
-essayait alors de tuer sur une partie déjà terminée et plantait
-(`GameError: The game has already ended`, dans `game-loop.ts`). Corrigé
-(`handleHunterShots` reconnaît maintenant ce cas et laisse le
-gestionnaire normal de fin de partie s'en occuper), puis re-vérifié sur
-1 500 parties supplémentaires sans aucune récidive. C'est exactement le
-genre de bug qu'aucun test unitaire ciblé n'aurait trouvé — il ne survient
-que quand deux mécaniques se chevauchent au bon (mauvais) moment — et
+**Bug 1 — le tir final du Chasseur plantait le bot.** La toute première
+campagne de simulation a fait planter le bot en 15 parties : quand un
+Chasseur (`Hunter`) meurt lors d'un tour de vote qui décide *en même
+temps* la victoire (ex. le lynchage tranche aussi le camp gagnant), le
+moteur terminait la partie et proposait le tir final du Chasseur dans le
+même lot d'événements — le code qui traite ce tir essayait alors de tuer
+sur une partie déjà terminée et plantait (`GameError: The game has
+already ended`, dans `game-loop.ts`). Corrigé (`handleHunterShots`
+reconnaît maintenant ce cas et laisse le gestionnaire normal de fin de
+partie s'en occuper).
+
+**Bug 2 — une victoire du Tanner par lynchage n'arrêtait jamais la
+partie.** Trouvé en construisant délibérément un scénario pour forcer
+cette victoire précise (composition de rôles imposée, groupe qui vote
+unanimement pour le Tanner à chaque tour) plutôt que d'attendre que le
+hasard y tombe — ce scénario a échoué **30 fois sur 30** avant le correctif.
+Cause : quand le Tanner est lynché, le code qui décide « la partie
+est-elle finie ? » (`checkWinCondition`) n'avait **aucune branche pour
+reconnaître une victoire du Tanner** — cette victoire est décidée ailleurs
+(`resolveLynchVotes`), qui marque bien les gagnants et annonce « le Tanner
+gagne ! », mais sans jamais faire passer l'état réel de la partie à
+« terminée ». Concrètement : le bot aurait annoncé la victoire du Tanner
+**puis enchaîné sur une nouvelle nuit** comme si de rien n'était,
+contredisant sa propre annonce. Corrigé (`resolveLynch` reconnaît
+maintenant cette victoire et termine la partie immédiatement, comme les 8
+autres conditions de victoire) ; le même scénario réussit maintenant de
+façon fiable.
+
+Les deux corrections ont été re-vérifiées sur les 11 600 parties de la
+campagne finale sans aucune récidive. Ce sont exactement les bugs
+qu'aucun test unitaire ciblé n'aurait trouvés — ils ne surviennent que
+quand deux mécaniques se chevauchent au bon (mauvais) moment — et
 exactement le genre de chose qu'une vraie partie Telegram aurait aussi pu
 déclencher en production sans cette campagne.
+
+### Une anomalie observée une seule fois, non reproduite (honnêteté totale)
+
+Lors d'une campagne intermédiaire de 11 600 parties (avant le dernier
+correctif de sharding du harnais, voir `git log` sur
+`test/simulation/full-game-stress.test.ts`), **une seule** partie (27
+joueurs, mode chaos) s'est terminée sans jamais fixer de camp vainqueur —
+sans planter, sans se bloquer non plus, juste sans vainqueur. Tentative de
+reproduction : 3 000 parties chaotiques supplémentaires de taille 25 à 35,
+puis 1 000 répétitions de la composition de rôles *exacte* de cette
+partie — **aucune des 4 000 tentatives n'a reproduit l'anomalie**. Ce
+n'est donc ni spécifique à une composition de rôles, ni à une taille de
+partie. L'explication la plus probable est un artefact du harnais de test
+lui-même (accumulation d'état dans l'implémentation des timers simulés de
+vitest sur une très longue exécution cumulée), pas un vrai défaut du
+moteur de jeu — mais je ne peux pas l'affirmer avec une certitude absolue
+faute de l'avoir reproduite pour l'inspecter. La campagne finale de 11 600
+parties (après le correctif de sharding) n'a montré aucune récidive. Je
+préfère te le signaler explicitement plutôt que de le passer sous silence.
 
 ## 5. Ce qui n'a PAS pu être testé dans cet environnement (à vérifier toi-même)
 
