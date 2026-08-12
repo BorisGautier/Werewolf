@@ -155,6 +155,17 @@ opérationnelles sans consommer un vrai bot.
 Un bot de test coûte rien et prend 2 minutes à créer — ne teste jamais tes
 changements pour la première fois directement sur le bot de production.
 
+**Tu peux jouer avec de vraies autres personnes (amis, autres comptes à toi)
+alors que le bot tourne sur ta propre machine, sans aucune configuration
+réseau** — pas de tunnel (ngrok...), pas de port à ouvrir, pas d'IP publique.
+Le bot fonctionne en *long polling* : c'est lui qui va chercher les messages
+auprès de Telegram, pas l'inverse — n'importe qui sur Telegram peut donc
+interagir avec un bot qui tourne sur ton laptop derrière ta box internet,
+exactement comme s'il tournait sur un serveur (voir `DEPLOYMENT.md`
+introduction). C'est littéralement le même process que celui déployé en
+production, juste lancé depuis ton terminal au lieu d'un conteneur Docker
+sur un VPS.
+
 1. Crée un second bot avec [@BotFather](https://t.me/BotFather) (voir
    `DEPLOYMENT.md` section 1), ex. `MonLoupGarouTestBot`.
 2. `/setprivacy` → `Disable` sur ce bot de test aussi.
@@ -162,9 +173,11 @@ changements pour la première fois directement sur le bot de production.
 4. `DEV_USER_IDS=<ton id Telegram>` pour accéder aux commandes dev
    (`/maintenance`, `/getroles`, `/skipvote`, ...) pendant tes tests.
 5. `npm run dev` (mode watch — redémarre automatiquement à chaque
-   modification de fichier).
-6. Crée un groupe Telegram de test, ajoute-y ton bot de test, promeus-le
-   administrateur.
+   modification de fichier ; laisse tourner tant que la partie dure).
+6. Crée un groupe Telegram, ajoute-y ton bot de test, promeus-le
+   administrateur, puis **invite les autres joueurs dans ce groupe** (un
+   lien d'invitation Telegram classique suffit — ils n'ont besoin de rien
+   d'autre que Telegram).
 
 ### Jouer une partie complète pour valider un changement
 
