@@ -1,0 +1,29 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    target-branch: dev
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      # Keeps weekly PR volume manageable: one PR for everything patch/minor, majors still get
+      # their own PR (they're the ones actually worth reviewing individually).
+      minor-and-patch:
+        update-types: [minor, patch]
+    labels:
+      - dependencies
+    commit-message:
+      prefix: chore(deps)
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    target-branch: dev
+    schedule:
+      interval: weekly
+      day: monday
+    labels:
+      - dependencies
+      - github-actions
+    commit-message:
+      prefix: chore(ci)

@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+    paths-ignore:
+      - 'legacy-csharp/**'
+  pull_request:
+    branches: [main, dev]
+    paths-ignore:
+      - 'legacy-csharp/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: werewolf
+          POSTGRES_PASSWORD: werewolf
+          POSTGRES_DB: werewolf
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U werewolf -d werewolf"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://werewolf:werewolf@localhost:5432/werewolf?schema=public
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run prisma:generate
+
+      - name: Type-check (src + test)
+        run: npx tsc --noEmit -p tsconfig.eslint.json
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      # Catches the class of bug a passing test suite alone can't: a migration that's missing,
+      # out of order, or doesn't actually apply cleanly to a brand-new database - exactly what a
+      # first-time `docker compose up` runs via docker-entrypoint.sh in production.
+      - name: Apply Prisma migrations to a fresh database
+        run: npm run prisma:deploy
