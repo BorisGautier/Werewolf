@@ -506,38 +506,6 @@ describe('full game stress simulation', () => {
     },
   );
 
-  // TEMPORARY investigation test for a real `noWinner` case the "random" campaign turned up at
-  // SIM_SCALE=200 (27 players, chaos, roles including Cupid+WildChild+Doppelganger+Thief all at
-  // once - the four roles that trigger the day-1 120s-minimum night timer). Concentrates on large
-  // chaotic games specifically instead of the general uniform-size sweep, to reproduce faster.
-  it(
-    'INVESTIGATE: large chaotic games always resolve to a winningTeam',
-    async () => {
-      const count = 30 * Math.max(SCALE, 5);
-      const noWinner: SimResult[] = [];
-      for (let i = 0; i < count; i++) {
-        const playerCount = 25 + (i % 11); // 25..35
-        const result = await runOneGame(BigInt(9_000_000 + i), playerCount, true, { kind: 'random' });
-        expect(result.crashed, `game crashed: ${JSON.stringify(result.errors[0])}`).toBe(false);
-        expect(result.stalled, `game stalled (hit the timer loop-limit)`).toBe(false);
-        if (!result.winningTeam) noWinner.push(result);
-      }
-      if (noWinner.length > 0) {
-        // eslint-disable-next-line no-console
-        console.log(
-          noWinner
-            .map(
-              (r) =>
-                `NO WINNER size=${r.playerCount} finalPhase=${r.finalPhase} alive=${r.aliveCount} day=${r.dayNumber} roles=[${r.roles.join(',')}]`,
-            )
-            .join('\n'),
-        );
-      }
-      expect(noWinner, `${noWinner.length}/${count} large chaotic games ended without a winningTeam`).toHaveLength(0);
-    },
-    600_000,
-  );
-
   // The two outcomes above structurally can't be relied on from the general campaign (see the
   // comment there) - proven directly instead, with a hand-picked role set and repeated attempts
   // to absorb the part that's still left to chance (whether the Tanner survives the night, e.g.).
