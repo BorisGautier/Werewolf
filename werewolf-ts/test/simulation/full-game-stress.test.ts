@@ -178,6 +178,12 @@ async function runOneGame(
   bias: VotingBias,
   runOpts: RunOneGameOptions = {},
 ): Promise<SimResult> {
+  // Re-installed fresh per game rather than once for the whole test: sinon's fake-timer
+  // implementation (what `vi.useFakeTimers()` wraps) accumulates internal bookkeeping for every
+  // timer ever created across the test's lifetime, which made a single multi-thousand-game test
+  // degrade super-linearly - resetting it here keeps each game's cost roughly constant.
+  vi.useFakeTimers();
+
   const errors: unknown[] = [];
   const logger = {
     info: () => {},
