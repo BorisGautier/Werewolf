@@ -35,7 +35,7 @@ npm run test          # une seule passe
 npm run test:watch    # relance automatiquement au fil des modifications
 ```
 
-~485 tests, aucune base de données ni token Telegram requis — tout est en
+~494 tests, aucune base de données ni token Telegram requis — tout est en
 mémoire. Organisation (`test/`) :
 
 - `test/domain/**` — le moteur de jeu pur : résolution de nuit rôle par
@@ -48,22 +48,31 @@ mémoire. Organisation (`test/`) :
   utilisé (un faux `bot.api` qui enregistre les appels au lieu de les
   exécuter).
 - `test/application/**` — `GameManager` (registre en mémoire).
-- `test/simulation/full-game-stress.test.ts` — joue des parties complètes,
-  aléatoires, de bout en bout (répartition des rôles réelle via `balance()`,
-  chaque menu nuit/jour/vote répondu avec un choix valide au hasard via
+- `test/simulation/full-game-stress.test.ts` — joue des parties complètes
+  de bout en bout (répartition des rôles réelle via `balance()`, tailles de
+  5 à 35 joueurs) selon 6 stratégies de vote de lynchage différentes
+  (aléatoire, unanime, égalité forcée, abstention totale, vote ciblé sur le
+  Tanner, vote ciblé sur le Prince — un vote purement indépendant par
+  joueur ne reproduit jamais un vrai groupe qui se coordonne), plus deux
+  scénarios déterministes dédiés (composition de rôles imposée) pour
+  prouver les deux issues les plus rares (égalité de vote, victoire du
+  Tanner par lynchage). Chaque menu nuit/jour/vote est répondu via
   `GameLoop.handleCallback()`, exactement l'appel qu'un vrai clic Telegram
-  déclenche) sans jamais toucher le réseau. Utile pour détecter ce que les
+  déclenche, sans jamais toucher le réseau. Utile pour détecter ce que les
   tests unitaires ciblés ne voient pas : une exception non gérée à grande
   échelle, une partie qui ne se termine jamais (le garde-fou anti-boucle-
   infinie des timers simulés de vitest le détecte), ou une partie qui se
-  termine sans camp vainqueur. Par défaut 40 parties (rapide, fait partie de
-  `npm test`) ; pour un balayage plus profond :
+  termine sans camp vainqueur — c'est exactement comme ça que deux vrais
+  bugs ont été trouvés pendant l'audit initial (voir `REQUIREMENTS.md`).
+  Par défaut ~58 parties (rapide, fait partie de `npm test`) ; pour un
+  balayage plus profond (les campagnes de plus de 1000 parties se
+  découpent automatiquement en plusieurs tests pour rester rapides) :
   ```bash
-  SIM_GAMES=1000 npx vitest run test/simulation
+  SIM_SCALE=200 npx vitest run test/simulation   # ~11 600 parties, ~2-3 min
   ```
-  Le résumé affiché en console liste les rôles jamais distribués et la
-  répartition des camps vainqueurs — utile pour repérer une combinaison de
-  rôles qui plante systématiquement.
+  Le résumé affiché en console liste les rôles jamais distribués, la
+  répartition des camps vainqueurs et des issues de vote — utile pour
+  repérer une combinaison de rôles qui plante systématiquement.
 
 Pour lancer un seul fichier ou filtrer par nom :
 
@@ -202,8 +211,8 @@ Honnêteté totale, pour éviter toute fausse impression de couverture totale :
   façon fiable et reproductible. Les tests `test/infrastructure/*.test.ts`
   et `test/simulation/full-game-stress.test.ts` mockent l'objet `bot`
   (aucun appel réseau réel) — ce qui couvre exhaustivement la logique du
-  moteur de jeu et son câblage (voir §2, `full-game-stress.test.ts` fait
-  tourner des centaines de parties complètes de bout en bout), mais jamais
+  moteur de jeu et son câblage (voir §2, `full-game-stress.test.ts` peut
+  faire tourner des milliers de parties complètes de bout en bout), mais jamais
   le comportement réel de l'API Telegram elle-même (limites de débit,
   formats de clavier effectivement rendus dans l'appli, latence réseau) ni
   l'expérience d'un vrai joueur humain qui clique dans Telegram.
