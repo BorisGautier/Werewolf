@@ -165,14 +165,19 @@ qu'avant, mais toujours réel :
   isolées, démarrage du process réel avec ce `node_modules` réduit, contre
   un vrai PostgreSQL local installé directement) — mais l'image Docker
   finale elle-même n'a jamais été construite et lancée telle quelle.
-- ⚠️ Système de GIFs de mort/victoire : structure de données et repository
-  présents et testés, mais **aucun média par défaut** n'est fourni — sans
-  soumission manuelle, cette fonctionnalité reste silencieuse. Ce n'est pas
-  un oubli : le projet original n'en fournissait pas non plus (fonctionnalité
-  payante réservée aux donateurs, jamais livrée avec des GIFs intégrés au
-  dépôt). Voir [`DEPLOYMENT.md` §10](./DEPLOYMENT.md#10-ajouter-des-gifs-de-mortvictoire)
-  pour la marche à suivre complète (le workflow `/setgif`/`/approvegifs`/
-  `/usegifpack` est déjà entièrement fonctionnel).
+- ⚠️ Système de GIFs de mort/victoire : `assets/gifs/` (voir
+  `src/infrastructure/telegram/local-gif-pack.ts`) accepte maintenant des
+  fichiers locaux par défaut (aucune commande nécessaire, priorité plus
+  basse qu'un pack donateur approuvé), en plus du workflow `/setgif`/
+  `/approvegifs`/`/usegifpack` déjà fonctionnel — mais **le dossier est vide
+  par défaut**, aucun média n'est fourni. Ce n'est pas un oubli : le projet
+  original n'en fournissait pas non plus (fonctionnalité payante réservée
+  aux donateurs, jamais livrée avec des GIFs intégrés au dépôt), et cet
+  environnement n'a pas pu en télécharger lui-même (voir la conversation :
+  les sites d'assets libres de droits comme OpenGameArt/Pixabay sont
+  bloqués par la politique réseau du bac à sable). Voir
+  [`DEPLOYMENT.md` §10](./DEPLOYMENT.md#10-ajouter-des-gifs-de-mortvictoire)
+  pour la marche à suivre complète des deux méthodes.
 - ⚠️ Packs de langue au-delà de FR/EN : structure prête à recevoir d'autres
   langues, mais aucune traduction supplémentaire n'a été rédigée.
 

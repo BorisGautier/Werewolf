@@ -34,6 +34,7 @@ import { donorBadge, type PlayerRepository } from '../persistence/player.reposit
 import type { Translator } from '../i18n/translator.js';
 import type { Logger } from '../logging/logger.js';
 import { describeEvent } from './messages.js';
+import { LocalGifPack } from './local-gif-pack.js';
 import { dayOneTargets, DAY_ABILITY_ROLES, DAY_TARGET_ROLES, NIGHT_TARGET_ROLES, nightTargets } from './role-menus.js';
 import { buildEndGameSummary } from './end-game-summary.js';
 
@@ -70,6 +71,7 @@ export class GameLoop {
     private readonly logger: Logger,
     private readonly players?: PlayerRepository,
     private readonly gifPacks?: GifPackRepository,
+    private readonly localGifPack: LocalGifPack = new LocalGifPack(),
   ) {}
 
   /**
@@ -715,13 +717,12 @@ export class GameLoop {
 
   /**
    * Port of the original's custom-gif-pack broadcasting: alongside the text announcement, send
-   * whichever video/animation `file_id` the group's default pack (or, for a death, the dying
-   * player's own approved pack) has configured for this event - a no-op until someone actually
-   * submits and gets a pack approved, matching today's text-only behavior exactly.
+   * whichever video/animation the group's default pack (or, for a death, the dying player's own
+   * approved pack) has configured for this event. Falls back to a bundled default under
+   * `assets/gifs/` (see `LocalGifPack`) when no approved custom pack covers this category - a
+   * no-op (today's text-only behavior, unchanged) until either one is actually supplied.
    */
   private async sendGifForEvent(game: Game, group: GroupWithConfig, event: GameEvent): Promise<void> {
-    if (!this.gifPacks) return;
-
     let category: GifCategory | null = null;
     let playerId: bigint | undefined;
 
@@ -733,11 +734,12 @@ export class GameLoop {
     }
     if (!category) return;
 
-    const fileId = await this.gifPacks.getApprovedFileId(category, group.defaultGifPackId, playerId);
-    if (!fileId) return;
+    const fileId = this.gifPacks ? await this.gifPacks.getApprovedFileId(category, group.defaultGifPackId, playerId) : null;
+    const media = fileId ?? this.localGifPack.resolve(category);
+    if (!media) return;
 
     try {
-      await this.bot.api.sendAnimation(chatNumber(game.chatId), fileId);
+      await this.bot.api.sendAnimation(chatNumber(game.chatId), media);
     } catch (err) {
       this.logger.warn({ err, chatId: game.chatId.toString(), category }, 'Failed to send gif pack animation');
     }

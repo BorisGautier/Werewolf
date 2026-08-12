@@ -32,6 +32,7 @@ COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY prisma ./prisma
 COPY locales ./locales
+COPY assets ./assets
 COPY package.json ./
 COPY docker-entrypoint.sh ./
 
