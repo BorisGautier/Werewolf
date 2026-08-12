@@ -203,3 +203,68 @@ que la restauration se fait avant que le bot ne commence à écrire).
   du code si tu comptes modifier ou étendre le bot, et
   [`TESTING.md`](./TESTING.md) pour développer/tester en local avant de
   redéployer.
+
+## 10. Ajouter des GIFs de mort/victoire
+
+### Il n'y a rien à « récupérer » du projet original
+
+Le système de GIFs existe dans le code (menus, base de données, envoi) mais
+**ne contient aucun média par défaut**, et ce n'est pas un oubli de ce
+portage : le projet C# original ne livrait lui non plus **aucun GIF
+intégré au dépôt**. `CustomGifData` (`Werewolf Node/Models/CustomGifData.cs`
+dans le code source original) n'y stocke que des chaînes `file_id`
+Telegram, jamais des fichiers — c'était une fonctionnalité **payante,
+réservée aux donateurs** (`Want to help keep Werewolf Moderator online?
+Donate now and gets: Custom gifs`, `Werewolf Control/Commands/GifCommands.cs`),
+soumise par chaque utilisateur puis validée manuellement par un développeur.
+
+Concrètement, même en ayant un accès total à la base de données de
+l'instance originale, ses `file_id` ne fonctionneraient pas sur ton bot :
+un `file_id` Telegram est **propre au bot qui l'a reçu** — il n'est pas
+portable d'un token de bot à un autre. Il n'existe donc aucun jeu de GIFs
+« d'origine » à copier ; il faut en soumettre de nouveaux à ton instance,
+avec le workflow ci-dessous (déjà entièrement fonctionnel, il suffit de
+l'utiliser).
+
+### Ajouter tes propres GIFs
+
+1. **Débloque la fonctionnalité pour toi-même** (normalement réservée aux
+   donateurs, mais il existe un contournement dev prévu pour ça — même
+   esprit que `/addach`) : en PM avec le bot,
+   ```
+   /adddonation TON_ID_TELEGRAM 10
+   ```
+   (ton id doit être dans `DEV_USER_IDS` — voir §1). `10` correspond au
+   premier palier de don, celui qui débloque les GIFs personnalisés.
+
+2. **Envoie un GIF ou une vidéo au bot** en PM (glisse-dépose ou transfère
+   un fichier `.gif`/`.mp4` que tu as déjà), puis **réponds à ce message**
+   avec :
+   ```
+   /setgif <catégorie>
+   ```
+   Catégories disponibles (une soumission par catégorie, répète l'étape
+   pour chacune que tu veux personnaliser) :
+   `VillagerDie`, `WolfWin`, `WolvesWin`, `VillagersWin`, `NoWinner`,
+   `StartGame`, `StartChaosGame`, `TannerWin`, `CultWins`,
+   `SerialKillerWins`, `LoversWin`, `SKKilled`, `ArsonistWins`,
+   `BurnToDeath`. `/customgif` affiche à tout moment ton avancement
+   (combien de catégories déjà remplies).
+
+3. **Valide ta propre soumission** (commande dev) :
+   ```
+   /reviewgifs              # liste les packs en attente
+   /approvegifs TON_ID_TELEGRAM
+   ```
+
+4. **Active le pack dans un groupe** — un admin du groupe (ou toi si tu
+   l'es) y exécute :
+   ```
+   /usegifpack TON_ID_TELEGRAM
+   ```
+   `/usegifpack none` désactive le pack du groupe.
+
+À partir de là, le bot envoie automatiquement l'animation correspondante
+en plus du message texte habituel (mort de nuit, victoire, etc.) — aucune
+autre configuration nécessaire, c'est le même mécanisme que
+`sendGifForEvent` dans `game-loop.ts`.
