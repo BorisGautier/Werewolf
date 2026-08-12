@@ -151,6 +151,14 @@ interface SimResult {
   bias: string;
   roles: string[];
   winningTeam?: string;
+  /** `game.phase` at the moment the timer queue drained - diagnostic for the `noWinner` case:
+   * distinguishes "the loop is stuck mid-phase and something silently stopped scheduling more
+   * work" (phase !== 'Ended') from "the game finished but nobody was ever marked as winningTeam"
+   * (phase === 'Ended', which `checkWinCondition()`'s code shows should be structurally
+   * impossible - `finished: true` is only ever returned alongside a `winningTeam`). */
+  finalPhase: string;
+  aliveCount: number;
+  dayNumber: number;
   lynchOutcomesSeen: Set<string>;
   crashed: boolean;
   errors: unknown[];
@@ -334,6 +342,9 @@ async function runOneGame(
     bias: bias.kind === 'targetRole' ? `targetRole:${bias.role}` : bias.kind,
     roles,
     ...(winningTeam !== undefined ? { winningTeam } : {}),
+    finalPhase: game.phase,
+    aliveCount: alivePlayers(game.players).length,
+    dayNumber: game.dayNumber,
     lynchOutcomesSeen,
     crashed: errors.length > 0 && !stalled,
     errors,
@@ -349,8 +360,16 @@ interface Campaign {
   bias: VotingBias;
 }
 
+/** Ceiling on games per `it()` block. Even with a fresh `vi.useFakeTimers()` per game (see
+ * `runOneGame`), per-game cost still climbs the longer a single test runs - some vitest/vi
+ * bookkeeping accumulates within one test's lifetime that only a fresh `beforeEach`/`afterEach`
+ * cycle between separate `it()`s resets (splitting the old single giant test into one `it()` per
+ * campaign already bought a 4x speedup; sharding further keeps every individual test comfortably
+ * inside its timeout even at high `SIM_SCALE`). */
+const MAX_GAMES_PER_TEST = 1000;
+
 function buildCampaigns(): Campaign[] {
-  return [
+  const raw: Campaign[] = [
     { name: 'random', count: 30 * SCALE, bias: { kind: 'random' } },
     { name: 'concentrate', count: 10 * SCALE, bias: { kind: 'concentrate' } },
     { name: 'split', count: 6 * SCALE, bias: { kind: 'split' } },
@@ -358,6 +377,22 @@ function buildCampaigns(): Campaign[] {
     { name: 'target-tanner', count: 4 * SCALE, bias: { kind: 'targetRole', role: 'Tanner' } },
     { name: 'target-prince', count: 4 * SCALE, bias: { kind: 'targetRole', role: 'Prince' } },
   ];
+
+  const sharded: Campaign[] = [];
+  for (const campaign of raw) {
+    if (campaign.count <= MAX_GAMES_PER_TEST) {
+      sharded.push(campaign);
+      continue;
+    }
+    const shardCount = Math.ceil(campaign.count / MAX_GAMES_PER_TEST);
+    let remaining = campaign.count;
+    for (let shard = 1; shard <= shardCount; shard++) {
+      const count = Math.min(MAX_GAMES_PER_TEST, remaining);
+      sharded.push({ name: `${campaign.name} [${shard}/${shardCount}]`, count, bias: campaign.bias });
+      remaining -= count;
+    }
+  }
+  return sharded;
 }
 
 describe('full game stress simulation', () => {
@@ -436,7 +471,10 @@ describe('full game stress simulation', () => {
             return `  CRASH bias=${c.bias} size=${c.playerCount} chaos=${c.chaos} roles=[${c.roles.join(',')}]:\n${stack}`;
           }),
           ...stalls.map((c) => `  STALL bias=${c.bias} size=${c.playerCount} chaos=${c.chaos} roles=[${c.roles.join(',')}]`),
-          ...noWinner.map((c) => `  NO WINNER bias=${c.bias} size=${c.playerCount} chaos=${c.chaos} roles=[${c.roles.join(',')}]`),
+          ...noWinner.map(
+            (c) =>
+              `  NO WINNER bias=${c.bias} size=${c.playerCount} chaos=${c.chaos} finalPhase=${c.finalPhase} alive=${c.aliveCount} day=${c.dayNumber} roles=[${c.roles.join(',')}]`,
+          ),
         ].join('\n'),
       );
 
