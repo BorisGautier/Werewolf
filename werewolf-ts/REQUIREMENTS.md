@@ -167,8 +167,12 @@ qu'avant, mais toujours réel :
   finale elle-même n'a jamais été construite et lancée telle quelle.
 - ⚠️ Système de GIFs de mort/victoire : structure de données et repository
   présents et testés, mais **aucun média par défaut** n'est fourni — sans
-  ajout manuel de fichiers GIF, cette fonctionnalité reste silencieuse
-  (comportement voulu, pas un bug, mais à savoir).
+  soumission manuelle, cette fonctionnalité reste silencieuse. Ce n'est pas
+  un oubli : le projet original n'en fournissait pas non plus (fonctionnalité
+  payante réservée aux donateurs, jamais livrée avec des GIFs intégrés au
+  dépôt). Voir [`DEPLOYMENT.md` §10](./DEPLOYMENT.md#10-ajouter-des-gifs-de-mortvictoire)
+  pour la marche à suivre complète (le workflow `/setgif`/`/approvegifs`/
+  `/usegifpack` est déjà entièrement fonctionnel).
 - ⚠️ Packs de langue au-delà de FR/EN : structure prête à recevoir d'autres
   langues, mais aucune traduction supplémentaire n'a été rédigée.
 

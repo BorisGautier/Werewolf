@@ -203,6 +203,57 @@ describe('evaluateGameAchievements', () => {
     expect(unlocksFor(result, 1n)).toContain('CultistTracker');
   });
 
+  it('grants GunnerSaves to every Village-team player when the Gunner staves off a wolf win, but not to non-Village players', () => {
+    const villager = createPlayer(1n, 'V', ROLE_BIT.Villager, 'Village');
+    const gunner = createPlayer(2n, 'G', ROLE_BIT.Gunner, 'Village');
+    const wolf = createPlayer(3n, 'W', ROLE_BIT.Wolf, 'Wolf');
+    const events: GameEvent[][] = [[{ type: 'GunnerPreventsWolfWin' }]];
+    const result = evaluateGameAchievements(ctx([villager, gunner, wolf], { eventBatches: events }));
+    expect(unlocksFor(result, 1n)).toContain('GunnerSaves');
+    expect(unlocksFor(result, 2n)).toContain('GunnerSaves');
+    expect(unlocksFor(result, 3n)).not.toContain('GunnerSaves');
+  });
+
+  it('does not grant GunnerSaves when the wolves win outright (no near-miss event)', () => {
+    const villager = createPlayer(1n, 'V', ROLE_BIT.Villager, 'Village');
+    const result = evaluateGameAchievements(ctx([villager]));
+    expect(unlocksFor(result, 1n)).not.toContain('GunnerSaves');
+  });
+
+  it('grants ReallyBadLuck to the Serial Killer when a random re-target lands on the Guardian Angel\'s pick', () => {
+    const sk = createPlayer(1n, 'SK', ROLE_BIT.SerialKiller, 'SerialKiller');
+    const events: GameEvent[][] = [
+      [
+        { type: 'SerialKillerRandomKill', originalTargetId: 9n, newTargetId: 5n },
+        { type: 'GuardianAngelBlockedSerialKiller', targetId: 5n },
+      ],
+    ];
+    const result = evaluateGameAchievements(ctx([sk], { eventBatches: events }));
+    expect(unlocksFor(result, 1n)).toContain('ReallyBadLuck');
+  });
+
+  it('does not grant ReallyBadLuck when the random re-target and the GA block happen on different nights', () => {
+    const sk = createPlayer(1n, 'SK', ROLE_BIT.SerialKiller, 'SerialKiller');
+    const events: GameEvent[][] = [
+      [{ type: 'SerialKillerRandomKill', originalTargetId: 9n, newTargetId: 5n }],
+      [{ type: 'GuardianAngelBlockedSerialKiller', targetId: 5n }],
+    ];
+    const result = evaluateGameAchievements(ctx([sk], { eventBatches: events }));
+    expect(unlocksFor(result, 1n)).not.toContain('ReallyBadLuck');
+  });
+
+  it('does not grant ReallyBadLuck when the GA blocks a different target than the random re-target', () => {
+    const sk = createPlayer(1n, 'SK', ROLE_BIT.SerialKiller, 'SerialKiller');
+    const events: GameEvent[][] = [
+      [
+        { type: 'SerialKillerRandomKill', originalTargetId: 9n, newTargetId: 5n },
+        { type: 'GuardianAngelBlockedSerialKiller', targetId: 7n },
+      ],
+    ];
+    const result = evaluateGameAchievements(ctx([sk], { eventBatches: events }));
+    expect(unlocksFor(result, 1n)).not.toContain('ReallyBadLuck');
+  });
+
   it('grants WuffieCult to the Alpha Wolf after 3 successful bites', () => {
     const alpha = createPlayer(1n, 'A', ROLE_BIT.AlphaWolf, 'Wolf');
     const events: GameEvent[][] = [

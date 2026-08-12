@@ -216,10 +216,17 @@ Honnêteté totale, pour éviter toute fausse impression de couverture totale :
   le comportement réel de l'API Telegram elle-même (limites de débit,
   formats de clavier effectivement rendus dans l'appli, latence réseau) ni
   l'expérience d'un vrai joueur humain qui clique dans Telegram.
-- Les mécaniques annotées "best effort" dans le code (reconstruction fine
-  de certaines séquences pour les succès `GunnerSaves`/`ReallyBadLuck`, voir
-  `src/domain/achievements/evaluate.ts`) n'ont pas de garantie de fidélité
-  à 100 % avec l'original faute de scénario de test exhaustif.
+- `GunnerSaves`/`ReallyBadLuck` (`src/domain/achievements/evaluate.ts`)
+  étaient auparavant annotés "best effort, deferred" (non implémentés,
+  faute d'un événement portant l'information nécessaire) - corrigés en
+  s'appuyant sur `GunnerPreventsWolfWin`/`SerialKillerRandomKill` +
+  `GuardianAngelBlockedSerialKiller`, qui portaient déjà tout ce qu'il
+  fallait ; testés dans `test/domain/achievements/evaluate.test.ts`.
+  Il reste un seul achievement réellement hors de portée de l'évaluateur
+  pur actuel (`CultFodder` - il faudrait savoir quel cultiste précis une
+  conversion du Chasseur de culte a ciblé, une info qu'aucun événement ne
+  porte aujourd'hui) - marqué `Deferred` dans le fichier, sans impact sur
+  le jeu lui-même (uniquement un succès cosmétique non débloqué).
 - Recommandation : après tout changement touchant `game-loop.ts` ou aux
   résolveurs de nuit d'un rôle sensible, joue au moins une partie manuelle
   complète avec ce rôle (section 5) avant de déployer en production.

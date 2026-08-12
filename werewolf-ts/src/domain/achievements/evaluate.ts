@@ -10,10 +10,12 @@
  *
  * Not every one of the 102 catalog entries is implemented. What's left out, each marked in-line
  * below, is either a feature this migration explicitly left out of scope (language packs, the
- * donor/dev-only easter eggs, calendar events - see the README/audit) or a handful of achievements
- * that need a full per-night visit-target history (the Harlot's/Chemist's specific targets each
- * night) or a reconstructed near-miss win-condition chain this migration doesn't retain once a
- * night resolves - both noted honestly as "best effort, deferred" where they come up.
+ * donor/dev-only easter eggs, calendar events - see the README/audit) or - down to a single
+ * remaining case, #45 `CultFodder` - an achievement that needs to know which cultist a Cult
+ * Hunter conversion specifically targeted, which no event carries today.
+ * (`GunnerSaves` #48 and `ReallyBadLuck` #86 used to be deferred for a similar reason - a
+ * reconstructed near-miss win-condition chain - until `GunnerPreventsWolfWin`/
+ * `SerialKillerRandomKill` turned out to already carry everything needed; see those two entries.)
  */
 
 import { ROLE_BIT, type Role } from '../roles/role.js';
@@ -253,9 +255,19 @@ export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigin
     const livingWolves = players.filter((p) => isWolf(p.role) && !p.isDead);
     if (livingWolves.length >= 7) out.grantAll(livingWolves.map((p) => p.id), 'PackHunter');
   }
-  // #48 GunnerSaves - needs to reconstruct a near-miss win-condition check (wolves == villagers,
-  // but the Gunner's remaining bullet keeps the game going); not a signal any event carries.
-  // Deferred.
+  // #48 GunnerSaves - mirrors the original's `CheckForGameEnd` branch: wolves have just caught up
+  // to (or are one short of, with two wolves in love) the rest, but a living Gunner's remaining
+  // bullet keeps the game from ending to the wolves - `win-condition.ts` already detects exactly
+  // this and emits `GunnerPreventsWolfWin`, so this only needs to react to it. Grants every
+  // *current* Village-team player rather than a snapshot of who was alive at that exact moment
+  // (not retained by any event) - team never changes on death, only via a role transform, so this
+  // slightly overgrants only in the rare case a village player transforms teams afterward.
+  if (allEvents.some((e) => e.type === 'GunnerPreventsWolfWin')) {
+    out.grantAll(
+      players.filter((p) => p.team === 'Village').map((p) => p.id),
+      'GunnerSaves',
+    );
+  }
   // #49 LongHaul - real-world wall-clock duration; the pure evaluator has no notion of time, so
   // this is computed in `AchievementRepository.recordGameResult()` from the DB's
   // `startedAt`/`endedAt` instead.
@@ -448,8 +460,22 @@ export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigin
     const lover = victim.loverId ? findPlayer(victim.loverId) : undefined;
     if (lover?.won) out.grant(lover.id, 'RomeoAndJuliet');
   }
-  // #86 ReallyBadLuck - a very specific SK-stumble/random-kill/GA-block chain; none of it is
-  // tied together by a single event today. Deferred.
+  // #86 ReallyBadLuck - mirrors the original's exact chain: the Serial Killer stumbled a dug
+  // grave the night before, so tonight's kill gets randomly re-targeted
+  // (`SerialKillerRandomKill`) - and *that* random target just happens to be the one the Guardian
+  // Angel is protecting (`GuardianAngelBlockedSerialKiller` for the same id, in the very same
+  // night's batch - `resolveSerialKillerNight` always emits both together, never across nights).
+  {
+    const sk = players.find((p) => p.role === ROLE_BIT.SerialKiller);
+    if (sk) {
+      const gotReallyBadLuck = ctx.eventBatches.some((batch) => {
+        const randomKill = batch.find((e): e is Extract<GameEvent, { type: 'SerialKillerRandomKill' }> => e.type === 'SerialKillerRandomKill');
+        if (!randomKill) return false;
+        return batch.some((e) => e.type === 'GuardianAngelBlockedSerialKiller' && e.targetId === randomKill.newTargetId);
+      });
+      if (gotReallyBadLuck) out.grant(sk.id, 'ReallyBadLuck');
+    }
+  }
   // #87 Domino - a Hunter's shot kills another Hunter (who then gets their own dying shot too).
   for (const death of deaths) {
     if (death.method !== 'HunterShot') continue;
