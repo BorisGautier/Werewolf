@@ -363,15 +363,21 @@ function buildCampaigns(): Campaign[] {
 describe('full game stress simulation', () => {
   const campaigns = buildCampaigns();
   const totalGames = campaigns.reduce((sum, c) => sum + c.count, 0);
+  // Shared across the per-campaign tests below and read by the final summary test - `it()`
+  // blocks in the same `describe` run sequentially in one worker, so this is safe.
+  const results: SimResult[] = [];
+  const seenRoles = new Set<string>();
+  let gameIndex = 0;
 
-  it(
-    `plays ${totalGames} complete games end-to-end across ${campaigns.length} voting strategies, without a live Telegram connection`,
-    async () => {
-      const results: SimResult[] = [];
-      const seenRoles = new Set<string>();
-      let gameIndex = 0;
-
-      for (const campaign of campaigns) {
+  // One `it()` per campaign instead of a single loop over all of them: running many thousands of
+  // games inside one `it()` made per-game cost climb (vitest/mock bookkeeping - `vi.fn()`,
+  // `useFakeTimers()` - accumulates *something* over a test's lifetime that a fresh `beforeEach`/
+  // `afterEach` cycle between separate `it()`s resets), so splitting keeps each test in the fast,
+  // roughly-linear regime instead of degrading super-linearly across the whole campaign.
+  for (const campaign of campaigns) {
+    it(
+      `campaign "${campaign.name}": plays ${campaign.count} games`,
+      async () => {
         for (let i = 0; i < campaign.count; i++) {
           const playerCount = 5 + (gameIndex % 31); // cycle 5..35 (the production max) for broad size coverage
           const chaos = gameIndex % 3 === 0;
@@ -380,8 +386,22 @@ describe('full game stress simulation', () => {
           for (const r of result.roles) seenRoles.add(r);
           gameIndex++;
         }
-      }
+        const campaignResults = results.slice(-campaign.count);
+        const campaignCrashes = campaignResults.filter((r) => r.crashed);
+        expect(
+          campaignCrashes,
+          `${campaignCrashes.length} game(s) crashed in campaign "${campaign.name}"`,
+        ).toHaveLength(0);
+      },
+      // A few thousand simulated games can take a while even with fake timers (lots of microtask
+      // churn) - give each campaign a lot more headroom than vitest's 5s default.
+      600_000,
+    );
+  }
 
+  it(
+    `summary: ${totalGames} games across ${campaigns.length} voting strategies played with no crash, no stall, and a winner every time`,
+    () => {
       const crashes = results.filter((r) => r.crashed);
       const stalls = results.filter((r) => r.stalled);
       const noWinner = results.filter((r) => !r.crashed && !r.stalled && !r.winningTeam);
@@ -446,9 +466,6 @@ describe('full game stress simulation', () => {
         ).toHaveLength(0);
       }
     },
-    // A few thousand simulated games can take a while even with fake timers (lots of microtask
-    // churn) - give this test a lot more headroom than vitest's 5s default.
-    600_000,
   );
 
   // The two outcomes above structurally can't be relied on from the general campaign (see the
