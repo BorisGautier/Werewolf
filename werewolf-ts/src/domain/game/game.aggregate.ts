@@ -269,6 +269,22 @@ export class Game {
     // could be missed in a same-round victory check.
     const roleChangeEvents = checkRoleChanges(this.players, true);
 
+    // A lynched Tanner ends the game immediately and unconditionally - `resolveLynchVotes()`
+    // already marked the winners on the players and pushed a `GameEnded` event for it, but
+    // `evaluateWinCondition()` (what `checkWinCondition()` below calls) has no Tanner branch of
+    // its own, so without this `this.phase` would never flip to 'Ended': the loop would announce
+    // the Tanner's win and then carry on into another night as if nothing had happened.
+    if (lynchResult.resolution.outcome === 'TannerWinByLynch') {
+      this.phase = 'Ended';
+      this.winningTeam = 'Tanner';
+      return {
+        ...lynchResult,
+        finished: true,
+        winningTeam: 'Tanner',
+        events: [...lynchResult.events, ...roleChangeEvents],
+      };
+    }
+
     const win = this.checkWinCondition({ checkBitten: true });
     return {
       ...lynchResult,
