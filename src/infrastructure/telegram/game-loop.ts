@@ -431,9 +431,21 @@ export class GameLoop {
       if (this.players) {
         try {
           const scores = calculateGamePoints(game.players, game.winningTeam ?? null, firstLynchVictimId(batches));
+          const grp = await this.groups.getOrCreate(game.chatId, null, null);
+          const lang = grp.language;
           for (const score of scores) {
             scoresMap.set(score.playerId, score.points);
-            await this.players.awardPoints(score.playerId, score.points, score.won);
+            const res = await this.players.awardPoints(score.playerId, score.points, score.won);
+            if (res.promoted) {
+              const title = this.t.translate(lang, res.newRank.titleKey);
+              const displayTitle = title.startsWith('Rank_') ? res.newRank.defaultTitle : title;
+              const promoMsg = this.t.translate(lang, 'RankPromotionNotice', res.newRank.emoji, displayTitle, res.newPoints);
+              try {
+                await this.bot.api.sendMessage(Number(score.playerId), promoMsg, { parse_mode: 'HTML' });
+              } catch {
+                // Ignore if player hasn't started PM
+              }
+            }
           }
         } catch (err) {
           this.logger.error({ err, chatId: game.chatId.toString(), gameId }, 'Failed to award leaderboard points');

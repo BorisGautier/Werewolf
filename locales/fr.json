@@ -749,6 +749,20 @@
     "LeaderboardTitle": ["🏆 <b>Classement Global des Joueurs</b> 🏆\n"],
     "LeaderboardRow": ["{0}. {1} — ⭐ <b>{2} pts</b> ({3} victoires / {4} parties)"],
     "LeaderboardYourRank": ["\nTa position : #{0} avec ⭐ {1} pts."],
-    "NoReportsPending": ["Aucun signalement en attente."]
+    "NoReportsPending": ["Aucun signalement en attente."],
+    "YourRankIs": ["Rang actuel"],
+    "RankPromotionNotice": ["🎉 <b>FÉLICITATIONS ! PROMOTION DE RANG !</b>\n\nVous avez accumulé <b>{2} points</b> et vous franchissez un nouveau palier !\nVotre nouveau rang est : <b>{0} {1}</b> ! 🏆"],
+    "Rank_Novice": ["Écuyer Débutant"],
+    "Rank_GuardianOfShadows": ["Gardien des Ombres"],
+    "Rank_BlackKnight": ["Chevalier Noir"],
+    "Rank_ShadowKnight": ["Chevalier des Ombres"],
+    "Rank_EliteKnight": ["Chevalier Élite"],
+    "Rank_DragonSlayer": ["Chasseur de Dragon"],
+    "Rank_ScourgeDestroyer": ["Destructeur de Fléaux"],
+    "Rank_WarKing": ["Roi de Guerre"],
+    "Rank_SkyMonarch": ["Monarque des Cieux"],
+    "Rank_WolfGod": ["Dieu du Loup"],
+    "Rank_OlympusLord": ["Seigneur de l'Olympe"],
+    "Rank_SupremeSovereign": ["Souverain Absolu"]
   }
 }
