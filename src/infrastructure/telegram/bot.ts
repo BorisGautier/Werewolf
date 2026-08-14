@@ -7,6 +7,8 @@ import type { Logger } from '../logging/logger.js';
 import type { Translator } from '../i18n/translator.js';
 import type { GameMode } from '../../domain/game/game-mode.js';
 import { getRankForPoints } from '../../domain/scoring/rank.js';
+import { TITLE_CATALOG, getTitleById } from '../../domain/titles/title.js';
+import { LAST_GAZETTES_BY_CHAT } from '../../domain/gazette/gazette-generator.js';
 import { AchievementRepository } from '../persistence/achievement.repository.js';
 import { AdminRepository } from '../persistence/admin.repository.js';
 import { GameRepository } from '../persistence/game.repository.js';
@@ -295,6 +297,90 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     }
 
     await ctx.reply(lines.join('\n'), { parse_mode: 'HTML' });
+  });
+
+  bot.command(['profile', 'profil'], async (ctx) => {
+    if (!ctx.from) return;
+    const targetUserId = BigInt(ctx.from.id);
+    const player = await deps.playerRepository.findByTelegramId(targetUserId);
+    const language = player?.languageCode ?? 'fr';
+    const isFr = language === 'fr';
+
+    const playerStats = await deps.gameRepository.getPlayerStats(targetUserId);
+    const rank = getRankForPoints(player?.points ?? 0);
+    const rankTitle = deps.translator.translate(language, rank.titleKey);
+    const displayRankTitle = rankTitle.startsWith('Rank_') ? rank.defaultTitle : rankTitle;
+
+    const equippedTitleObj = player?.equippedTitle ? getTitleById(player.equippedTitle) : null;
+    const titleText = equippedTitleObj ? `${equippedTitleObj.emoji} ${equippedTitleObj.defaultTitle}` : (isFr ? 'Aucun' : 'None');
+
+    const winrate = playerStats.played > 0 ? ((playerStats.won / playerStats.played) * 100).toFixed(1) : '0.0';
+
+    const cardLines = [
+      `👤 <b>CARTE DE PROFIL — ${ctx.from.first_name.toUpperCase()}</b>`,
+      `━━━━━━━━━━━━━━━━━━━━━━`,
+      `🏅 <b>Rang :</b> ${rank.emoji} ${displayRankTitle}`,
+      `👑 <b>Titre Équipé :</b> ${titleText}`,
+      `⭐ <b>Points de Classement :</b> ${player?.points ?? 0} pts`,
+      `🎮 <b>Parties Jouées :</b> ${playerStats.played}`,
+      `🏆 <b>Victoires :</b> ${playerStats.won} (${winrate}% winrate)`,
+      `💎 <b>Palier Donateur :</b> ${donorBadge(player?.donationLevel ?? 0) || (isFr ? 'Membre' : 'Member')}`,
+      `━━━━━━━━━━━━━━━━━━━━━━`,
+      isFr ? `💡 Utilise /titles pour changer ton titre équipé !` : `💡 Use /titles to change your equipped title!`,
+    ];
+
+    await ctx.reply(cardLines.join('\n'), { parse_mode: 'HTML' });
+  });
+
+  bot.command('gazette', async (ctx) => {
+    const chatId = ctx.chat?.id ? ctx.chat.id.toString() : '';
+    const gazette = LAST_GAZETTES_BY_CHAT.get(chatId);
+    if (!gazette) {
+      await ctx.reply('📜 <i>Aucune gazette récente pour ce groupe. Jouez une partie pour éditer la première gazette !</i>', { parse_mode: 'HTML' });
+      return;
+    }
+    await ctx.reply(`${gazette.title}\n\n${gazette.lines.join('\n')}`, { parse_mode: 'HTML' });
+  });
+
+  bot.command(['titles', 'titres'], async (ctx) => {
+    if (!ctx.from) return;
+    const player = await deps.playerRepository.findByTelegramId(BigInt(ctx.from.id));
+    const language = player?.languageCode ?? 'fr';
+    const isFr = language === 'fr';
+
+    const keyboard = new InlineKeyboard();
+    TITLE_CATALOG.forEach((t, i) => {
+      const isEquipped = player?.equippedTitle === t.id;
+      const btnText = `${isEquipped ? '✅ ' : ''}${t.emoji} ${t.defaultTitle}`;
+      keyboard.text(btnText, `settitle:${t.id}`);
+      if (i % 2 === 1) keyboard.row();
+    });
+    keyboard.row().text(isFr ? '❌ Retirer mon titre' : '❌ Unequip Title', 'settitle:none');
+
+    const msg = isFr
+      ? `👑 <b>GESTION DES TITRES ÉPIQUES</b>\n\nChoisis le titre que tu souhaites afficher sur ta carte de profil et dans le classement :`
+      : `👑 <b>EQUIP YOUR TITLE</b>\n\nChoose the title you wish to display on your profile card and leaderboard:`;
+
+    try {
+      await ctx.api.sendMessage(ctx.from.id, msg, { reply_markup: keyboard, parse_mode: 'HTML' });
+      if (ctx.chat && ctx.chat.type !== 'private') {
+        await ctx.reply(isFr ? 'Regarde tes messages privés pour gérer tes titres !' : 'Check your private messages to manage your titles!');
+      }
+    } catch {
+      await ctx.reply(isFr ? "Démarre d'abord une conversation avec moi en MP pour gérer tes titres !" : "Start a PM with me first to manage your titles!");
+    }
+  });
+
+  bot.callbackQuery(/^settitle:(.+)$/, async (ctx) => {
+    if (!ctx.from) return;
+    const titleId = ctx.match[1]!;
+    const newTitle = titleId === 'none' ? null : titleId;
+    await deps.playerRepository.setEquippedTitle(BigInt(ctx.from.id), newTitle);
+
+    const titleObj = newTitle ? getTitleById(newTitle) : null;
+    const text = titleObj ? `Titre équipé : ${titleObj.emoji} ${titleObj.defaultTitle} !` : 'Titre retiré.';
+    await ctx.answerCallbackQuery({ text });
+    await ctx.editMessageText(`✅ <b>${text}</b>\n\nUtilise /profile pour admirer ta nouvelle carte de profil !`, { parse_mode: 'HTML' });
   });
 
   bot.command('report', async (ctx) => {

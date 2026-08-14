@@ -194,6 +194,7 @@ model Player {
   points             Int      @default(0)
   gamesPlayed        Int      @default(0)
   gamesWon           Int      @default(0)
+  equippedTitle      String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 

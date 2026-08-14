@@ -23,6 +23,7 @@ import { WOLF_ROLES } from '../../domain/game/game-balancing.js';
 import { ABSTAIN, SPARK, alivePlayers, type Player } from '../../domain/game/player.js';
 import type { GameEvent } from '../../domain/game/game-event.js';
 import type { Team } from '../../domain/game/team.js';
+import { generateGazette, LAST_GAZETTES_BY_CHAT } from '../../domain/gazette/gazette-generator.js';
 import { evaluateGameAchievements, firstLynchVictimId } from '../../domain/achievements/evaluate.js';
 import { ACHIEVEMENTS, type AchievementCode } from '../../domain/achievements/catalog.js';
 import type { GroupWithConfig } from '../persistence/group.repository.js';
@@ -462,6 +463,15 @@ export class GameLoop {
       const donorBadges = await this.donorBadges(game.players.map((p) => p.id));
       const summary = buildEndGameSummary(game.players, group.showRolesEnd, group.language, this.t, durationMs, donorBadges, scoresMap);
       await this.sendRaw(game.chatId, summary);
+
+      try {
+        const gazette = generateGazette(game, batches, group.language);
+        LAST_GAZETTES_BY_CHAT.set(game.chatId.toString(), gazette);
+        const gazetteMsg = `${gazette.title}\n\n${gazette.lines.join('\n')}`;
+        await this.sendRaw(game.chatId, gazetteMsg);
+      } catch (err) {
+        this.logger.error({ err, chatId: game.chatId.toString() }, 'Failed to generate village gazette');
+      }
     } catch (err) {
       this.logger.error({ err, chatId: game.chatId.toString() }, 'Failed to send end-of-game summary');
     }
