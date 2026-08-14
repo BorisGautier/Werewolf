@@ -1,4 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
+import { getRankForPoints, type RankTier } from '../../domain/scoring/rank.js';
 
 export interface PlayerUpsertData {
   username?: string | null;
@@ -133,10 +134,18 @@ export class PlayerRepository {
     await this.prisma.player.update({ where: { telegramId }, data: { afkCount: 0 } });
   }
 
-  /** Awards leaderboard points and records game stats. */
-  async awardPoints(telegramId: bigint, deltaPoints: number, won: boolean): Promise<void> {
+  /** Awards leaderboard points and records game stats. Returns promotion info if rank leveled up. */
+  async awardPoints(
+    telegramId: bigint,
+    deltaPoints: number,
+    won: boolean,
+  ): Promise<{ oldPoints: number; newPoints: number; oldRank: RankTier; newRank: RankTier; promoted: boolean }> {
     await this.upsert(telegramId);
-    await this.prisma.player.update({
+    const existing = await this.findByTelegramId(telegramId);
+    const oldPoints = existing?.points ?? 0;
+    const oldRank = getRankForPoints(oldPoints);
+
+    const updated = await this.prisma.player.update({
       where: { telegramId },
       data: {
         points: { increment: deltaPoints },
@@ -144,6 +153,12 @@ export class PlayerRepository {
         ...(won ? { gamesWon: { increment: 1 } } : {}),
       },
     });
+
+    const newPoints = updated.points;
+    const newRank = getRankForPoints(newPoints);
+    const promoted = newRank.level > oldRank.level;
+
+    return { oldPoints, newPoints, oldRank, newRank, promoted };
   }
 
   /** Returns top ranked players ordered by points descending. */

@@ -753,6 +753,20 @@
     "LeaderboardTitle": ["🏆 <b>Global Player Leaderboard</b> 🏆\n"],
     "LeaderboardRow": ["{0}. {1} — ⭐ <b>{2} pts</b> ({3} wins / {4} games)"],
     "LeaderboardYourRank": ["\nYour rank: #{0} with ⭐ {1} pts."],
-    "NoReportsPending": ["No pending reports."]
+    "NoReportsPending": ["No pending reports."],
+    "YourRankIs": ["Current Rank"],
+    "RankPromotionNotice": ["🎉 <b>CONGRATULATIONS! RANK PROMOTION!</b>\n\nYou accumulated <b>{2} points</b> and reached a new tier!\nYour new rank is: <b>{0} {1}</b>! 🏆"],
+    "Rank_Novice": ["Beginner Squire"],
+    "Rank_GuardianOfShadows": ["Guardian of Shadows"],
+    "Rank_BlackKnight": ["Black Knight"],
+    "Rank_ShadowKnight": ["Shadow Knight"],
+    "Rank_EliteKnight": ["Elite Knight"],
+    "Rank_DragonSlayer": ["Dragon Slayer"],
+    "Rank_ScourgeDestroyer": ["Scourge Destroyer"],
+    "Rank_WarKing": ["War King"],
+    "Rank_SkyMonarch": ["Sky Monarch"],
+    "Rank_WolfGod": ["Wolf God"],
+    "Rank_OlympusLord": ["Lord of Olympus"],
+    "Rank_SupremeSovereign": ["Supreme Sovereign"]
   }
 }

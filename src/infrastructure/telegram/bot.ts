@@ -6,6 +6,7 @@ import type { Env } from '../config/env.js';
 import type { Logger } from '../logging/logger.js';
 import type { Translator } from '../i18n/translator.js';
 import type { GameMode } from '../../domain/game/game-mode.js';
+import { getRankForPoints } from '../../domain/scoring/rank.js';
 import { AchievementRepository } from '../persistence/achievement.repository.js';
 import { AdminRepository } from '../persistence/admin.repository.js';
 import { GameRepository } from '../persistence/game.repository.js';
@@ -200,7 +201,14 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
         const localized = deps.translator.translate(lang, `Role_${name}`);
         const displayName = localized.startsWith('Role_') ? name : localized;
         const emoji = ROLE_META[name].emoji;
-        await ctx.reply(deps.translator.translate(lang, 'YourRoleIs', `${emoji} ${displayName}`));
+        const rank = getRankForPoints(player?.points ?? 0);
+        const rankTitle = deps.translator.translate(lang, rank.titleKey);
+        const displayRankTitle = rankTitle.startsWith('Rank_') ? rank.defaultTitle : rankTitle;
+        await ctx.reply(
+          deps.translator.translate(lang, 'YourRoleIs', `${emoji} ${displayName}`) +
+            `\n🏅 <b>${deps.translator.translate(lang, 'YourRankIs')}:</b> ${rank.emoji} ${displayRankTitle} (${player?.points ?? 0} pts)`,
+          { parse_mode: 'HTML' }
+        );
       }
     }
   });
@@ -242,9 +250,14 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     const name = `${ctx.from.first_name} ${ctx.from.last_name ?? ''}`.trim();
 
     const playerStats = await deps.gameRepository.getPlayerStats(BigInt(ctx.from.id));
+    const rank = getRankForPoints(player?.points ?? 0);
+    const rankTitle = deps.translator.translate(language, rank.titleKey);
+    const displayRankTitle = rankTitle.startsWith('Rank_') ? rank.defaultTitle : rankTitle;
+
     const lines = [
       deps.translator.translate(language, 'StatsHeader'),
       deps.translator.translate(language, 'StatsPlayerLine', name, playerStats.played, playerStats.won),
+      `🏅 <b>${deps.translator.translate(language, 'YourRankIs')}:</b> ${rank.emoji} ${displayRankTitle} (${player?.points ?? 0} pts)`,
     ];
 
     if (ctx.chat && ctx.chat.type !== 'private') {
@@ -253,7 +266,7 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
       lines.push(deps.translator.translate(language, 'StatsGroupLine', groupStats.played));
     }
 
-    await ctx.reply(lines.join('\n'));
+    await ctx.reply(lines.join('\n'), { parse_mode: 'HTML' });
   });
 
   bot.command(['leaderboard', 'top', 'classement'], async (ctx) => {
@@ -263,16 +276,22 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     const language = caller?.languageCode ?? 'en';
 
     const topPlayers = await deps.playerRepository.getTopPlayers(10);
-    const lines = [deps.translator.translate(language, 'LeaderboardTitle')];
+    const lines = [deps.translator.translate(language, 'LeaderboardTitle') + '\n'];
 
     topPlayers.forEach((p, idx) => {
       const pName = (p.displayName ?? p.username ?? 'Player') + donorBadge(p.donationLevel);
-      lines.push(deps.translator.translate(language, 'LeaderboardRow', idx + 1, pName, p.points, p.gamesWon, p.gamesPlayed));
+      const rank = getRankForPoints(p.points);
+      const rankTitle = deps.translator.translate(language, rank.titleKey);
+      const displayRankTitle = rankTitle.startsWith('Rank_') ? rank.defaultTitle : rankTitle;
+      lines.push(`${idx + 1}. <b>${pName}</b> - ${rank.emoji} <i>${displayRankTitle}</i> (${p.points} pts | ${p.gamesWon}🏆/${p.gamesPlayed}🎮)`);
     });
 
     const userRank = await deps.playerRepository.getPlayerRank(callerId);
     if (userRank && userRank.rank > 10) {
-      lines.push(deps.translator.translate(language, 'LeaderboardYourRank', userRank.rank, userRank.points));
+      const callerRank = getRankForPoints(caller?.points ?? 0);
+      const callerRankTitle = deps.translator.translate(language, callerRank.titleKey);
+      const displayCallerRank = callerRankTitle.startsWith('Rank_') ? callerRank.defaultTitle : callerRankTitle;
+      lines.push(`\n📌 <b>Votre Rang :</b> #${userRank.rank} - ${callerRank.emoji} ${displayCallerRank} (${userRank.points} pts)`);
     }
 
     await ctx.reply(lines.join('\n'), { parse_mode: 'HTML' });
