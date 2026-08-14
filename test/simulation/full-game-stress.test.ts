@@ -427,6 +427,7 @@ describe('full game stress simulation', () => {
         const campaignCrashes = campaignResults.filter((r) => r.crashed);
         expect(
           campaignCrashes,
+          campaignCrashes,
           `${campaignCrashes.length} game(s) crashed in campaign "${campaign.name}"`,
         ).toHaveLength(0);
       },

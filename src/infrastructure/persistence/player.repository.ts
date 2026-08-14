@@ -161,6 +161,15 @@ export class PlayerRepository {
     return { oldPoints, newPoints, oldRank, newRank, promoted };
   }
 
+  /** Sets the equipped title for a player. */
+  async setEquippedTitle(telegramId: bigint, equippedTitle: string | null): Promise<void> {
+    await this.upsert(telegramId);
+    await this.prisma.player.update({
+      where: { telegramId },
+      data: { equippedTitle },
+    });
+  }
+
   /** Returns top ranked players ordered by points descending. */
   async getTopPlayers(limit = 10) {
     return this.prisma.player.findMany({
@@ -175,6 +184,7 @@ export class PlayerRepository {
         gamesPlayed: true,
         gamesWon: true,
         donationLevel: true,
+        equippedTitle: true,
       },
     });
   }
