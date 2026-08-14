@@ -169,14 +169,21 @@ model Player {
   /// Consecutive finished games this player was the first lynch victim in; resets to 0 the
   /// moment a game ends without that being true. Powers the BlackSheep achievement.
   firstLynchStreak   Int @default(0)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  afkCount           Int      @default(0)
+  suspendedUntil     DateTime?
+  points             Int      @default(0)
+  gamesPlayed        Int      @default(0)
+  gamesWon           Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
-  gamePlayers    GamePlayer[]
-  achievements   PlayerAchievement[]
-  globalBans     GlobalBan[]
-  adminGrants    AdminUser[]
-  gifPack        CustomGifPack?
+  gamePlayers        GamePlayer[]
+  achievements       PlayerAchievement[]
+  globalBans         GlobalBan[]
+  adminGrants        AdminUser[]
+  gifPack            CustomGifPack?
+  reportsMade        PlayerReport[] @relation("reportsMade")
+  reportsReceived    PlayerReport[] @relation("reportsReceived")
 
   @@map("players")
 }
@@ -213,6 +220,7 @@ model Group {
   secretLynch              Boolean @default(false)
   secretLynchShowVotes     Boolean @default(false)
   secretLynchShowVoters    Boolean @default(false)
+  muteDead                 Boolean @default(false)
 
   botInGroup   Boolean  @default(true)
   memberCount  Int?
@@ -411,4 +419,27 @@ model DailyStat {
 
   @@unique([date, groupId])
   @@map("daily_stats")
+}
+
+enum ReportStatus {
+  PENDING
+  RESOLVED
+  DISMISSED
+}
+
+model PlayerReport {
+  id          Int          @id @default(autoincrement())
+  reporterId  BigInt
+  reportedId  BigInt
+  groupId     BigInt?
+  reason      String
+  status      ReportStatus @default(PENDING)
+  createdAt   DateTime     @default(now())
+
+  reporter    Player?      @relation("reportsMade", fields: [reporterId], references: [telegramId])
+  reported    Player?      @relation("reportsReceived", fields: [reportedId], references: [telegramId])
+
+  @@index([reporterId])
+  @@index([reportedId])
+  @@map("player_reports")
 }

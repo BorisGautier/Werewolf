@@ -57,3 +57,12 @@ export const ABOUT_ROLE_BY_TRIGGER: Readonly<Record<string, RoleName>> = {
 export function aboutLocaleKey(role: RoleName): string {
   return `About${role}`;
 }
+
+/** Resolves any `/about<trigger>`, `/about<roleName>`, `/<trigger>`, or `/<roleName>` command string. */
+export function resolveRoleFromTrigger(input: string): RoleName | null {
+  const clean = input.toLowerCase().replace(/^\/?about/, '');
+  if (ABOUT_ROLE_BY_TRIGGER[clean]) return ABOUT_ROLE_BY_TRIGGER[clean]!;
+  const roleEntry = Object.values(ABOUT_ROLE_BY_TRIGGER).find((r) => r.toLowerCase() === clean);
+  return roleEntry ?? null;
+}
+

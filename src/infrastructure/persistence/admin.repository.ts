@@ -42,6 +42,15 @@ export class AdminRepository {
     return grant !== null;
   }
 
+  /** List all admin Telegram IDs (DEV and GLOBAL_ADMIN) to send report alerts. */
+  async listGlobalAdminIds(): Promise<bigint[]> {
+    const admins = await this.prisma.adminUser.findMany({
+      where: { role: { in: ['DEV', 'GLOBAL_ADMIN'] } },
+      select: { telegramId: true },
+    });
+    return admins.map((a) => a.telegramId);
+  }
+
   /**
    * Creates the ban record and marks the player banned, creating a stub `Player` row if this
    * telegramId has never interacted with the bot before (mirrors the original always being able

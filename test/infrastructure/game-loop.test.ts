@@ -170,19 +170,24 @@ describe('GameLoop', () => {
   });
 
   it('skips the gif send entirely when no gif pack repository is wired in (default behavior)', async () => {
-    const { loop, gameManager, sendAnimation } = createHarness();
-    const game = dealtGame(gameManager);
-    const wolf = game.players[0]!;
-    const victim = game.players[1]!;
+    const dir = await mkdtemp(path.join(tmpdir(), 'werewolf-gifs-empty-'));
+    try {
+      const { loop, gameManager, sendAnimation } = createHarness({ localGifPack: new LocalGifPack(dir) });
+      const game = dealtGame(gameManager);
+      const wolf = game.players[0]!;
+      const victim = game.players[1]!;
 
-    loop.start(game, 42);
-    await vi.advanceTimersByTimeAsync(0);
+      loop.start(game, 42);
+      await vi.advanceTimersByTimeAsync(0);
 
-    await loop.handleCallback(wolf.id, wolf.id, `nt:${victim.id.toString()}`);
-    await vi.advanceTimersByTimeAsync(5000);
+      await loop.handleCallback(wolf.id, wolf.id, `nt:${victim.id.toString()}`);
+      await vi.advanceTimersByTimeAsync(5000);
 
-    expect(victim.isDead).toBe(true);
-    expect(sendAnimation).not.toHaveBeenCalled();
+      expect(victim.isDead).toBe(true);
+      expect(sendAnimation).not.toHaveBeenCalled();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it('falls back to a bundled local gif when no approved custom pack covers the category', async () => {

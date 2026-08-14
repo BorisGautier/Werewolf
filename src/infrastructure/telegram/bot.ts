@@ -11,7 +11,7 @@ import { GameRepository } from '../persistence/game.repository.js';
 import { GIF_CATEGORIES, GifPackRepository } from '../persistence/gif-pack.repository.js';
 import { GroupRepository } from '../persistence/group.repository.js';
 import { NotifyGameRepository } from '../persistence/notify-game.repository.js';
-import { DONATION_TIERS, PlayerRepository } from '../persistence/player.repository.js';
+import { DONATION_TIERS, PlayerRepository, donorBadge } from '../persistence/player.repository.js';
 import { GameLobbyManager } from './game-lobby.js';
 import { GameLoop } from './game-loop.js';
 import { ConfigMenu } from './config-menu.js';
@@ -22,7 +22,7 @@ import {
   resolveEntityTargets,
   resolveGroupArg,
 } from './moderation-targets.js';
-import { ABOUT_ROLE_BY_TRIGGER, aboutLocaleKey } from './role-info.js';
+import { ABOUT_ROLE_BY_TRIGGER, aboutLocaleKey, resolveRoleFromTrigger } from './role-info.js';
 import { ROLE_META, roleName } from '../../domain/roles/role.js';
 import { ACHIEVEMENT_CODES, ACHIEVEMENTS } from '../../domain/achievements/catalog.js';
 import { SpamGuard } from './spam-guard.js';
@@ -48,6 +48,8 @@ export async function isGroupAdminOrAnonymous(ctx: Context): Promise<boolean> {
   return member.status === 'creator' || member.status === 'administrator';
 }
 
+import { ReportRepository } from '../persistence/report.repository.js';
+
 export interface BotDependencies {
   translator: Translator;
   gameManager: GameManager;
@@ -58,6 +60,7 @@ export interface BotDependencies {
   notifyGameRepository: NotifyGameRepository;
   achievementRepository: AchievementRepository;
   gifPackRepository: GifPackRepository;
+  reportRepository?: ReportRepository;
 }
 
 const INVITE_LINK_PATTERN = /^(https?:\/\/)?t(elegram)?\.me\/(\+|joinchat\/)([a-zA-Z0-9_-]+)$/;
@@ -151,11 +154,29 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     await ctx.reply('pong');
   });
 
+  bot.command('testgif', async (ctx) => {
+    if (!ctx.from) return;
+    if (!env.devUserIds.includes(BigInt(ctx.from.id))) return;
+    const category = ((ctx.match as string | undefined) ?? '').trim() as import('../persistence/gif-pack.repository.js').GifCategory;
+    const validCategories = GIF_CATEGORIES as readonly string[];
+    if (!category || !validCategories.includes(category)) {
+      await ctx.reply(`Usage: /testgif <category>\n\nAvailable categories:\n${GIF_CATEGORIES.join('\n')}`);
+      return;
+    }
+    const localPack = new (await import('./local-gif-pack.js')).LocalGifPack();
+    const file = localPack.resolve(category as import('../persistence/gif-pack.repository.js').GifCategory);
+    if (!file) {
+      await ctx.reply(`❌ No GIF found for category "${category}" in assets/gifs/`);
+      return;
+    }
+    await ctx.replyWithAnimation(file, { caption: `✅ Test GIF: <b>${category}</b>`, parse_mode: 'HTML' });
+  });
+
   bot.command('version', async (ctx) => {
     await ctx.reply('werewolf-ts v0.1.0 (migration in progress)');
   });
 
-  bot.command('start', async (ctx) => {
+  bot.command(['start', 'myrole', 'role'], async (ctx) => {
     if (!ctx.from || !ctx.chat || ctx.chat.type !== 'private') return;
     const telegramId = BigInt(ctx.from.id);
     await deps.playerRepository.upsert(telegramId, {
@@ -164,7 +185,23 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     });
     await deps.playerRepository.markHasStartedPm(telegramId);
     const player = await deps.playerRepository.findByTelegramId(telegramId);
-    await ctx.reply(deps.translator.translate(player?.languageCode ?? 'en', 'WelcomeMessage'));
+    const lang = player?.languageCode ?? 'en';
+
+    if (ctx.message?.text?.startsWith('/start') && !ctx.message.text.includes('myrole')) {
+      await ctx.reply(deps.translator.translate(lang, 'WelcomeMessage'));
+    }
+
+    const activeGame = deps.gameManager.findByPlayer(telegramId);
+    if (activeGame && activeGame.phase !== 'Joining') {
+      const p = activeGame.players.find((x) => x.id === telegramId);
+      if (p) {
+        const name = roleName(p.role);
+        const localized = deps.translator.translate(lang, `Role_${name}`);
+        const displayName = localized.startsWith('Role_') ? name : localized;
+        const emoji = ROLE_META[name].emoji;
+        await ctx.reply(deps.translator.translate(lang, 'YourRoleIs', `${emoji} ${displayName}`));
+      }
+    }
   });
 
   bot.command('help', async (ctx) => {
@@ -216,6 +253,125 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     }
 
     await ctx.reply(lines.join('\n'));
+  });
+
+  bot.command(['leaderboard', 'top', 'classement'], async (ctx) => {
+    if (!ctx.from) return;
+    const callerId = BigInt(ctx.from.id);
+    const caller = await deps.playerRepository.findByTelegramId(callerId);
+    const language = caller?.languageCode ?? 'en';
+
+    const topPlayers = await deps.playerRepository.getTopPlayers(10);
+    const lines = [deps.translator.translate(language, 'LeaderboardTitle')];
+
+    topPlayers.forEach((p, idx) => {
+      const pName = (p.displayName ?? p.username ?? 'Player') + donorBadge(p.donationLevel);
+      lines.push(deps.translator.translate(language, 'LeaderboardRow', idx + 1, pName, p.points, p.gamesWon, p.gamesPlayed));
+    });
+
+    const userRank = await deps.playerRepository.getPlayerRank(callerId);
+    if (userRank && userRank.rank > 10) {
+      lines.push(deps.translator.translate(language, 'LeaderboardYourRank', userRank.rank, userRank.points));
+    }
+
+    await ctx.reply(lines.join('\n'), { parse_mode: 'HTML' });
+  });
+
+  bot.command('report', async (ctx) => {
+    if (!ctx.from) return;
+    const reporterId = BigInt(ctx.from.id);
+    const reporter = await deps.playerRepository.findByTelegramId(reporterId);
+    const language = reporter?.languageCode ?? 'en';
+
+    let reportedId: bigint | null = null;
+    let reportedName = 'Player';
+    let reason = '';
+
+    if (ctx.message?.reply_to_message?.from) {
+      reportedId = BigInt(ctx.message.reply_to_message.from.id);
+      reportedName = ctx.message.reply_to_message.from.first_name;
+      const parts = (ctx.message.text ?? '').split(' ').slice(1);
+      reason = parts.join(' ').trim();
+    } else {
+      const parts = (ctx.message?.text ?? '').split(' ').slice(1);
+      if (parts.length >= 2) {
+        const targetStr = parts[0]!;
+        reason = parts.slice(1).join(' ').trim();
+
+        if (targetStr.startsWith('@')) {
+          const username = targetStr.slice(1);
+          const targetPlayer = await deps.playerRepository.findByUsername(username);
+          if (targetPlayer) {
+            reportedId = targetPlayer.telegramId;
+            reportedName = targetPlayer.displayName ?? username;
+          }
+        } else if (/^\d+$/.test(targetStr)) {
+          reportedId = BigInt(targetStr);
+          const targetPlayer = await deps.playerRepository.findByTelegramId(reportedId);
+          if (targetPlayer) reportedName = targetPlayer.displayName ?? targetStr;
+        }
+      }
+    }
+
+    if (!reportedId || !reason) {
+      await ctx.reply(deps.translator.translate(language, 'ReportUsage'));
+      return;
+    }
+
+    if (reporterId === reportedId) {
+      await ctx.reply(deps.translator.translate(language, 'ReportCannotReportSelf'));
+      return;
+    }
+
+    const groupId = ctx.chat?.type !== 'private' ? BigInt(ctx.chat.id) : null;
+    await deps.reportRepository?.createReport({
+      reporterId,
+      reportedId,
+      groupId,
+      reason,
+    });
+
+    const adminIds = await deps.adminRepository.listGlobalAdminIds();
+    const reporterName = `${ctx.from.first_name} ${ctx.from.last_name ?? ''}`.trim();
+    const alertMsg = deps.translator.translate(
+      'en',
+      'ReportAdminNotification',
+      reporterName,
+      reporterId.toString(),
+      reportedName,
+      reportedId.toString(),
+      reason,
+    );
+
+    for (const adminId of adminIds) {
+      try {
+        await ctx.api.sendMessage(Number(adminId), alertMsg, { parse_mode: 'HTML' });
+      } catch {
+        // Ignore if admin hasn't started PM
+      }
+    }
+
+    await ctx.reply(deps.translator.translate(language, 'ReportReceived', reportedName));
+  });
+
+  bot.command('reports', async (ctx) => {
+    if (!ctx.from) return;
+    if (!(await deps.adminRepository.isGlobalAdmin(BigInt(ctx.from.id)))) return;
+
+    const pending = await deps.reportRepository?.getPendingReports(10);
+    if (!pending || pending.length === 0) {
+      await ctx.reply('No pending reports.');
+      return;
+    }
+
+    const lines = ['⚠️ <b>Pending Player Reports:</b>\n'];
+    for (const r of pending) {
+      const reporter = r.reporter?.displayName ?? r.reporterId.toString();
+      const reported = r.reported?.displayName ?? r.reportedId.toString();
+      lines.push(`• <b>#${r.id}</b>: ${reporter} ➡️ ${reported} - <i>${r.reason}</i>`);
+    }
+
+    await ctx.reply(lines.join('\n'), { parse_mode: 'HTML' });
   });
 
   bot.command(['startgame', 'startchaos'], async (ctx) => {
@@ -297,6 +453,9 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     if (!ctx.from || !ctx.chat) return;
     const text = await gameLoop.handleCallback(BigInt(ctx.from.id), BigInt(ctx.chat.id), ctx.callbackQuery.data);
     await ctx.answerCallbackQuery(text ? { text } : undefined);
+    if (text) {
+      await ctx.editMessageReplyMarkup(undefined).catch(() => null);
+    }
   });
 
   bot.command('forcestart', async (ctx) => {
@@ -413,14 +572,16 @@ function registerWaitlistCommands(bot: Bot, deps: BotDependencies): void {
 function registerRoleInfoCommands(bot: Bot, deps: BotDependencies): void {
   bot.command('rolelist', async (ctx) => {
     if (!ctx.from) return;
+    const isGroup = ctx.chat && ctx.chat.type !== 'private';
+    const group = isGroup ? await deps.groupRepository.getOrCreate(BigInt(ctx.chat.id), ctx.chat.title ?? null, null) : null;
     const player = await deps.playerRepository.findByTelegramId(BigInt(ctx.from.id));
-    const language = player?.languageCode ?? 'en';
+    const language = group?.language ?? player?.languageCode ?? 'en';
     const lines = Object.entries(ABOUT_ROLE_BY_TRIGGER).map(
       ([trigger, role]) => `/about${trigger} - ${ROLE_META[role].emoji} ${role}`,
     );
     try {
       await ctx.api.sendMessage(ctx.from.id, lines.join('\n'));
-      if (ctx.chat && ctx.chat.type !== 'private') await ctx.reply(deps.translator.translate(language, 'CheckYourPM'));
+      if (isGroup) await ctx.reply(deps.translator.translate(language, 'CheckYourPM'));
     } catch (err) {
       if (err instanceof GrammyError) {
         await ctx.reply(deps.translator.translate(language, 'CantPMYou'));
@@ -430,17 +591,26 @@ function registerRoleInfoCommands(bot: Bot, deps: BotDependencies): void {
     }
   });
 
-  bot.command(Object.keys(ABOUT_ROLE_BY_TRIGGER), async (ctx) => {
+  const roleCommandNames = Object.keys(ABOUT_ROLE_BY_TRIGGER).flatMap((t) => [
+    t,
+    `about${t}`,
+    ABOUT_ROLE_BY_TRIGGER[t]!.toLowerCase(),
+    `about${ABOUT_ROLE_BY_TRIGGER[t]!.toLowerCase()}`,
+  ]);
+
+  bot.command(roleCommandNames, async (ctx) => {
     if (!ctx.from || !ctx.message?.text) return;
-    const trigger = ctx.message.text.slice(1).split(/[ @]/)[0]!.toLowerCase();
-    const role = ABOUT_ROLE_BY_TRIGGER[trigger];
+    const commandText = ctx.message.text.slice(1).split(/[ @]/)[0]!;
+    const role = resolveRoleFromTrigger(commandText);
     if (!role) return;
 
+    const isGroup = ctx.chat && ctx.chat.type !== 'private';
+    const group = isGroup ? await deps.groupRepository.getOrCreate(BigInt(ctx.chat.id), ctx.chat.title ?? null, null) : null;
     const player = await deps.playerRepository.findByTelegramId(BigInt(ctx.from.id));
-    const language = player?.languageCode ?? 'en';
+    const language = group?.language ?? player?.languageCode ?? 'en';
     try {
       await ctx.api.sendMessage(ctx.from.id, deps.translator.translate(language, aboutLocaleKey(role)));
-      if (ctx.chat && ctx.chat.type !== 'private') await ctx.reply(deps.translator.translate(language, 'CheckYourPM'));
+      if (isGroup) await ctx.reply(deps.translator.translate(language, 'CheckYourPM'));
     } catch (err) {
       if (err instanceof GrammyError) {
         await ctx.reply(deps.translator.translate(language, 'CantPMYou'));

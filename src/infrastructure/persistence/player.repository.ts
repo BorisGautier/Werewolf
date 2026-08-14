@@ -93,4 +93,94 @@ export class PlayerRepository {
     await this.prisma.player.update({ where: { telegramId }, data: { totalDonatedStars: totalStars, donationLevel: level } });
     return { totalStars, level, leveledUp: false };
   }
+
+  /**
+   * Records an AFK strike for a player. On the 3rd strike, resets strike count and suspends
+   * the player for 24 hours.
+   */
+  async recordAfkStrike(telegramId: bigint): Promise<{ afkCount: number; isSuspended: boolean; suspendedUntil: Date | null }> {
+    const player = await this.upsert(telegramId);
+    const newCount = player.afkCount + 1;
+    if (newCount >= 3) {
+      const suspendedUntil = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      await this.prisma.player.update({
+        where: { telegramId },
+        data: { afkCount: 0, suspendedUntil },
+      });
+      return { afkCount: 3, isSuspended: true, suspendedUntil };
+    } else {
+      await this.prisma.player.update({
+        where: { telegramId },
+        data: { afkCount: newCount },
+      });
+      return { afkCount: newCount, isSuspended: false, suspendedUntil: player.suspendedUntil };
+    }
+  }
+
+  /** Checks whether the player is currently suspended from joining games (24h AFK ban). */
+  async checkSuspension(telegramId: bigint): Promise<{ isSuspended: boolean; suspendedUntil: Date | null }> {
+    const player = await this.prisma.player.findUnique({
+      where: { telegramId },
+      select: { suspendedUntil: true },
+    });
+    if (!player?.suspendedUntil) return { isSuspended: false, suspendedUntil: null };
+    const isSuspended = player.suspendedUntil.getTime() > Date.now();
+    return { isSuspended, suspendedUntil: isSuspended ? player.suspendedUntil : null };
+  }
+
+  /** Resets AFK strike count to 0. */
+  async clearAfkStrikes(telegramId: bigint): Promise<void> {
+    await this.prisma.player.update({ where: { telegramId }, data: { afkCount: 0 } });
+  }
+
+  /** Awards leaderboard points and records game stats. */
+  async awardPoints(telegramId: bigint, deltaPoints: number, won: boolean): Promise<void> {
+    await this.upsert(telegramId);
+    await this.prisma.player.update({
+      where: { telegramId },
+      data: {
+        points: { increment: deltaPoints },
+        gamesPlayed: { increment: 1 },
+        ...(won ? { gamesWon: { increment: 1 } } : {}),
+      },
+    });
+  }
+
+  /** Returns top ranked players ordered by points descending. */
+  async getTopPlayers(limit = 10) {
+    return this.prisma.player.findMany({
+      take: limit,
+      orderBy: [{ points: 'desc' }, { gamesWon: 'desc' }],
+      select: {
+        id: true,
+        telegramId: true,
+        username: true,
+        displayName: true,
+        points: true,
+        gamesPlayed: true,
+        gamesWon: true,
+        donationLevel: true,
+      },
+    });
+  }
+
+  /** Finds a player's global leaderboard rank. */
+  async getPlayerRank(telegramId: bigint): Promise<{ rank: number; points: number; gamesPlayed: number; gamesWon: number } | null> {
+    const target = await this.prisma.player.findUnique({
+      where: { telegramId },
+      select: { points: true, gamesPlayed: true, gamesWon: true },
+    });
+    if (!target) return null;
+
+    const higherCount = await this.prisma.player.count({
+      where: { points: { gt: target.points } },
+    });
+    return {
+      rank: higherCount + 1,
+      points: target.points,
+      gamesPlayed: target.gamesPlayed,
+      gamesWon: target.gamesWon,
+    };
+  }
 }
+

@@ -12,7 +12,7 @@
  * registered in `GameManager` for the night/day loop to pick up.
  */
 
-import { Bot, GrammyError, InlineKeyboard } from 'grammy';
+import { Bot, InlineKeyboard } from 'grammy';
 import { GameAlreadyRunningError, GameManager } from '../../application/game-manager.js';
 import { Game, GameError } from '../../domain/game/game.aggregate.js';
 import type { GameMode } from '../../domain/game/game-mode.js';
@@ -64,7 +64,7 @@ export class GameLobbyManager {
   async startGame(
     chatId: bigint,
     chatTitle: string | null,
-    starter: { id: bigint; name: string },
+    starter: { id: bigint; name: string; username?: string },
     requestedMode: GameMode,
   ): Promise<void> {
     const group = await this.groups.getOrCreate(chatId, chatTitle, null);
@@ -78,6 +78,15 @@ export class GameLobbyManager {
       } catch (err) {
         this.logger.warn({ err, chatId: chatId.toString() }, 'Failed to leave a banned group');
       }
+      return;
+    }
+
+    if (this.sessions.has(chatId)) {
+      await this.join(chatId, {
+        id: starter.id,
+        firstName: starter.name,
+        ...(starter.username ? { username: starter.username } : {}),
+      });
       return;
     }
 
@@ -106,6 +115,19 @@ export class GameLobbyManager {
         return;
       }
       throw err;
+    }
+
+    // Automatically join the player who started the game
+    await this.players.upsert(starter.id, { displayName: starter.name });
+    const isBanned = await this.players.isBanned(starter.id);
+    const suspension = await this.players.checkSuspension(starter.id);
+    if (!isBanned && !suspension.isSuspended) {
+      try {
+        game.addPlayer(starter.id, starter.name);
+        await this.sendToUser(starter.id, language, 'YouJoined', group.title ?? '');
+      } catch {
+        // Ignore if auto-join fails
+      }
     }
 
     const keyboard = new InlineKeyboard().text(this.t.translate(language, 'JoinButton'), JOIN_BUTTON_CALLBACK);
@@ -155,9 +177,19 @@ export class GameLobbyManager {
 
     const name = `${telegramUser.firstName} ${telegramUser.lastName ?? ''}`.replace(/\n/g, '').trim();
 
-    if (session.game.players.some((p) => p.name === name)) {
-      await this.send(chatId, language, 'NameExists', name);
-      return;
+    if (session.game.players.some((p) => p.id === telegramUser.id)) {
+      return; // Already in lobby
+    }
+
+    let uniqueName = name;
+    let counter = 2;
+    while (session.game.players.some((p) => p.name === uniqueName)) {
+      if (telegramUser.username && counter === 2) {
+        uniqueName = `${name} (@${telegramUser.username})`;
+      } else {
+        uniqueName = `${name} (${counter})`;
+      }
+      counter++;
     }
 
     await this.players.upsert(telegramUser.id, {
@@ -166,8 +198,14 @@ export class GameLobbyManager {
     });
     if (await this.players.isBanned(telegramUser.id)) return;
 
+    const suspension = await this.players.checkSuspension(telegramUser.id);
+    if (suspension.isSuspended) {
+      await this.sendToUser(telegramUser.id, language, 'PlayerSuspendedAfk');
+      return;
+    }
+
     try {
-      session.game.addPlayer(telegramUser.id, name);
+      session.game.addPlayer(telegramUser.id, uniqueName);
     } catch (err) {
       if (err instanceof GameError && err.code === 'ALREADY_JOINED') return;
       if (err instanceof GameError && err.code === 'GROUP_FULL') {
@@ -181,8 +219,19 @@ export class GameLobbyManager {
       throw err;
     }
 
-    session.playersJoinedSinceAnnounce.push(name);
-    await this.sendToUser(telegramUser.id, language, 'YouJoined', group.title ?? '');
+    session.playersJoinedSinceAnnounce.push(uniqueName);
+    const sentPm = await this.sendToUser(telegramUser.id, language, 'YouJoined', group.title ?? '');
+    if (!sentPm) {
+      const botUsername = this.bot.botInfo?.username ?? '';
+      const keyboard = botUsername
+        ? new InlineKeyboard().url(this.t.translate(language, 'StartPmButton'), `https://t.me/${botUsername}`)
+        : undefined;
+      await this.bot.api.sendMessage(
+        chatNumber(chatId),
+        this.t.translate(language, 'MustStartPmFirstGroup', name),
+        keyboard ? { reply_markup: keyboard } : {},
+      ).catch(() => null);
+    }
   }
 
   async forceStart(chatId: bigint, isAdmin: boolean): Promise<void> {
@@ -233,7 +282,7 @@ export class GameLobbyManager {
       return;
     }
 
-    const maxExtend = group.maxExtendSeconds;
+    const maxExtend = group.maxExtendSeconds > 0 ? group.maxExtendSeconds : 60;
     const seconds = Math.abs(requestedSeconds) > maxExtend ? maxExtend * Math.sign(requestedSeconds) : requestedSeconds;
 
     session.secondsLeft = Math.max(session.secondsLeft + seconds, 0);
@@ -369,7 +418,15 @@ export class GameLobbyManager {
     );
     const undelivered = session.game.players.filter((_, index) => !delivered[index]).map((p) => p.name);
     if (undelivered.length > 0) {
-      await this.send(session.chatId, session.language, 'PMFailed', undelivered.join(', '));
+      const botUsername = this.bot.botInfo?.username ?? '';
+      const keyboard = botUsername
+        ? new InlineKeyboard().url(this.t.translate(session.language, 'StartPmButton'), `https://t.me/${botUsername}`)
+        : undefined;
+      await this.bot.api.sendMessage(
+        chatNumber(session.chatId),
+        this.t.translate(session.language, 'PMFailed', undelivered.join(', ')),
+        keyboard ? { reply_markup: keyboard } : {},
+      ).catch(() => null);
     }
 
     // The night/day loop sends its own richer "Night N falls, you have X seconds" message right
@@ -383,29 +440,33 @@ export class GameLobbyManager {
 
   private async notifyRole(telegramId: bigint, language: string, role: bigint): Promise<boolean> {
     const name = roleName(role);
+    const localized = this.t.translate(language, `Role_${name}`);
+    const displayName = localized.startsWith('Role_') ? name : localized;
     const emoji = ROLE_META[name].emoji;
     try {
-      await this.bot.api.sendMessage(chatNumber(telegramId), this.t.translate(language, 'YourRoleIs', `${emoji} ${name}`));
+      await this.bot.api.sendMessage(chatNumber(telegramId), this.t.translate(language, 'YourRoleIs', `${emoji} ${displayName}`));
       return true;
     } catch (err) {
-      if (err instanceof GrammyError) {
-        this.logger.warn({ telegramId: telegramId.toString(), err: err.message }, 'Could not PM role to player');
-        return false;
-      }
-      throw err;
+      this.logger.warn({ telegramId: telegramId.toString(), err: (err as Error).message }, 'Could not PM role to player');
+      return false;
     }
   }
 
   private async send(chatId: bigint, language: string, key: string, ...args: unknown[]): Promise<void> {
-    await this.bot.api.sendMessage(chatNumber(chatId), this.t.translate(language, key, ...args));
+    try {
+      await this.bot.api.sendMessage(chatNumber(chatId), this.t.translate(language, key, ...args));
+    } catch (err) {
+      this.logger.error({ chatId: chatId.toString(), err: (err as Error).message }, 'Failed to send group message');
+    }
   }
 
-  private async sendToUser(telegramId: bigint, language: string, key: string, ...args: unknown[]): Promise<void> {
+  private async sendToUser(telegramId: bigint, language: string, key: string, ...args: unknown[]): Promise<boolean> {
     try {
       await this.bot.api.sendMessage(chatNumber(telegramId), this.t.translate(language, key, ...args));
+      return true;
     } catch (err) {
-      if (err instanceof GrammyError) return;
-      throw err;
+      this.logger.warn({ telegramId: telegramId.toString(), err: (err as Error).message }, 'Could not PM user');
+      return false;
     }
   }
 }
