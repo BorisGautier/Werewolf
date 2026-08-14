@@ -27,3 +27,26 @@ describe('ABOUT_ROLE_BY_TRIGGER', () => {
     }
   });
 });
+
+describe('resolveRoleFromTrigger', () => {
+  it('resolves triggers like ww, seer, ga', async () => {
+    const { resolveRoleFromTrigger } = await import('../../src/infrastructure/telegram/role-info.js');
+    expect(resolveRoleFromTrigger('ww')).toBe('Wolf');
+    expect(resolveRoleFromTrigger('seer')).toBe('Seer');
+    expect(resolveRoleFromTrigger('ga')).toBe('GuardianAngel');
+  });
+
+  it('resolves /about triggers like /aboutww, /aboutseer, /aboutarsonist', async () => {
+    const { resolveRoleFromTrigger } = await import('../../src/infrastructure/telegram/role-info.js');
+    expect(resolveRoleFromTrigger('/aboutww')).toBe('Wolf');
+    expect(resolveRoleFromTrigger('/aboutseer')).toBe('Seer');
+    expect(resolveRoleFromTrigger('/aboutarsonist')).toBe('Arsonist');
+    expect(resolveRoleFromTrigger('aboutwolf')).toBe('Wolf');
+  });
+
+  it('returns null for unknown triggers', async () => {
+    const { resolveRoleFromTrigger } = await import('../../src/infrastructure/telegram/role-info.js');
+    expect(resolveRoleFromTrigger('xyzunknown')).toBeNull();
+  });
+});
+

@@ -37,6 +37,7 @@ import { describeEvent } from './messages.js';
 import { LocalGifPack } from './local-gif-pack.js';
 import { dayOneTargets, DAY_ABILITY_ROLES, DAY_TARGET_ROLES, NIGHT_TARGET_ROLES, nightTargets } from './role-menus.js';
 import { buildEndGameSummary } from './end-game-summary.js';
+import { calculateGamePoints } from '../../domain/scoring.js';
 
 const NIGHT_ONE_MIN_SECONDS = 120;
 
@@ -60,6 +61,7 @@ export class GameLoop {
    * (right after its current phase's wait window closes), so it bails out instead of resolving/
    * announcing/recursing into the next phase. */
   private readonly killedChats = new Set<bigint>();
+  private readonly mutedPlayers = new Map<bigint, Set<bigint>>();
 
   constructor(
     private readonly bot: Bot,
@@ -106,6 +108,7 @@ export class GameLoop {
     this.gameIds.delete(chatId);
     this.eventBatches.delete(chatId);
     this.skipVote(chatId);
+    void this.unmuteAllDead(chatId);
     return true;
   }
 
@@ -247,7 +250,7 @@ export class GameLoop {
     const group = await this.groups.getOrCreate(game.chatId, null, null);
     game.startDay();
     const seconds = group.dayTimerSeconds;
-    await this.send(game.chatId, group.language, 'DayTime', seconds);
+    await this.send(game.chatId, group.language, 'DayTime', game.dayNumber, formatDuration(seconds));
     await this.sendDayMenus(game, group.language);
 
     await this.phaseSleep(game.chatId, seconds * 1000);
@@ -404,6 +407,7 @@ export class GameLoop {
     this.eventBatches.delete(game.chatId);
 
     let startedAt: Date | undefined;
+    const scoresMap = new Map<bigint, number>();
     if (gameId !== undefined) {
       try {
         startedAt = await this.gameRepo.finalizeGame(gameId, game.winningTeam, game.players);
@@ -415,6 +419,18 @@ export class GameLoop {
       } catch (err) {
         this.logger.error({ err, chatId: game.chatId.toString(), gameId }, 'Failed to award achievements');
       }
+
+      if (this.players) {
+        try {
+          const scores = calculateGamePoints(game.players, game.winningTeam ?? null, firstLynchVictimId(batches));
+          for (const score of scores) {
+            scoresMap.set(score.playerId, score.points);
+            await this.players.awardPoints(score.playerId, score.points, score.won);
+          }
+        } catch (err) {
+          this.logger.error({ err, chatId: game.chatId.toString(), gameId }, 'Failed to award leaderboard points');
+        }
+      }
     }
 
     // Mirrors the recap `DoGameEnd` sends right after the win announcement (`switch
@@ -424,12 +440,13 @@ export class GameLoop {
       const group = await this.groups.getOrCreate(game.chatId, null, null);
       const durationMs = startedAt ? Date.now() - startedAt.getTime() : null;
       const donorBadges = await this.donorBadges(game.players.map((p) => p.id));
-      const summary = buildEndGameSummary(game.players, group.showRolesEnd, group.language, this.t, durationMs, donorBadges);
+      const summary = buildEndGameSummary(game.players, group.showRolesEnd, group.language, this.t, durationMs, donorBadges, scoresMap);
       await this.sendRaw(game.chatId, summary);
     } catch (err) {
       this.logger.error({ err, chatId: game.chatId.toString() }, 'Failed to send end-of-game summary');
     }
 
+    await this.unmuteAllDead(game.chatId);
     this.games.remove(game.chatId);
   }
 
@@ -568,7 +585,7 @@ export class GameLoop {
       }
       case 'ability':
         if (game.phase !== 'Day') return null;
-        return this.applyAbility(game, playerId, rest[0] as RoleName);
+        return await this.applyAbility(game, playerId, rest[0] as RoleName);
       case 'cupid1': {
         if (game.phase !== 'Night') return null;
         const cupid = game.players.find((p) => p.id === playerId && p.role === ROLE_BIT.Cupid);
@@ -658,28 +675,41 @@ export class GameLoop {
     await this.send(game.chatId, group.language, 'SecretLynchResultFull', lines.join('\n'));
   }
 
-  private applyAbility(game: Game, playerId: bigint, role: RoleName): string | null {
+  private async applyAbility(game: Game, playerId: bigint, role: RoleName): Promise<string | null> {
     const player = game.players.find((p) => p.id === playerId && !p.isDead);
     if (!player || roleName(player.role) !== role) return null;
+    const group = await this.groups.getOrCreate(game.chatId, null, null);
+
     switch (role) {
-      case 'Mayor':
-        return game.useMayorReveal(playerId) ? 'MayorRevealedMsg' : 'AbilityAlreadyUsed';
-      case 'Pacifist':
-        return game.usePacifistPeace(playerId) ? 'PacifistDeclaredMsg' : 'AbilityAlreadyUsed';
+      case 'Mayor': {
+        if (!game.useMayorReveal(playerId)) return 'AbilityAlreadyUsed';
+        await this.send(game.chatId, group.language, 'MayorRevealedMsg', player.name);
+        return 'MayorRevealedMsg';
+      }
+      case 'Pacifist': {
+        if (!game.usePacifistPeace(playerId)) return 'AbilityAlreadyUsed';
+        await this.send(game.chatId, group.language, 'PacifistDeclaredMsg', player.name);
+        return 'PacifistDeclaredMsg';
+      }
       case 'Blacksmith': {
         const events = game.useBlacksmithSpreadSilver(playerId);
         if (events.length === 0) return 'AbilityAlreadyUsed';
         this.logEvents(game.chatId, events);
+        await this.send(game.chatId, group.language, 'BlacksmithSpreadMsg', player.name);
         return 'BlacksmithSpreadMsg';
       }
       case 'Sandman': {
         const events = game.useSandmanSleep(playerId);
         if (events.length === 0) return 'AbilityAlreadyUsed';
         this.logEvents(game.chatId, events);
+        await this.send(game.chatId, group.language, 'SandmanUsedMsg', player.name);
         return 'SandmanUsedMsg';
       }
-      case 'Troublemaker':
-        return game.useTroublemakerDoubleLynch(playerId) ? 'TroubleDoubleLynchNow' : 'AbilityAlreadyUsed';
+      case 'Troublemaker': {
+        if (!game.useTroublemakerDoubleLynch(playerId)) return 'AbilityAlreadyUsed';
+        await this.send(game.chatId, group.language, 'TroubleDoubleLynchNow', player.name);
+        return 'TroubleDoubleLynchNow';
+      }
       default:
         return null;
     }
@@ -713,6 +743,62 @@ export class GameLoop {
       await this.sendGifForEvent(game, group, event);
       await this.recordKillEvent(game, phase, event);
     }
+    await this.syncMuteDead(game, group);
+  }
+
+  private async syncMuteDead(game: Game, group: GroupWithConfig): Promise<void> {
+    if (!group.muteDead) return;
+    let mutedSet = this.mutedPlayers.get(game.chatId);
+    if (!mutedSet) {
+      mutedSet = new Set<bigint>();
+      this.mutedPlayers.set(game.chatId, mutedSet);
+    }
+
+    for (const player of game.players) {
+      if (player.isDead && player.id > 0n && !mutedSet.has(player.id)) {
+        try {
+          await this.bot.api.restrictChatMember(chatNumber(game.chatId), Number(player.id), {
+            can_send_messages: false,
+          });
+          mutedSet.add(player.id);
+        } catch (err) {
+          this.logger.warn(
+            { err, chatId: game.chatId.toString(), playerId: player.id.toString() },
+            'Failed to mute dead player in Telegram group',
+          );
+        }
+      }
+    }
+  }
+
+  private async unmuteAllDead(chatId: bigint): Promise<void> {
+    const mutedSet = this.mutedPlayers.get(chatId);
+    if (!mutedSet || mutedSet.size === 0) {
+      this.mutedPlayers.delete(chatId);
+      return;
+    }
+
+    for (const playerId of mutedSet) {
+      try {
+        await this.bot.api.restrictChatMember(chatNumber(chatId), Number(playerId), {
+          can_send_messages: true,
+          can_send_audios: true,
+          can_send_documents: true,
+          can_send_photos: true,
+          can_send_videos: true,
+          can_send_video_notes: true,
+          can_send_voice_notes: true,
+          can_send_other_messages: true,
+          can_add_web_page_previews: true,
+        });
+      } catch (err) {
+        this.logger.warn(
+          { err, chatId: chatId.toString(), playerId: playerId.toString() },
+          'Failed to unmute dead player in Telegram group',
+        );
+      }
+    }
+    this.mutedPlayers.delete(chatId);
   }
 
   /**
@@ -726,7 +812,7 @@ export class GameLoop {
     let category: GifCategory | null = null;
     let playerId: bigint | undefined;
 
-    if (event.type === 'PlayerDied' && event.isNight) {
+    if (event.type === 'PlayerDied') {
       category = event.method === 'Burn' ? 'BurnToDeath' : event.method === 'SerialKilled' ? 'SKKilled' : 'VillagerDie';
       playerId = event.playerId;
     } else if (event.type === 'GameEnded') {

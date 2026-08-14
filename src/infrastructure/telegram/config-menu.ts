@@ -38,6 +38,7 @@ interface ToggleField {
     | 'allowCult'
     | 'allowThief'
     | 'allowArsonist'
+    | 'muteDead'
   >;
   labelKey: string;
 }
@@ -60,6 +61,7 @@ const TOGGLE_FIELDS: readonly ToggleField[] = [
   { code: 'aco', field: 'allowCult', labelKey: 'CfgAllowCult' },
   { code: 'ath', field: 'allowThief', labelKey: 'CfgAllowThief' },
   { code: 'aar', field: 'allowArsonist', labelKey: 'CfgAllowArsonist' },
+  { code: 'md', field: 'muteDead', labelKey: 'CfgMuteDead' },
 ];
 
 export interface MenuScreen {

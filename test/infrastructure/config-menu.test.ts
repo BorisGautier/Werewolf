@@ -42,6 +42,7 @@ function fakeGroup(overrides: Partial<GroupWithConfig> = {}): GroupWithConfig {
     secretLynch: false,
     secretLynchShowVotes: false,
     secretLynchShowVoters: false,
+    muteDead: false,
     botInGroup: true,
     banned: false,
     memberCount: null,
@@ -101,6 +102,13 @@ describe('ConfigMenu', () => {
     expect(getGroup().thiefFull).toBe(false);
     await menu.handleAction(-100n, 'opt', ['tf']);
     expect(getGroup().thiefFull).toBe(true);
+  });
+
+  it('toggles the muteDead boolean option', async () => {
+    const { menu, getGroup } = createHarness();
+    expect(getGroup().muteDead).toBe(false);
+    await menu.handleAction(-100n, 'opt', ['md']);
+    expect(getGroup().muteDead).toBe(true);
   });
 
   it('returns null for an unknown option code instead of crashing', async () => {

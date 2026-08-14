@@ -97,6 +97,7 @@ function createHarness(joinTimeSeconds = 5) {
     }),
     findByTelegramId: vi.fn(async (telegramId: bigint) => playersStore.get(telegramId.toString()) ?? null),
     isBanned: vi.fn(async () => false),
+    checkSuspension: vi.fn(async () => ({ isSuspended: false, suspendedUntil: null })),
   } as unknown as PlayerRepository;
 
   const gameRepo = {
@@ -142,19 +143,28 @@ describe('GameLobbyManager', () => {
     await lobby.join(chatId, user(3, 'Bob'));
 
     const game = gameManager.get(chatId)!;
-    expect(game.players.map((p) => p.name).sort()).toEqual(['Alice', 'Bob']);
+    expect(game.players.map((p) => p.name).sort()).toEqual(['Alice', 'Bob', 'Starter']);
   });
 
-  it('sends GameAlreadyRunning instead of creating a second game for the same chat', async () => {
+  it('auto-joins a second player who types /startgame while joining, and sends GameAlreadyRunning once in progress', async () => {
+    vi.useFakeTimers();
     const { lobby, sendMessage, gameManager } = createHarness();
     const chatId = 101n;
 
     await lobby.startGame(chatId, 'Group', { id: 1n, name: 'Starter' }, 'Normal');
-    sendMessage.mockClear();
     await lobby.startGame(chatId, 'Group', { id: 4n, name: 'Other' }, 'Normal');
+    expect(gameManager.get(chatId)!.players).toHaveLength(2);
 
+    for (let i = 5; i <= 7; i++) {
+      await lobby.join(chatId, user(i, `Player${i}`));
+    }
+    await lobby.forceStart(chatId, true);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(gameManager.get(chatId)!.phase).toBe('Night');
+
+    sendMessage.mockClear();
+    await lobby.startGame(chatId, 'Group', { id: 99n, name: 'Late' }, 'Normal');
     expect(sendMessage).toHaveBeenCalledWith(101, expect.stringContaining('already running'));
-    expect(gameManager.size).toBe(1);
   });
 
   it("refuses to start a game and leaves a group that's been /bangroup'd, even without creating a game", async () => {
@@ -169,17 +179,17 @@ describe('GameLobbyManager', () => {
     expect(sendMessage).not.toHaveBeenCalled();
   });
 
-  it('rejects a second player joining with the same display name', async () => {
-    const { lobby, sendMessage, gameManager } = createHarness();
+  it('disambiguates a second player joining with the same display name', async () => {
+    const { lobby, gameManager } = createHarness();
     const chatId = 102n;
 
     await lobby.startGame(chatId, 'Group', { id: 1n, name: 'Starter' }, 'Normal');
     await lobby.join(chatId, user(2, 'Alice'));
-    sendMessage.mockClear();
     await lobby.join(chatId, user(3, 'Alice'));
 
-    expect(sendMessage).toHaveBeenCalledWith(102, expect.stringContaining('Alice'));
-    expect(gameManager.get(chatId)!.players).toHaveLength(1);
+    const players = gameManager.get(chatId)!.players;
+    expect(players).toHaveLength(3);
+    expect(players.map((p) => p.name)).toContain('Alice (2)');
   });
 
   it('removes a player who flees during the joining lobby', async () => {
@@ -188,10 +198,10 @@ describe('GameLobbyManager', () => {
 
     await lobby.startGame(chatId, 'Group', { id: 1n, name: 'Starter' }, 'Normal');
     await lobby.join(chatId, user(2, 'Alice'));
-    expect(gameManager.get(chatId)!.players).toHaveLength(1);
+    expect(gameManager.get(chatId)!.players).toHaveLength(2);
 
     await lobby.flee(chatId, { id: 2n, name: 'Alice' });
-    expect(gameManager.get(chatId)!.players).toHaveLength(0);
+    expect(gameManager.get(chatId)!.players).toHaveLength(1);
   });
 
   it('cancels the game if too few players joined by the time the countdown ends', async () => {
@@ -215,7 +225,7 @@ describe('GameLobbyManager', () => {
     const chatId = 105n;
 
     await lobby.startGame(chatId, 'Group', { id: 1n, name: 'Starter' }, 'Normal');
-    for (let i = 2; i <= 6; i++) {
+    for (let i = 2; i <= 5; i++) {
       await lobby.join(chatId, user(i, `Player${i}`));
     }
     expect(gameManager.get(chatId)!.players).toHaveLength(5);
@@ -242,7 +252,7 @@ describe('GameLobbyManager', () => {
 
     // The starter (1n) is on the waitlist too but shouldn't be PM'd about their own game.
     expect(sendMessage).toHaveBeenCalledWith(99, expect.stringContaining('Group'));
-    expect(sendMessage).not.toHaveBeenCalledWith(1, expect.stringContaining('Group'));
+    expect(sendMessage).not.toHaveBeenCalledWith(1, expect.stringContaining('A new game has started'));
   });
 
   it('clears the /nextgame waitlist once a lobby locks in and deals roles', async () => {
@@ -319,7 +329,7 @@ describe('GameLobbyManager', () => {
     await lobby.join(chatId, user(2, 'Alice'));
 
     await lobby.flee(chatId, { id: 2n, name: 'Alice' });
-    expect(gameManager.get(chatId)!.players).toHaveLength(0);
+    expect(gameManager.get(chatId)!.players).toHaveLength(1);
   });
 
   it('flee refuses to leave a running game when AllowFlee is off', async () => {
@@ -329,7 +339,7 @@ describe('GameLobbyManager', () => {
     groupsStore.set(chatId.toString(), fakeGroup(chatId, 'Group', { allowFlee: false }));
 
     await lobby.startGame(chatId, 'Group', { id: 1n, name: 'Starter' }, 'Normal');
-    for (let i = 2; i <= 6; i++) {
+    for (let i = 2; i <= 5; i++) {
       await lobby.join(chatId, user(i, `Player${i}`));
     }
     await lobby.forceStart(chatId, true);
@@ -350,11 +360,11 @@ describe('GameLobbyManager', () => {
 
     await lobby.startGame(chatId, 'Group', { id: 1n, name: 'Starter' }, 'Normal');
     await lobby.join(chatId, user(2, 'Alice'));
-    expect(gameManager.get(chatId)!.players).toHaveLength(1);
+    expect(gameManager.get(chatId)!.players).toHaveLength(2);
 
     const removed = await lobby.smite(chatId, { id: 2n, name: 'Alice' });
     expect(removed).toBe(true);
-    expect(gameManager.get(chatId)!.players).toHaveLength(0);
+    expect(gameManager.get(chatId)!.players).toHaveLength(1);
   });
 
   it('smite reports false when there is no game running or the target is not playing', async () => {

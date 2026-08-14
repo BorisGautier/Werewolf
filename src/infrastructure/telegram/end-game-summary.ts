@@ -14,9 +14,11 @@ import type { Translator } from '../i18n/translator.js';
 
 export type ShowRolesEndMode = 'NONE' | 'LIVING' | 'ALL';
 
-function displayRole(role: Player['role']): string {
+function displayRole(role: Player['role'], language: string, t: Translator): string {
   const name = roleName(role);
-  return `${ROLE_META[name].emoji} ${name}`;
+  const localized = t.translate(language, `Role_${name}`);
+  const label = localized.startsWith('Role_') ? name : localized;
+  return `${ROLE_META[name].emoji} ${label}`;
 }
 
 /** Mirrors `_timePlayed.Value.ToString(@"hh\:mm\:ss")`. */
@@ -36,6 +38,7 @@ export function buildEndGameSummary(
   t: Translator,
   durationMs: number | null,
   donorBadges: ReadonlyMap<bigint, string> = new Map(),
+  playerScores: ReadonlyMap<bigint, number> = new Map(),
 ): string {
   const byTimeDied = [...players].sort((a, b) => {
     const at = a.timeDied?.getTime() ?? Infinity;
@@ -45,17 +48,22 @@ export function buildEndGameSummary(
   const aliveCount = players.filter((p) => !p.isDead).length;
   const outcomeKey = (p: Player) => t.translate(language, p.won ? 'Won' : 'Lost');
   const displayName = (p: Player) => `${p.name}${donorBadges.get(p.id) ?? ''}`;
+  const ptsSuffix = (p: Player) => {
+    const pts = playerScores.get(p.id);
+    if (pts === undefined) return '';
+    return pts >= 0 ? ` (+${pts} pts)` : ` (${pts} pts)`;
+  };
 
   const lines: string[] = [];
   if (showRolesEnd === 'NONE') {
     lines.push(`${t.translate(language, 'PlayersAlive')}: ${aliveCount} / ${players.length}`);
-    for (const p of byTimeDied) lines.push(displayName(p));
+    for (const p of byTimeDied) lines.push(`${displayName(p)}${ptsSuffix(p)}`);
   } else if (showRolesEnd === 'ALL') {
     lines.push(`${t.translate(language, 'PlayersAlive')}: ${aliveCount} / ${players.length}`);
     for (const p of byTimeDied) {
       const status = p.isDead ? t.translate(language, p.fled ? 'RanAway' : 'Dead') : t.translate(language, 'Alive');
       const heart = p.inLove ? '❤️' : '';
-      lines.push(`${displayName(p)}: ${status} - ${displayRole(p.role)}${heart} ${outcomeKey(p)}`);
+      lines.push(`${displayName(p)}: ${status} - ${displayRole(p.role, language, t)}${heart} ${outcomeKey(p)}${ptsSuffix(p)}`);
     }
   } else {
     lines.push(t.translate(language, 'RemainingPlayersEnd'));
@@ -63,7 +71,7 @@ export function buildEndGameSummary(
     for (const p of alive) {
       const heart = p.inLove ? '❤️' : '';
       const teamLabel = t.translate(language, `${p.team}TeamEnd`);
-      lines.push(`${displayName(p)}: ${displayRole(p.role)} ${teamLabel} ${heart} ${outcomeKey(p)}`);
+      lines.push(`${displayName(p)}: ${displayRole(p.role, language, t)} ${teamLabel} ${heart} ${outcomeKey(p)}${ptsSuffix(p)}`);
     }
   }
 
