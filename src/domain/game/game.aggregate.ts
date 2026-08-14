@@ -14,6 +14,7 @@
  * send its menus, wait, then call `resolveNightActions()`.
  */
 
+import { randomInt } from 'node:crypto';
 import { balance, WOLF_ROLES, type BalanceOptions } from './game-balancing.js';
 import { killPlayer, type KillOptions } from './kill.js';
 import { resetLynchState, resolveLynchVotes, type LynchOptions, type LynchResult } from './lynch.js';
@@ -91,6 +92,22 @@ export class Game {
   sandmanSleep = false;
   /** Mirrors `_pacifistUsed`: the Pacifist has declared peace - the next lynch resolution is skipped. */
   pacifistUsed = false;
+  /** State properties for 20 new roles */
+  mimicTargetMap = new Map<bigint, bigint>();
+  hitmanTargetMap = new Map<bigint, bigint>();
+  avengerTargetMap = new Map<bigint, bigint>();
+  crowCursedMap = new Map<bigint, bigint>();
+  chameleonAppearanceMap = new Map<bigint, Role>();
+  hypnotistForcedVoteMap = new Map<bigint, { victimId: bigint; targetId: bigint }>();
+  judgePardoned = false;
+  priestessBlinded = false;
+  berserkerRage = false;
+  anonymousLynchVotes = false;
+  trapperTrapsMap = new Map<bigint, bigint>();
+  reflectorActiveSet = new Set<bigint>();
+  poisonedViperVictimsSet = new Set<bigint>();
+  archangelBulletsMap = new Map<bigint, number>();
+  consecutiveVillageDeaths = 0;
   /** Mirrors `_doubleLynch` as captured by `startLynch()`: how many lynch attempts this Lynch phase gets. */
   lynchAttemptsPlanned = 1;
   private doubleLynchPending = false;
@@ -180,6 +197,23 @@ export class Game {
       player.team = getTeamForRole(role);
     });
     this.possibleRoles = possibleRoles;
+
+    this.players.forEach((player) => {
+      if (player.role === ROLE_BIT.Hitman) {
+        const targets = this.players.filter((p) => p.id !== player.id);
+        if (targets.length > 0) {
+          const target = targets[randomInt(targets.length)]!;
+          this.hitmanTargetMap.set(player.id, target.id);
+        }
+      }
+      if (player.role === ROLE_BIT.Avenger) {
+        const targets = this.players.filter((p) => p.id !== player.id);
+        if (targets.length > 0) {
+          const target = targets[randomInt(targets.length)]!;
+          this.avengerTargetMap.set(player.id, target.id);
+        }
+      }
+    });
 
     return this.enterNight();
   }

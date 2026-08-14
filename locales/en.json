@@ -424,6 +424,8 @@
     "CfgSecretLynch": ["Secret ballot (hide who's voting for whom)"],
     "CfgSecretLynchShowVotes": ["Secret ballot: still show vote counts"],
     "CfgSecretLynchShowVoters": ["Secret ballot: still show voter names"],
+    "CfgPmLynchVote": ["PM lynch vote (send vote menu to each player in DM)"],
+    "PmLynchVoteStarted": ["🗳️ Lynch voting has started! Check your private messages to vote."],
     "CfgAllowExtend": ["Allow /extend"],
     "CfgAllowFlee": ["Allow /flee mid-game"],
     "CfgAllowNsfw": ["Allow NSFW content"],
@@ -478,6 +480,26 @@
     "Role_Augur": ["Augur"],
     "Role_Arsonist": ["Arsonist"],
     "Role_Spumpkin": ["Spumpkin"],
+    "Role_Watchman": ["Watchman"],
+    "Role_Judge": ["Judge"],
+    "Role_Archivist": ["Archivist"],
+    "Role_Tracker": ["Tracker"],
+    "Role_Priestess": ["Priestess"],
+    "Role_Mimic": ["Mimic"],
+    "Role_CrownPrince": ["Crown Prince"],
+    "Role_Archangel": ["Archangel"],
+    "Role_TrapperWolf": ["Trapper Wolf"],
+    "Role_ChameleonWolf": ["Chameleon Wolf"],
+    "Role_ViperWolf": ["Viper Wolf"],
+    "Role_HowlerWolf": ["Howler Wolf"],
+    "Role_HypnotistWolf": ["Hypnotist Wolf"],
+    "Role_BerserkerWolf": ["Berserker Wolf"],
+    "Role_Necromancer": ["Necromancer"],
+    "Role_Jester": ["Jester"],
+    "Role_Hitman": ["Hitman"],
+    "Role_Reflector": ["Reflector"],
+    "Role_Avenger": ["Avenger"],
+    "Role_Crow": ["Crow"],
 
     "CheckYourPM": ["Check your private messages!"],
     "CantPMYou": ["I couldn't send you a private message - please start a chat with me first, then try again."],
@@ -637,6 +659,66 @@
     ],
     "AboutAugur": [
       "You are the Augur. Every morning, you watch the birds and deduce a role that certainly is not in the game right now from their flight. They also will never tell you a role twice, so be sure you make use of that information!"
+    ],
+    "AboutWatchman": [
+      "You are the Watchman. Each night, you can monitor a player's house and receive the exact number of visitors who went there."
+    ],
+    "AboutJudge": [
+      "You are the Judge. Once per game during the day, you can use your Right of Pardon to cancel the execution of a player lynched by the village."
+    ],
+    "AboutArchivist": [
+      "You are the Archivist. Each night, you can consult the village records to learn the exact number of living players in a specific role category."
+    ],
+    "AboutTracker": [
+      "You are the Tracker. Each night, you can track a player to find out if they left their house (performed an active action) or stayed home."
+    ],
+    "AboutPriestess": [
+      "You are the Priestess. Once per game at night, you can bless a player. If attacked by wolves, they survive and the pack is blinded for the next night."
+    ],
+    "AboutMimic": [
+      "You are the Mimic. At the start of the game, you choose a player to imitate. Seers who scan you will see your target's role instead."
+    ],
+    "AboutCrownPrince": [
+      "You are the Crown Prince. If the Mayor dies during the game, you immediately inherit the Mayor title and double vote weight."
+    ],
+    "AboutArchangel": [
+      "You are the Archangel. If 3 innocent villagers die consecutively, you receive a Sacred Bullet capable of eliminating a Werewolf during the day."
+    ],
+    "AboutTrapperWolf": [
+      "You are the Trapper Wolf. Once per game at night, you can trap a player's house. Any visiting role who goes there will have their action neutralized."
+    ],
+    "AboutChameleonWolf": [
+      "You are the Chameleon Wolf. Each night, you can choose which role appearance you present to detection powers to deceive the Seer."
+    ],
+    "AboutViperWolf": [
+      "You are the Viper Wolf. Once per game at night, you can inject a slow poison. The victim survives the day but dies at sunset."
+    ],
+    "AboutHowlerWolf": [
+      "You are the Howler Wolf. Once per game at night, your terrifying howl makes all lynch votes on the following day anonymous."
+    ],
+    "AboutHypnotistWolf": [
+      "You are the Hypnotist Wolf. Once per game at night, you can force a villager's lynch vote against a target of your choice on the next day."
+    ],
+    "AboutBerserkerWolf": [
+      "You are the Berserker Wolf. If a Werewolf in your pack is lynched during the day, you enter a rage and allow the pack to eliminate two victims the next night."
+    ],
+    "AboutNecromancer": [
+      "You are the Necromancer. Once per game at night, you can resurrect a dead player as a Zombie. They join your faction to win with you."
+    ],
+    "AboutJester": [
+      "You are the Jester. Your sole goal is to get lynched by the village! If you succeed, you win alone and take one of your accusers down with you."
+    ],
+    "AboutHitman": [
+      "You are the Hitman. A secret target is assigned to you at game start. If your target dies while you are alive, you win the game!"
+    ],
+    "AboutReflector": [
+      "You are the Reflector. Once per game at night, you can raise your mirror. Any power or attack directed at you will be reflected back at the sender."
+    ],
+    "AboutAvenger": [
+      "You are the Avenger. A rival is assigned to you at game start. If that rival is executed by village lynch vote, you fulfill your objective!"
+    ],
+    "AboutCrow": [
+      "You are the Crow. Each night, you can curse a player's door to inflict +2 penalty votes on them during the next lynch."
     ],
 
     "GifPackNone": ["You don't have a custom gif pack yet. Reply to a gif or video with /setgif <category> to start submitting one."],

@@ -420,6 +420,8 @@
     "CfgSecretLynch": ["Vote secret (cacher qui vote pour qui)"],
     "CfgSecretLynchShowVotes": ["Vote secret : afficher quand même le nombre de votes"],
     "CfgSecretLynchShowVoters": ["Vote secret : afficher quand même les noms des votants"],
+    "CfgPmLynchVote": ["Vote de lynchage en MP (envoyer le menu de vote en privé)"],
+    "PmLynchVoteStarted": ["🗳️ Le vote pour le lynchage a commencé ! Consultez vos messages privés pour voter."],
     "CfgAllowExtend": ["Autoriser /extend"],
     "CfgAllowFlee": ["Autoriser /flee en cours de partie"],
     "CfgAllowNsfw": ["Autoriser le contenu NSFW"],
@@ -474,6 +476,26 @@
     "Role_Augur": ["Augure"],
     "Role_Arsonist": ["Incendiaire"],
     "Role_Spumpkin": ["Citrouille"],
+    "Role_Watchman": ["Gardien de Nuit"],
+    "Role_Judge": ["Juge"],
+    "Role_Archivist": ["Archiviste"],
+    "Role_Tracker": ["Chien de Chasse"],
+    "Role_Priestess": ["Prêtresse de Lumière"],
+    "Role_Mimic": ["Comédien"],
+    "Role_CrownPrince": ["Prince Héritier"],
+    "Role_Archangel": ["Ange Exterminateur"],
+    "Role_TrapperWolf": ["Loup Piégeur"],
+    "Role_ChameleonWolf": ["Loup Caméléon"],
+    "Role_ViperWolf": ["Loup Empoisonneur"],
+    "Role_HowlerWolf": ["Loup Hurleur"],
+    "Role_HypnotistWolf": ["Loup Hypnotiseur"],
+    "Role_BerserkerWolf": ["Loup Berserker"],
+    "Role_Necromancer": ["Nécromancien"],
+    "Role_Jester": ["Bouffon"],
+    "Role_Hitman": ["Assassin à Gages"],
+    "Role_Reflector": ["Miroir Réflecteur"],
+    "Role_Avenger": ["Vengeur"],
+    "Role_Crow": ["Corbeau Maudisseur"],
 
     "CheckYourPM": ["Regarde tes messages privés !"],
     "CantPMYou": ["Je n'ai pas pu t'envoyer de message privé - démarre d'abord une conversation avec moi, puis réessaie."],
@@ -635,6 +657,66 @@
     ],
     "AboutAugur": [
       "Vous êtes l'Augure 🦅. Chaque matin, vous pouvez regarder le vol des oiseaux et deviner un rôle qui n'est pas présent dans le village. Les oiseaux ne vous montreront jamais deux fois le même rôle, usez bien de cette information !"
+    ],
+    "AboutWatchman": [
+      "Vous êtes le Gardien de Nuit. Chaque nuit, vous pouvez surveiller la maison d'un joueur et recevoir le nombre exact de personnes qui lui ont rendu visite."
+    ],
+    "AboutJudge": [
+      "Vous êtes le Juge. Une fois par partie pendant la journée, vous pouvez utiliser votre Droit de Grâce pour annuler la condamnation d'un joueur lynché par le village."
+    ],
+    "AboutArchivist": [
+      "Vous êtes l'Archiviste. Chaque nuit, vous pouvez consulter les registres du village pour connaître le nombre exact de joueurs vivants appartenant à une catégorie."
+    ],
+    "AboutTracker": [
+      "Vous êtes le Chien de Chasse. Chaque nuit, vous pouvez suivre un joueur pour savoir s'il a quitté sa maison (effectué une action active) ou s'il est resté chez lui."
+    ],
+    "AboutPriestess": [
+      "Vous êtes la Prêtresse de Lumière. Une fois par partie la nuit, vous pouvez bénir un joueur. S'il est attaqué par les loups, il survit et la meute est aveuglée pour la nuit suivante."
+    ],
+    "AboutMimic": [
+      "Vous êtes le Comédien. En début de partie, vous choisissez un joueur à imiter. Les Voyantes qui vous sonderont verront le rôle de la personne imitée."
+    ],
+    "AboutCrownPrince": [
+      "Vous êtes le Prince Héritier. Si le Maire vient à mourir durant la partie, vous héritez immédiatement du poste de Maire et de son vote double."
+    ],
+    "AboutArchangel": [
+      "Vous êtes l'Ange Exterminateur. Si 3 villageois innocents meurent consécutivement, vous recevez une Balle Sacrée capable d'éliminer un Loup-Garou pendant la journée."
+    ],
+    "AboutTrapperWolf": [
+      "Vous êtes le Loup Piégeur. Une fois par partie la nuit, vous pouvez piéger la maison d'un joueur. Tout rôle visiteur qui s'y rend verra son action annulée."
+    ],
+    "AboutChameleonWolf": [
+      "Vous êtes le Loup Caméléon. Chaque nuit, vous pouvez choisir quelle apparence vous présentez aux pouvoirs de détection pour tromper la Voyante."
+    ],
+    "AboutViperWolf": [
+      "Vous êtes le Loup Empoisonneur. Une fois par partie la nuit, vous pouvez injecter un venin lent. La victime survit la journée mais s'effondre au coucher du soleil."
+    ],
+    "AboutHowlerWolf": [
+      "Vous êtes le Loup Hurleur. Une fois par partie la nuit, votre cri terrifiant rend anonymes tous les votes de lynchage du jour suivant."
+    ],
+    "AboutHypnotistWolf": [
+      "Vous êtes le Loup Hypnotiseur. Une fois par partie la nuit, vous pouvez forcer le vote d'un villageois contre une cible de votre choix pour le jour suivant."
+    ],
+    "AboutBerserkerWolf": [
+      "Vous êtes le Loup Berserker. Si l'un des Loups de la meute se fait lyncher le jour, vous entrez en rage et permettez à la meute d'éliminer deux victimes la nuit suivante."
+    ],
+    "AboutNecromancer": [
+      "Vous êtes le Nécromancien. Une fois par partie la nuit, vous pouvez ressusciter un joueur mort sous forme de Zombi. Il rejoint votre faction pour gagner avec vous."
+    ],
+    "AboutJester": [
+      "Vous êtes le Bouffon. Votre seul but est de vous faire lyncher par le village ! Si vous y parvenez, vous gagnez seul la partie et emportez l'un de vos accusateurs."
+    ],
+    "AboutHitman": [
+      "Vous êtes l'Assassin à Gages. Une cible secrète vous est désignée en début de partie. Si votre cible meurt alors que vous êtes vivant, vous gagnez la partie !"
+    ],
+    "AboutReflector": [
+      "Vous êtes le Miroir Réflecteur. Une fois par partie la nuit, vous pouvez dresser votre miroir. Tout pouvoir ou attaque dirigé contre vous sera renvoyé sur son émetteur."
+    ],
+    "AboutAvenger": [
+      "Vous êtes le Vengeur. Un rival vous est désigné en début de partie. Si ce rival est exécuté au vote par le village, vous remplissez votre objectif !"
+    ],
+    "AboutCrow": [
+      "Vous êtes le Corbeau Maudisseur. Chaque nuit, vous pouvez maudire la porte d'un joueur pour lui infliger +2 votes de pénalité d'office lors du prochain lynchage."
     ],
 
     "GifPackNone": ["Vous n'avez pas encore de pack de gifs personnalisé. Répondez à un gif ou une vidéo avec /setgif <catégorie> pour commencer à en soumettre un."],

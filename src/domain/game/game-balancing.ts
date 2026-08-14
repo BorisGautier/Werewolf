@@ -12,18 +12,25 @@
 import { randomInt } from 'node:crypto';
 import { ROLE_NAMES, ROLE_BIT, type Role, type RoleFlags, getUniqueRoles, hasFlag } from '../roles/role.js';
 import { shuffle } from '../shared/shuffle.js';
+import type { GameMode } from './game-mode.js';
 
 export const WOLF_ROLES: readonly Role[] = [
   ROLE_BIT.Wolf,
   ROLE_BIT.AlphaWolf,
   ROLE_BIT.WolfCub,
   ROLE_BIT.Lycan,
+  ROLE_BIT.TrapperWolf,
+  ROLE_BIT.ChameleonWolf,
+  ROLE_BIT.ViperWolf,
+  ROLE_BIT.HowlerWolf,
+  ROLE_BIT.HypnotistWolf,
+  ROLE_BIT.BerserkerWolf,
 ];
 
 const WOLF_ROLES_WITH_SNOW: readonly Role[] = [...WOLF_ROLES, ROLE_BIT.SnowWolf];
 
 /** Roles that are not on the village team (mirrors `nonVgRoles`). */
-const NON_VILLAGE_ROLES: readonly Role[] = [
+export const NON_VILLAGE_ROLES: readonly Role[] = [
   ROLE_BIT.Cultist,
   ROLE_BIT.SerialKiller,
   ROLE_BIT.Tanner,
@@ -35,6 +42,18 @@ const NON_VILLAGE_ROLES: readonly Role[] = [
   ROLE_BIT.Thief,
   ROLE_BIT.SnowWolf,
   ROLE_BIT.Arsonist,
+  ROLE_BIT.TrapperWolf,
+  ROLE_BIT.ChameleonWolf,
+  ROLE_BIT.ViperWolf,
+  ROLE_BIT.HowlerWolf,
+  ROLE_BIT.HypnotistWolf,
+  ROLE_BIT.BerserkerWolf,
+  ROLE_BIT.Necromancer,
+  ROLE_BIT.Jester,
+  ROLE_BIT.Hitman,
+  ROLE_BIT.Reflector,
+  ROLE_BIT.Avenger,
+  ROLE_BIT.Crow,
 ];
 
 /** Village roles whose identity is revealed / known, capping how many can appear (mirrors `revealedVgRoles`). */
@@ -80,6 +99,7 @@ export interface BalanceOptions {
   playerCount: number;
   chaos: boolean;
   burningOverkill: boolean;
+  mode?: GameMode;
   /** Set only when validating a config (mirrors `validationMode`): treats every flag bit as meaningful. */
   validationMode?: boolean;
 }
@@ -386,6 +406,46 @@ export function getStrength(role: Role, allRolesInGame: readonly Role[]): number
       return 8;
     case ROLE_BIT.Spumpkin:
       return 2;
+    case ROLE_BIT.Watchman:
+      return 5;
+    case ROLE_BIT.Judge:
+      return 4;
+    case ROLE_BIT.Archivist:
+      return 5;
+    case ROLE_BIT.Tracker:
+      return 5;
+    case ROLE_BIT.Priestess:
+      return 6;
+    case ROLE_BIT.Mimic:
+      return 2;
+    case ROLE_BIT.CrownPrince:
+      return 3;
+    case ROLE_BIT.Archangel:
+      return 7;
+    case ROLE_BIT.TrapperWolf:
+      return 11;
+    case ROLE_BIT.ChameleonWolf:
+      return 10;
+    case ROLE_BIT.ViperWolf:
+      return 12;
+    case ROLE_BIT.HowlerWolf:
+      return 11;
+    case ROLE_BIT.HypnotistWolf:
+      return 12;
+    case ROLE_BIT.BerserkerWolf:
+      return 13;
+    case ROLE_BIT.Necromancer:
+      return 12;
+    case ROLE_BIT.Jester:
+      return Math.floor(allRolesInGame.length / 2);
+    case ROLE_BIT.Hitman:
+      return 10;
+    case ROLE_BIT.Reflector:
+      return 4;
+    case ROLE_BIT.Avenger:
+      return 3;
+    case ROLE_BIT.Crow:
+      return 4;
     default:
       throw new RangeError(`Unknown role: ${role.toString()}`);
   }
