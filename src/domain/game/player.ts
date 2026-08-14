@@ -73,8 +73,10 @@ export interface Player {
   dayCult: number;
   /** Augur mechanic: roles they've already been shown, so they never see the same one twice. */
   sawRoles: Role[];
-  /** Thief/Doppelganger mechanic: id of the player whose role this one copied/stole, if any. */
+  /** Thief/Doppelganger/Hitman/Avenger mechanic: id of the target player. */
   roleModel: bigint | null;
+  targetId: bigint | null;
+  isCursedByCrow: boolean;
 
   // --- Achievement-tracking counters/flags (mirrors the original's per-player achievement fields) ---
   /** Ever received at least one lynch vote, across any attempt this game (Inconspicuous). */
@@ -167,6 +169,8 @@ export function createPlayer(id: bigint, name: string, role: Role, team: Team): 
     dayCult: 0,
     sawRoles: [],
     roleModel: null,
+    targetId: null,
+    isCursedByCrow: false,
     hasBeenVoted: false,
     foolCorrectSeeCount: 0,
     foolCorrectlySeenBH: false,

@@ -30,6 +30,7 @@ interface ToggleField {
     | 'secretLynch'
     | 'secretLynchShowVotes'
     | 'secretLynchShowVoters'
+    | 'pmLynchVote'
     | 'allowExtend'
     | 'allowFlee'
     | 'allowNsfw'
@@ -53,6 +54,7 @@ const TOGGLE_FIELDS: readonly ToggleField[] = [
   { code: 'sl', field: 'secretLynch', labelKey: 'CfgSecretLynch' },
   { code: 'slv', field: 'secretLynchShowVotes', labelKey: 'CfgSecretLynchShowVotes' },
   { code: 'slr', field: 'secretLynchShowVoters', labelKey: 'CfgSecretLynchShowVoters' },
+  { code: 'pml', field: 'pmLynchVote', labelKey: 'CfgPmLynchVote' },
   { code: 'ae', field: 'allowExtend', labelKey: 'CfgAllowExtend' },
   { code: 'af', field: 'allowFlee', labelKey: 'CfgAllowFlee' },
   { code: 'ans', field: 'allowNsfw', labelKey: 'CfgAllowNsfw' },

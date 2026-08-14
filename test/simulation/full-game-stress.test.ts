@@ -42,6 +42,7 @@ import { Game } from '../../src/domain/game/game.aggregate.js';
 import { ROLE_BIT, ROLE_NAMES, roleName, type RoleName } from '../../src/domain/roles/role.js';
 import { alivePlayers } from '../../src/domain/game/player.js';
 import { getTeamForRole } from '../../src/domain/game/team.js';
+import { GAME_MODES } from '../../src/domain/game/game-mode.js';
 import { GameLoop } from '../../src/infrastructure/telegram/game-loop.js';
 import { getDefaultLocale, loadLocales } from '../../src/infrastructure/i18n/locale-loader.js';
 import { Translator } from '../../src/infrastructure/i18n/translator.js';
@@ -229,8 +230,9 @@ async function runOneGame(
   } as unknown as AchievementRepository;
 
   const gameManager = new GameManager();
+  const selectedMode = GAME_MODES[randomInt(GAME_MODES.length)]!;
   const game: Game = gameManager.create(chatId, {
-    mode: 'Normal',
+    mode: selectedMode,
     minPlayers: 5,
     maxPlayers: 35,
     burningOverkill: true,

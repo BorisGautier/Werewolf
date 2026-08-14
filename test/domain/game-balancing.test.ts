@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ROLE_BIT, addFlag } from '../../src/domain/roles/role.js';
-import { WOLF_ROLES, balance, getStrength, tryBalance } from '../../src/domain/game/game-balancing.js';
+import { WOLF_ROLES, NON_VILLAGE_ROLES, balance, getStrength, tryBalance } from '../../src/domain/game/game-balancing.js';
 
 describe('game balancing', () => {
   it('always assigns exactly one role per player', () => {
@@ -22,8 +22,8 @@ describe('game balancing', () => {
       chaos: false,
       burningOverkill: true,
     });
-    const hasWolfTeam = rolesToAssign.some((r) => WOLF_ROLES.includes(r));
-    expect(hasWolfTeam || rolesToAssign.includes(ROLE_BIT.SerialKiller) || rolesToAssign.includes(ROLE_BIT.Cultist) || rolesToAssign.includes(ROLE_BIT.Arsonist)).toBe(true);
+    const hasEnemy = rolesToAssign.some((r) => NON_VILLAGE_ROLES.includes(r));
+    expect(hasEnemy).toBe(true);
   });
 
   it('never deals a Sorcerer, Traitor or SnowWolf without a wolf-team role present', () => {

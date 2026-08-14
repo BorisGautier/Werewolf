@@ -291,7 +291,7 @@ export class GameLoop {
     for (let attempt = 1; attempt <= attempts; attempt++) {
       if (attempt > 1) game.restartLynchVote();
 
-      await this.sendLynchVoteMenu(game, group.language, seconds);
+      await this.sendLynchVoteMenu(game, group, seconds);
       await this.phaseSleep(game.chatId, seconds * 1000);
       if (this.consumeKilled(game.chatId)) return;
 
@@ -306,13 +306,21 @@ export class GameLoop {
     await this.runNight(game);
   }
 
-  private async sendLynchVoteMenu(game: Game, language: string, seconds: number): Promise<void> {
+  private async sendLynchVoteMenu(game: Game, group: GroupWithConfig, seconds: number): Promise<void> {
     const alive = alivePlayers(game.players);
-    const keyboard = targetKeyboard(alive, 'vote', language, this.t);
-    await this.send(game.chatId, language, 'LynchTime', formatDuration(seconds));
-    await this.bot.api.sendMessage(chatNumber(game.chatId), this.t.translate(language, 'AskTarget'), {
-      reply_markup: keyboard,
-    });
+    const keyboard = targetKeyboard(alive, 'vote', group.language, this.t);
+    await this.send(game.chatId, group.language, 'LynchTime', formatDuration(seconds));
+
+    if (group.pmLynchVote) {
+      await this.send(game.chatId, group.language, 'PmLynchVoteStarted');
+      for (const actor of alive) {
+        await this.sendPm(actor.id, group.language, 'AskTarget', keyboard);
+      }
+    } else {
+      await this.bot.api.sendMessage(chatNumber(game.chatId), this.t.translate(group.language, 'AskTarget'), {
+        reply_markup: keyboard,
+      });
+    }
   }
 
   private async broadcastLynchOutcome(

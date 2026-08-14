@@ -19,7 +19,61 @@ export type GifCategory =
   | 'LoversWin'
   | 'SKKilled'
   | 'ArsonistWins'
-  | 'BurnToDeath';
+  | 'BurnToDeath'
+  | 'NightStart'
+  | 'DayStart'
+  | 'LynchStart'
+  | 'WolfAttack'
+  | 'HunterShot'
+  | 'WitchPotionKill'
+  | 'WitchPotionSave'
+  | 'SeerVision'
+  | 'FoolVision'
+  | 'ApprenticeSeerPromote'
+  | 'CultConvert'
+  | 'CultHunterKill'
+  | 'GAGuard'
+  | 'HarlotVisit'
+  | 'HarlotVisitedWolf'
+  | 'HarlotTargetEaten'
+  | 'CupidLovers'
+  | 'LoverDied'
+  | 'WildChildTransform'
+  | 'DoppelgangerSwap'
+  | 'WolfCubDeath'
+  | 'AlphaWolfInfect'
+  | 'GraveDiggerDig'
+  | 'GraveDiggerFall'
+  | 'ArsonistDouse'
+  | 'ArsonistSpark'
+  | 'AugurBirds'
+  | 'SnowWolfFreeze'
+  | 'SandmanSleep'
+  | 'BlacksmithSilver'
+  | 'TroublemakerBrawl'
+  | 'PacifistPeace'
+  | 'MayorReveal'
+  | 'PrinceSurvived'
+  | 'WatchmanWatch'
+  | 'JudgePardon'
+  | 'ArchivistRecords'
+  | 'TrackerTrack'
+  | 'PriestessBless'
+  | 'MimicImitate'
+  | 'CrownPrincePromote'
+  | 'ArchangelBullet'
+  | 'TrapperWolfTrap'
+  | 'ChameleonWolfDisguise'
+  | 'ViperWolfPoison'
+  | 'HowlerWolfHowl'
+  | 'HypnotistWolfMindControl'
+  | 'BerserkerWolfRage'
+  | 'NecromancerResurrect'
+  | 'JesterWin'
+  | 'HitmanTargetEliminated'
+  | 'ReflectorReflect'
+  | 'AvengerRivalLynched'
+  | 'CrowCurse';
 
 export const GIF_CATEGORIES: readonly GifCategory[] = [
   'VillagerDie',
@@ -36,6 +90,60 @@ export const GIF_CATEGORIES: readonly GifCategory[] = [
   'SKKilled',
   'ArsonistWins',
   'BurnToDeath',
+  'NightStart',
+  'DayStart',
+  'LynchStart',
+  'WolfAttack',
+  'HunterShot',
+  'WitchPotionKill',
+  'WitchPotionSave',
+  'SeerVision',
+  'FoolVision',
+  'ApprenticeSeerPromote',
+  'CultConvert',
+  'CultHunterKill',
+  'GAGuard',
+  'HarlotVisit',
+  'HarlotVisitedWolf',
+  'HarlotTargetEaten',
+  'CupidLovers',
+  'LoverDied',
+  'WildChildTransform',
+  'DoppelgangerSwap',
+  'WolfCubDeath',
+  'AlphaWolfInfect',
+  'GraveDiggerDig',
+  'GraveDiggerFall',
+  'ArsonistDouse',
+  'ArsonistSpark',
+  'AugurBirds',
+  'SnowWolfFreeze',
+  'SandmanSleep',
+  'BlacksmithSilver',
+  'TroublemakerBrawl',
+  'PacifistPeace',
+  'MayorReveal',
+  'PrinceSurvived',
+  'WatchmanWatch',
+  'JudgePardon',
+  'ArchivistRecords',
+  'TrackerTrack',
+  'PriestessBless',
+  'MimicImitate',
+  'CrownPrincePromote',
+  'ArchangelBullet',
+  'TrapperWolfTrap',
+  'ChameleonWolfDisguise',
+  'ViperWolfPoison',
+  'HowlerWolfHowl',
+  'HypnotistWolfMindControl',
+  'BerserkerWolfRage',
+  'NecromancerResurrect',
+  'JesterWin',
+  'HitmanTargetEliminated',
+  'ReflectorReflect',
+  'AvengerRivalLynched',
+  'CrowCurse',
 ];
 
 /** Prisma column name for each category - `villagerDie`, `wolfWin`, ... (camelCase of the enum). */

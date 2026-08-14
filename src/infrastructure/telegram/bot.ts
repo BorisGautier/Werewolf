@@ -5,6 +5,7 @@ import { GameManager } from '../../application/game-manager.js';
 import type { Env } from '../config/env.js';
 import type { Logger } from '../logging/logger.js';
 import type { Translator } from '../i18n/translator.js';
+import type { GameMode } from '../../domain/game/game-mode.js';
 import { AchievementRepository } from '../persistence/achievement.repository.js';
 import { AdminRepository } from '../persistence/admin.repository.js';
 import { GameRepository } from '../persistence/game.repository.js';
@@ -374,16 +375,46 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     await ctx.reply(lines.join('\n'), { parse_mode: 'HTML' });
   });
 
-  bot.command(['startgame', 'startchaos'], async (ctx) => {
-    if (!ctx.chat || ctx.chat.type === 'private' || !ctx.from) return;
-    if (maintenance.on) {
-      await ctx.reply('Sorry, we are about to start maintenance.  Please check @greywolfdev for more information.');
-      return;
-    }
-    const mode = ctx.message?.text?.startsWith('/startchaos') ? 'Chaos' : 'Normal';
-    const name = `${ctx.from.first_name} ${ctx.from.last_name ?? ''}`.trim();
-    await lobby.startGame(BigInt(ctx.chat.id), ctx.chat.title ?? null, { id: BigInt(ctx.from.id), name }, mode);
-  });
+  const START_COMMAND_MODE_MAP: Record<string, GameMode> = {
+    startgame: 'Normal',
+    startnormal: 'Normal',
+    startchaos: 'Chaos',
+    startbloodbath: 'Bloodbath',
+    startdarkmagic: 'DarkMagic',
+    startwolfpack: 'WolfPack',
+    startcursed: 'CursedVillage',
+    startinfection: 'Infection',
+    startanarchy: 'Anarchy',
+    startholywar: 'HolyWar',
+    startassassins: 'Assassins',
+  };
+
+  bot.command(
+    [
+      'startgame',
+      'startnormal',
+      'startchaos',
+      'startbloodbath',
+      'startdarkmagic',
+      'startwolfpack',
+      'startcursed',
+      'startinfection',
+      'startanarchy',
+      'startholywar',
+      'startassassins',
+    ],
+    async (ctx) => {
+      if (!ctx.chat || ctx.chat.type === 'private' || !ctx.from) return;
+      if (maintenance.on) {
+        await ctx.reply('Sorry, we are about to start maintenance.  Please check @greywolfdev for more information.');
+        return;
+      }
+      const cmdText = ctx.message?.text?.split(' ')[0]?.replace('/', '').split('@')[0]?.toLowerCase() ?? 'startgame';
+      const mode: GameMode = START_COMMAND_MODE_MAP[cmdText] ?? 'Normal';
+      const name = `${ctx.from.first_name} ${ctx.from.last_name ?? ''}`.trim();
+      await lobby.startGame(BigInt(ctx.chat.id), ctx.chat.title ?? null, { id: BigInt(ctx.from.id), name }, mode);
+    },
+  );
 
   bot.command('join', async (ctx) => {
     if (!ctx.from) return;

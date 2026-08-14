@@ -46,6 +46,14 @@ const VILLAGE_ROLES: readonly Role[] = [
   ROLE_BIT.Spumpkin,
   ROLE_BIT.Augur,
   ROLE_BIT.GraveDigger,
+  ROLE_BIT.Watchman,
+  ROLE_BIT.Judge,
+  ROLE_BIT.Archivist,
+  ROLE_BIT.Tracker,
+  ROLE_BIT.Priestess,
+  ROLE_BIT.Mimic,
+  ROLE_BIT.CrownPrince,
+  ROLE_BIT.Archangel,
 ];
 
 const THIEF_TEAM_ROLES: readonly Role[] = [ROLE_BIT.Doppelganger, ROLE_BIT.Thief];
@@ -57,6 +65,12 @@ const WOLF_TEAM_ROLES: readonly Role[] = [
   ROLE_BIT.Wolf,
   ROLE_BIT.Lycan,
   ROLE_BIT.SnowWolf,
+  ROLE_BIT.TrapperWolf,
+  ROLE_BIT.ChameleonWolf,
+  ROLE_BIT.ViperWolf,
+  ROLE_BIT.HowlerWolf,
+  ROLE_BIT.HypnotistWolf,
+  ROLE_BIT.BerserkerWolf,
 ];
 
 /** Port of `Werewolf.cs`'s `SetTeam`: derives a player's team from their current role. */
@@ -64,9 +78,18 @@ export function getTeamForRole(role: Role): Team {
   if (VILLAGE_ROLES.includes(role)) return 'Village';
   if (THIEF_TEAM_ROLES.includes(role)) return 'Thief';
   if (WOLF_TEAM_ROLES.includes(role)) return 'Wolf';
-  if (role === ROLE_BIT.Tanner) return 'Tanner';
+  if (role === ROLE_BIT.Tanner || role === ROLE_BIT.Jester) return 'Tanner';
   if (role === ROLE_BIT.Cultist) return 'Cult';
   if (role === ROLE_BIT.SerialKiller) return 'SerialKiller';
   if (role === ROLE_BIT.Arsonist) return 'Arsonist';
+  if (
+    role === ROLE_BIT.Necromancer ||
+    role === ROLE_BIT.Hitman ||
+    role === ROLE_BIT.Reflector ||
+    role === ROLE_BIT.Avenger ||
+    role === ROLE_BIT.Crow
+  ) {
+    return 'Neutral';
+  }
   throw new RangeError(`No team mapping for role: ${role.toString()}`);
 }

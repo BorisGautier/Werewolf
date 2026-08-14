@@ -98,6 +98,13 @@ export function resolveLynchVotes(players: Player[], options: LynchOptions): Lyn
     }
   }
 
+  // Apply Crow curse (+2 penalty votes)
+  players.forEach((p) => {
+    if (p.isCursedByCrow) {
+      p.votes += 2;
+    }
+  });
+
   const maxVotes = Math.max(0, ...players.map((p) => p.votes));
   const tied = players.filter((p) => p.votes === maxVotes && maxVotes > 0);
 
@@ -112,9 +119,7 @@ export function resolveLynchVotes(players: Player[], options: LynchOptions): Lyn
       resolution = { outcome: 'Lynched', playerId: lynched!.id };
     } else {
       resolution = { outcome: 'Tied', tiedPlayerIds: tied.map((p) => p.id) };
-      // Mirrors the original's SoClose check in the tie branch: a tied Tanner was "so close" to
-      // being lynched.
-      for (const p of tied) if (p.role === ROLE_BIT.Tanner) p.soClose = true;
+      for (const p of tied) if (p.role === ROLE_BIT.Tanner || p.role === ROLE_BIT.Jester) p.soClose = true;
     }
   } else {
     lynched = tied[0];
@@ -130,6 +135,32 @@ export function resolveLynchVotes(players: Player[], options: LynchOptions): Lyn
         .filter((p) => p.choice === lynched!.id)
         .map((p) => p.id);
       events.push(...killPlayer(players, lynched.id, 'Lynch', { killerIds, isNight: false }));
+
+      // Check CrownPrince promotion if Mayor died
+      if (lynched.role === ROLE_BIT.Mayor) {
+        const cp = players.find((p) => !p.isDead && p.role === ROLE_BIT.CrownPrince);
+        if (cp) {
+          cp.role = ROLE_BIT.Mayor;
+          cp.hasUsedAbility = true;
+        }
+      }
+
+      // Jester lynch victory
+      if (lynched.role === ROLE_BIT.Jester) {
+        lynched.won = true;
+        events.push(declareWinner(players, 'Tanner'));
+        if (killerIds.length > 0) {
+          const randomVoterId = killerIds[Math.floor(random() * killerIds.length)]!;
+          events.push(...killPlayer(players, randomVoterId, 'Lynch', { killerIds: [lynched.id], isNight: false }));
+        }
+      }
+
+      // Avenger rival goal check
+      players.filter((p) => !p.isDead && p.role === ROLE_BIT.Avenger).forEach((avenger) => {
+        if (avenger.targetId === lynched!.id) {
+          avenger.won = true;
+        }
+      });
 
       if (lynched.role === ROLE_BIT.Tanner && alivePlayers(players).every((p) => p.choice === lynched!.id)) {
         lynched.tannerOverkill = true;

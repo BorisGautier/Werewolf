@@ -134,6 +134,26 @@ enum RoleName {
   Augur
   Arsonist
   Spumpkin
+  Watchman
+  Judge
+  Archivist
+  Tracker
+  Priestess
+  Mimic
+  CrownPrince
+  Archangel
+  TrapperWolf
+  ChameleonWolf
+  ViperWolf
+  HowlerWolf
+  HypnotistWolf
+  BerserkerWolf
+  Necromancer
+  Jester
+  Hitman
+  Reflector
+  Avenger
+  Crow
 }
 
 enum AdminRole {
@@ -220,6 +240,7 @@ model Group {
   secretLynch              Boolean @default(false)
   secretLynchShowVotes     Boolean @default(false)
   secretLynchShowVoters    Boolean @default(false)
+  pmLynchVote              Boolean @default(false)
   muteDead                 Boolean @default(false)
 
   botInGroup   Boolean  @default(true)
