@@ -138,6 +138,18 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     await ctx.reply(deps.translator.translate(language, 'SpamBanned', duration));
   });
 
+  // Automatically capture and register any member who sends a message in a group
+  bot.use(async (ctx, next) => {
+    if (ctx.chat && (ctx.chat.type === 'group' || ctx.chat.type === 'supergroup') && ctx.from) {
+      void deps.groupRepository.registerMember(BigInt(ctx.chat.id), {
+        telegramId: BigInt(ctx.from.id),
+        username: ctx.from.username ?? null,
+        displayName: ctx.from.first_name,
+      });
+    }
+    return next();
+  });
+
   // Registered before the generic `callback_query:data` catch-all further down (which doesn't
   // call next()) so its own `stopwaiting:...` callback data actually gets a chance to match.
   registerWaitlistCommands(bot, deps);
@@ -383,6 +395,89 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     await ctx.editMessageText(`✅ <b>${text}</b>\n\nUtilise /profile pour admirer ta nouvelle carte de profil !`, { parse_mode: 'HTML' });
   });
 
+  bot.command('tagall', async (ctx) => {
+    if (!ctx.chat || ctx.chat.type === 'private') return;
+    const callerId = BigInt(ctx.from?.id ?? 0);
+    const group = await deps.groupRepository.findByTelegramId(BigInt(ctx.chat.id));
+    const language = group?.language ?? 'fr';
+
+    try {
+      const member = await ctx.api.getChatMember(ctx.chat.id, Number(callerId));
+      const isAdmin = member.status === 'administrator' || member.status === 'creator';
+      if (!isAdmin) {
+        await ctx.reply(language === 'fr' ? 'Seuls les administrateurs du groupe peuvent utiliser /tagall.' : 'Only group administrators can use /tagall.');
+        return;
+      }
+      await lobby.tagAllMembers(BigInt(ctx.chat.id), language);
+    } catch {
+      await lobby.tagAllMembers(BigInt(ctx.chat.id), language);
+    }
+  });
+
+  bot.command('claim', async (ctx) => {
+    if (!ctx.from) return;
+    const userId = BigInt(ctx.from.id);
+    const chatId = ctx.chat ? BigInt(ctx.chat.id) : 0n;
+
+    let game = chatId !== 0n ? gameLoop.getGame(chatId) : undefined;
+    if (!game) {
+      game = deps.gameManager.findByPlayer(userId);
+    }
+
+    const isFr = ctx.from.language_code === 'fr';
+
+    if (!game || game.phase === 'Ended' || game.phase === 'Joining') {
+      await ctx.reply(isFr ? "Il n'y a pas de partie active en cours." : "There is no active game currently.");
+      return;
+    }
+
+    const player = game.players.find((p) => p.id === userId);
+    if (!player || player.isDead) {
+      await ctx.reply(isFr ? "Seuls les joueurs vivants de la partie peuvent effectuer un claim." : "Only living players in the game can claim a role.");
+      return;
+    }
+
+    const text = (ctx.message?.text ?? '').split(' ').slice(1).join(' ').trim();
+    if (!text) {
+      await ctx.reply(isFr ? "Usage : /claim <rôle> (ex: /claim Voyante, /claim Villageois)" : "Usage: /claim <role> (e.g. /claim Seer, /claim Villager)");
+      return;
+    }
+
+    const claimedRole = text.charAt(0).toUpperCase() + text.slice(1);
+    game.claimsMap.set(userId, claimedRole);
+
+    const announcement = isFr
+      ? `📢 <b>CLAIM :</b> <a href="tg://user?id=${userId}">${player.name}</a> affirme être <b>${claimedRole}</b> !`
+      : `📢 <b>CLAIM:</b> <a href="tg://user?id=${userId}">${player.name}</a> claims to be <b>${claimedRole}</b>!`;
+
+    await ctx.api.sendMessage(Number(game.chatId), announcement, { parse_mode: 'HTML' });
+  });
+
+  bot.command('claims', async (ctx) => {
+    if (!ctx.chat) return;
+    const chatId = BigInt(ctx.chat.id);
+    const game = gameLoop.getGame(chatId) ?? (ctx.from ? deps.gameManager.findByPlayer(BigInt(ctx.from.id)) : undefined);
+
+    if (!game || game.phase === 'Ended' || game.phase === 'Joining') {
+      await ctx.reply("Il n'y a pas de partie en cours dans ce groupe.");
+      return;
+    }
+
+    const lines: string[] = [];
+    for (const p of game.players) {
+      const claim = game.claimsMap.get(p.id);
+      const status = p.isDead ? '💀 mort' : '🙂 en vie';
+      if (claim) {
+        lines.push(`• <b>${p.name}</b> (${status}) : <b>${claim}</b>`);
+      } else {
+        lines.push(`• <b>${p.name}</b> (${status}) : <i>(Aucun claim)</i>`);
+      }
+    }
+
+    const title = "📜 <b>RELEVÉ DES CLAIMS DE LA PARTIE :</b>\n\n";
+    await ctx.reply(title + lines.join('\n'), { parse_mode: 'HTML' });
+  });
+
   bot.command('report', async (ctx) => {
     if (!ctx.from) return;
     const reporterId = BigInt(ctx.from.id);
@@ -588,9 +683,15 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
   bot.on('callback_query:data', async (ctx) => {
     if (!ctx.from || !ctx.chat) return;
     const text = await gameLoop.handleCallback(BigInt(ctx.from.id), BigInt(ctx.chat.id), ctx.callbackQuery.data);
-    await ctx.answerCallbackQuery(text ? { text } : undefined);
+    await ctx.answerCallbackQuery(text ? { text } : undefined).catch(() => null);
     if (text) {
-      await ctx.editMessageReplyMarkup(undefined).catch(() => null);
+      if (ctx.chat.type === 'private') {
+        await ctx.editMessageText(`✅ <b>${text}</b>`, { parse_mode: 'HTML' }).catch(async () => {
+          await ctx.editMessageReplyMarkup(undefined).catch(() => null);
+        });
+      } else {
+        await ctx.editMessageReplyMarkup(undefined).catch(() => null);
+      }
     }
   });
 

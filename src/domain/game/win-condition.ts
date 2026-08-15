@@ -19,6 +19,12 @@ const CLASSIC_WOLF_ROLES: readonly Role[] = [
   ROLE_BIT.AlphaWolf,
   ROLE_BIT.WolfCub,
   ROLE_BIT.Lycan,
+  ROLE_BIT.TrapperWolf,
+  ROLE_BIT.ChameleonWolf,
+  ROLE_BIT.ViperWolf,
+  ROLE_BIT.HowlerWolf,
+  ROLE_BIT.HypnotistWolf,
+  ROLE_BIT.BerserkerWolf,
 ];
 
 const NO_ONE_SOLO_ROLES: readonly Role[] = [ROLE_BIT.Sorcerer, ROLE_BIT.Tanner, ROLE_BIT.Thief, ROLE_BIT.Doppelganger];

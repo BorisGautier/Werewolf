@@ -40,6 +40,7 @@ interface ToggleField {
     | 'allowThief'
     | 'allowArsonist'
     | 'muteDead'
+    | 'tagAllOnStart'
   >;
   labelKey: string;
 }
@@ -63,6 +64,7 @@ const TOGGLE_FIELDS: readonly ToggleField[] = [
   { code: 'aco', field: 'allowCult', labelKey: 'CfgAllowCult' },
   { code: 'ath', field: 'allowThief', labelKey: 'CfgAllowThief' },
   { code: 'aar', field: 'allowArsonist', labelKey: 'CfgAllowArsonist' },
+  { code: 'tas', field: 'tagAllOnStart', labelKey: 'CfgTagAllOnStart' },
   { code: 'md', field: 'muteDead', labelKey: 'CfgMuteDead' },
 ];
 

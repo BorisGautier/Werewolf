@@ -24,6 +24,7 @@ import { donorBadge, PlayerRepository } from '../persistence/player.repository.j
 import type { Translator } from '../i18n/translator.js';
 import type { Logger } from '../logging/logger.js';
 import type { GameLoop } from './game-loop.js';
+import { aboutLocaleKey } from './role-info.js';
 
 const WARNING_SECONDS: readonly number[] = [60, 30, 10];
 const ANNOUNCE_JOINED_EVERY_SECONDS = 30;
@@ -121,10 +122,11 @@ export class GameLobbyManager {
     await this.players.upsert(starter.id, { displayName: starter.name });
     const isBanned = await this.players.isBanned(starter.id);
     const suspension = await this.players.checkSuspension(starter.id);
+    const groupName = formatGroupTitle(group.title, language, mode);
     if (!isBanned && !suspension.isSuspended) {
       try {
         game.addPlayer(starter.id, starter.name);
-        await this.sendToUser(starter.id, language, 'YouJoined', group.title ?? '');
+        await this.sendToUser(starter.id, language, 'YouJoined', groupName);
       } catch {
         // Ignore if auto-join fails
       }
@@ -136,7 +138,11 @@ export class GameLobbyManager {
       reply_markup: keyboard,
     });
 
-    await this.notifyWaitingPlayers(chatId, group.title ?? '', language, starter.id);
+    await this.notifyWaitingPlayers(chatId, groupName, language, starter.id);
+
+    if (group.tagAllOnStart) {
+      await this.tagAllMembers(chatId, language);
+    }
 
     const session: LobbySession = {
       game,
@@ -162,6 +168,48 @@ export class GameLobbyManager {
     for (const userId of waiting) {
       if (userId === starterId) continue;
       await this.sendToUser(userId, language, 'NotifyNewGame', groupTitle);
+    }
+  }
+
+  async tagAllMembers(chatId: bigint, language: string): Promise<void> {
+    const isFr = language === 'fr';
+    const waitingUsers = await this.notifyGames.listWaiting(chatId);
+    const groupPlayers = await this.players.getGroupPlayers(chatId, 100);
+    const registeredMembers = await this.groups.getGroupMembers(chatId, 100);
+
+    const userMap = new Map<bigint, { username?: string | null; displayName?: string | null }>();
+
+    for (const id of waitingUsers) {
+      const p = await this.players.findByTelegramId(id);
+      if (p) userMap.set(id, { username: p.username, displayName: p.displayName });
+    }
+
+    for (const p of groupPlayers) {
+      userMap.set(p.telegramId, { username: p.username, displayName: p.displayName });
+    }
+
+    for (const m of registeredMembers) {
+      userMap.set(m.telegramId, { username: m.username, displayName: m.displayName });
+    }
+
+    if (userMap.size === 0) return;
+
+    const mentions: string[] = [];
+    for (const [id, info] of userMap.entries()) {
+      if (info.username) {
+        mentions.push(`@${info.username}`);
+      } else {
+        const pName = info.displayName ?? (isFr ? 'Membre' : 'Member');
+        mentions.push(`<a href="tg://user?id=${id}">${pName}</a>`);
+      }
+    }
+
+    if (mentions.length > 0) {
+      const header = isFr
+        ? `📢 <b>APPEL DE LA COMMUNAUTÉ ! REJOIGNEZ LA PARTIE !</b> 🐺\n\n`
+        : `📢 <b>COMMUNITY CALL! JOIN THE GAME!</b> 🐺\n\n`;
+      const message = `${header}${mentions.join(' ')}`;
+      await this.bot.api.sendMessage(chatNumber(chatId), message, { parse_mode: 'HTML' });
     }
   }
 
@@ -220,7 +268,7 @@ export class GameLobbyManager {
     }
 
     session.playersJoinedSinceAnnounce.push(uniqueName);
-    const sentPm = await this.sendToUser(telegramUser.id, language, 'YouJoined', group.title ?? '');
+    const sentPm = await this.sendToUser(telegramUser.id, language, 'YouJoined', formatGroupTitle(group.title, language, session.game.mode));
     if (!sentPm) {
       const botUsername = this.bot.botInfo?.username ?? '';
       const keyboard = botUsername
@@ -435,6 +483,8 @@ export class GameLobbyManager {
       { chatId: session.chatId.toString(), gameId, players: session.game.players.length },
       'Game started, handing off to the night/day loop',
     );
+    const grp = await this.groups.getOrCreate(session.chatId, null, null);
+    void this.gameLoop.sendGifCategory?.(session.chatId, grp, session.game.mode === 'Chaos' ? 'StartChaosGame' : 'StartGame');
     this.gameLoop.start(session.game, gameId);
   }
 
@@ -443,8 +493,21 @@ export class GameLobbyManager {
     const localized = this.t.translate(language, `Role_${name}`);
     const displayName = localized.startsWith('Role_') ? name : localized;
     const emoji = ROLE_META[name].emoji;
+
+    let description = '';
     try {
-      await this.bot.api.sendMessage(chatNumber(telegramId), this.t.translate(language, 'YourRoleIs', `${emoji} ${displayName}`));
+      const descLocalized = this.t.translate(language, aboutLocaleKey(name));
+      if (descLocalized && descLocalized.length > 0) {
+        description = `\n\n📖 <b>${language === 'fr' ? 'Description du rôle' : 'Role description'} :</b>\n${descLocalized}`;
+      }
+    } catch {
+      // Ignore missing role description key
+    }
+
+    const roleMsg = `${this.t.translate(language, 'YourRoleIs', `${emoji} ${displayName}`)}${description}`;
+
+    try {
+      await this.bot.api.sendMessage(chatNumber(telegramId), roleMsg, { parse_mode: 'HTML' });
       return true;
     } catch (err) {
       this.logger.warn({ telegramId: telegramId.toString(), err: (err as Error).message }, 'Could not PM role to player');
@@ -469,6 +532,13 @@ export class GameLobbyManager {
       return false;
     }
   }
+}
+
+function formatGroupTitle(title: string | null | undefined, language: string, mode?: string): string {
+  const modeLabel = mode === 'Chaos' ? 'CHAOS' : mode === 'Bloodbath' ? 'Bain de Sang' : (language === 'fr' ? 'Loup-Garou' : 'Werewolf');
+  const trimmed = title?.trim();
+  if (trimmed) return `${modeLabel} (${trimmed})`;
+  return modeLabel;
 }
 
 function chatNumber(id: bigint): number {

@@ -57,6 +57,34 @@ export class GroupRepository {
   async setDefaultGifPack(telegramId: bigint, gifPackId: number | null): Promise<void> {
     await this.prisma.group.update({ where: { telegramId }, data: { defaultGifPackId: gifPackId } });
   }
+
+  /** Captures/registers any user who speaks or joins in this group. */
+  async registerMember(telegramGroupId: bigint, user: { telegramId: bigint; username?: string | null; displayName?: string | null }): Promise<void> {
+    const group = await this.getOrCreate(telegramGroupId);
+    await this.prisma.groupMember.upsert({
+      where: { groupId_telegramId: { groupId: group.id, telegramId: user.telegramId } },
+      create: {
+        groupId: group.id,
+        telegramId: user.telegramId,
+        username: user.username ?? null,
+        displayName: user.displayName ?? null,
+      },
+      update: {
+        username: user.username ?? null,
+        displayName: user.displayName ?? null,
+      },
+    });
+  }
+
+  /** Gets all registered members of this specific group chat. */
+  async getGroupMembers(telegramGroupId: bigint, limit = 100) {
+    const group = await this.prisma.group.findUnique({ where: { telegramId: telegramGroupId } });
+    if (!group) return [];
+    return this.prisma.groupMember.findMany({
+      where: { groupId: group.id },
+      take: limit,
+    });
+  }
 }
 
 /** The `Game` construction options a `GroupWithConfig` maps to (mode/timers are read separately per call site). */

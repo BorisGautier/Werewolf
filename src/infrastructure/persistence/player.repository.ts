@@ -207,5 +207,29 @@ export class PlayerRepository {
       gamesWon: target.gamesWon,
     };
   }
+
+  /** Fetches players who have played at least one game in this specific group. */
+  async getGroupPlayers(telegramGroupId: bigint, limit = 50) {
+    return this.prisma.player.findMany({
+      where: {
+        gamePlayers: {
+          some: {
+            game: {
+              group: {
+                telegramId: telegramGroupId,
+              },
+            },
+          },
+        },
+      },
+      take: limit,
+      select: {
+        id: true,
+        telegramId: true,
+        username: true,
+        displayName: true,
+      },
+    });
+  }
 }
 

@@ -108,6 +108,7 @@ export class Game {
   poisonedViperVictimsSet = new Set<bigint>();
   archangelBulletsMap = new Map<bigint, number>();
   consecutiveVillageDeaths = 0;
+  claimsMap = new Map<bigint, string>();
   /** Mirrors `_doubleLynch` as captured by `startLynch()`: how many lynch attempts this Lynch phase gets. */
   lynchAttemptsPlanned = 1;
   private doubleLynchPending = false;

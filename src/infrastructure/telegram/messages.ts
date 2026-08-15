@@ -60,9 +60,11 @@ const TEAM_WIN_KEY: Record<Team, string> = {
   Thief: 'GenericTeamWin',
 };
 
-function displayRole(role: bigint): string {
+function displayRole(role: bigint, t?: { translate: (lang: string, key: string, ...args: unknown[]) => string }, language = 'fr'): string {
   const name = roleName(role);
-  return `${ROLE_META[name].emoji} ${name}`;
+  const localized = t ? t.translate(language, `Role_${name}`) : name;
+  const displayName = localized.startsWith('Role_') ? name : localized;
+  return `${ROLE_META[name].emoji} ${displayName}`;
 }
 
 function nameOf(players: readonly Player[], id: bigint): string {
@@ -74,9 +76,11 @@ export function describeEvent(
   event: GameEvent,
   players: readonly Player[],
   showRolesOnDeath: boolean,
+  t?: { translate: (lang: string, key: string, ...args: unknown[]) => string },
+  language = 'fr',
 ): OutgoingMessage[] {
   const name = (id: bigint) => nameOf(players, id);
-  const role = (id: bigint) => displayRole(findById(players, id)?.role ?? 0n);
+  const role = (id: bigint) => displayRole(findById(players, id)?.role ?? 0n, t, language);
 
   switch (event.type) {
     case 'PlayerDied': {
