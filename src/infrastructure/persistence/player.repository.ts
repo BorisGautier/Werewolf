@@ -1,5 +1,14 @@
 import type { PrismaClient } from '@prisma/client';
 import { getRankForPoints, type RankTier } from '../../domain/scoring/rank.js';
+import {
+  dbErrors,
+  dbQueries,
+  dbQueryDuration,
+  donationEvents,
+  donationStarsTotal,
+  playerUpserts,
+  totalPlayersSeen,
+} from '../monitoring/metrics.js';
 
 export interface PlayerUpsertData {
   username?: string | null;
@@ -45,11 +54,23 @@ export class PlayerRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
   async upsert(telegramId: bigint, data: PlayerUpsertData = {}) {
-    return this.prisma.player.upsert({
-      where: { telegramId },
-      create: { telegramId, ...data },
-      update: { ...data },
-    });
+    const end = dbQueryDuration.startTimer({ repository: 'player', operation: 'upsert' });
+    try {
+      dbQueries.labels('player', 'upsert').inc();
+      playerUpserts.inc();
+      totalPlayersSeen.inc();
+      const res = await this.prisma.player.upsert({
+        where: { telegramId },
+        create: { telegramId, ...data },
+        update: { ...data },
+      });
+      end();
+      return res;
+    } catch (err) {
+      dbErrors.labels('player', 'upsert').inc();
+      end();
+      throw err;
+    }
   }
 
   async findByTelegramId(telegramId: bigint) {
@@ -76,6 +97,9 @@ export class PlayerRepository {
 
   /** Adds `stars` to the player's lifetime total and recomputes their donation tier from it. */
   async recordDonation(telegramId: bigint, stars: number): Promise<RecordDonationResult> {
+    donationEvents.inc();
+    donationStarsTotal.inc(stars);
+
     const before = await this.prisma.player.findUnique({ where: { telegramId }, select: { donationLevel: true } });
     const updated = await this.prisma.player.update({
       where: { telegramId },

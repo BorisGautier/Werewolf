@@ -8,6 +8,13 @@ import { killPlayer } from './kill.js';
 import type { GameEvent } from './game-event.js';
 import { ABSTAIN, type Player } from './player.js';
 import { getTeamForRole } from './team.js';
+import {
+  detectiveSnoops,
+  gunnerBackfires,
+  gunnerHits,
+  gunnerShots,
+  spumpkinDetonations,
+} from '../../infrastructure/monitoring/metrics.js';
 
 /** The "bad team" roles a Detective's snoop (Streetwise) or a Gunner's bullet (SmartGunner) counts as a real hit. */
 const THREAT_ROLES: readonly Role[] = [
@@ -39,11 +46,16 @@ export function resolveGunnerShot(players: Player[]): GameEvent[] {
   const target = players.find((p) => p.id === gunner.choice);
   if (!target) return events;
 
+  gunnerShots.inc();
   gunner.bullet--;
   gunner.hasUsedAbility = true;
-  if (THREAT_ROLES.includes(target.role)) gunner.bulletHitBaddies++;
+  if (THREAT_ROLES.includes(target.role)) {
+    gunner.bulletHitBaddies++;
+    gunnerHits.inc();
+  }
 
   if (target.role === ROLE_BIT.WiseElder) {
+    gunnerBackfires.inc();
     gunner.role = ROLE_BIT.Villager;
     gunner.team = getTeamForRole(ROLE_BIT.Villager);
     gunner.changedRolesCount++;
@@ -55,15 +67,6 @@ export function resolveGunnerShot(players: Player[]): GameEvent[] {
   return events;
 }
 
-/**
- * Port of the Spumpkin block: a 40% chance to detonate, killing both the
- * target *and* the Spumpkin themselves (mirrors the original's
- * `KillPlayer(spumpkin, killMethod: null, killer: null, ...)` - no method/
- * killer attribution for the self-kill, which we map to `'None'` with no
- * killers). Shooting the Wise Elder still costs the Spumpkin their role,
- * same as the Gunner, though this hardly matters since they're about to die
- * anyway - ported for exact parity regardless.
- */
 export function resolveSpumpkinDetonate(players: Player[], random: () => number = Math.random): GameEvent[] {
   const events: GameEvent[] = [];
 
@@ -75,8 +78,9 @@ export function resolveSpumpkinDetonate(players: Player[], random: () => number 
   const target = players.find((p) => p.id === spumpkin.choice);
   if (!target) return events;
 
-  if (Math.floor(random() * 100) >= 40) return events; // Settings.SpumpkinDetonateChance-equivalent roll failed
+  if (Math.floor(random() * 100) >= 40) return events;
 
+  spumpkinDetonations.inc();
   if (target.role === ROLE_BIT.WiseElder) {
     spumpkin.role = ROLE_BIT.Villager;
     spumpkin.team = getTeamForRole(ROLE_BIT.Villager);
@@ -89,11 +93,6 @@ export function resolveSpumpkinDetonate(players: Player[], random: () => number 
   return events;
 }
 
-/**
- * Port of the Detective's snoop block: an accurate (undisguised) role reveal, a chance the wolf
- * pack gets tipped off, and the Streetwise streak - finding a different threat 4 times running
- * resets on either a repeat target or a non-threat snoop, mirroring `CorrectSnooped`.
- */
 export function resolveDetectiveSnoop(players: Player[], random: () => number = Math.random): GameEvent[] {
   const events: GameEvent[] = [];
 
@@ -102,8 +101,8 @@ export function resolveDetectiveSnoop(players: Player[], random: () => number = 
   );
   if (!detective) return events;
 
+  detectiveSnoops.inc();
   if (Math.floor(random() * 100) < 40) {
-    // Settings.ChanceDetectiveCaught
     events.push({ type: 'DetectiveCaught', playerId: detective.id });
   }
 

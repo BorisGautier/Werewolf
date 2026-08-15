@@ -13,6 +13,7 @@ import { killPlayer } from './kill.js';
 import { declareWinner } from './win-condition.js';
 import type { GameEvent } from './game-event.js';
 import { ABSTAIN, alivePlayers, type Player } from './player.js';
+import { lynchAbstentions, lynchBotVotes, lynchVotesCast } from '../../infrastructure/monitoring/metrics.js';
 
 /** @deprecated use `ABSTAIN` from `player.ts` - kept as an alias so existing imports keep working. */
 export const SKIP_VOTE = ABSTAIN;
@@ -78,6 +79,8 @@ export function resolveLynchVotes(players: Player[], options: LynchOptions): Lyn
 
   for (const voter of alivePlayers(players)) {
     if (voter.choice !== null && voter.choice !== ABSTAIN) {
+      lynchVotesCast.inc();
+      if (voter.isBot) lynchBotVotes.inc();
       const target = players.find((x) => x.id === voter.choice);
       if (target) {
         target.votes++;
@@ -90,10 +93,15 @@ export function resolveLynchVotes(players: Player[], options: LynchOptions): Lyn
         }
       }
       voter.nonVoteCount = 0;
-    } else if (options.lynchAttempt < 2) {
-      voter.nonVoteCount++;
-      if (voter.nonVoteCount >= 2) {
-        events.push(...killPlayer(players, voter.id, 'Idle', { killerIds: [voter.id], isNight: false, triggerHunterShot: false }));
+    } else {
+      if (voter.choice === ABSTAIN) {
+        lynchAbstentions.inc();
+      }
+      if (options.lynchAttempt < 2) {
+        voter.nonVoteCount++;
+        if (voter.nonVoteCount >= 2) {
+          events.push(...killPlayer(players, voter.id, 'Idle', { killerIds: [voter.id], isNight: false, triggerHunterShot: false }));
+        }
       }
     }
   }

@@ -1,4 +1,5 @@
 import type { LocaleFile } from './locale-file.types.js';
+import { translationMisses } from '../monitoring/metrics.js';
 
 export class MissingLocaleStringError extends Error {
   constructor(key: string) {
@@ -60,6 +61,12 @@ export class Translator {
 
     const fromDefault = this.defaultLocale.strings[key];
     if (fromDefault && fromDefault.length > 0) return fromDefault;
+
+    try {
+      translationMisses.labels(key).inc();
+    } catch {
+      // ignore
+    }
 
     throw new MissingLocaleStringError(key);
   }

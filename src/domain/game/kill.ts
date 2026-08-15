@@ -8,7 +8,8 @@
  * exactly like the original.
  */
 
-import { ROLE_BIT, type Role } from '../roles/role.js';
+import { ROLE_BIT, roleName, type Role } from '../roles/role.js';
+import { loversSuicides, playersEliminated, roleDeaths } from '../../infrastructure/monitoring/metrics.js';
 import type { GameEvent } from './game-event.js';
 import type { KillMethod } from './kill-method.js';
 import type { Player } from './player.js';
@@ -43,6 +44,15 @@ export function killPlayer(
   options: KillOptions = {},
 ): GameEvent[] {
   const victim = findPlayer(players, victimId);
+  playersEliminated.labels(method).inc();
+  try {
+    roleDeaths.labels(roleName(victim.role)).inc();
+  } catch {
+    // ignore unknown role bit
+  }
+  if (method === 'LoverDied') {
+    loversSuicides.inc();
+  }
   const isNight = options.isNight ?? true;
   const killerIds = options.killerIds ?? [];
   const dyingSimultaneously = options.dyingSimultaneously ?? new Set<bigint>();

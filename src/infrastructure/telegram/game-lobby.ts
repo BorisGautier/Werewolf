@@ -23,9 +23,22 @@ import { groupToGameOptions, GroupRepository, resolveGameMode } from '../persist
 import { NotifyGameRepository } from '../persistence/notify-game.repository.js';
 import { donorBadge, PlayerRepository } from '../persistence/player.repository.js';
 import type { Translator } from '../i18n/translator.js';
+import { groupBans } from '../monitoring/metrics.js';
 import type { Logger } from '../logging/logger.js';
 import type { GameLoop } from './game-loop.js';
 import { aboutLocaleKey } from './role-info.js';
+import {
+  activeLobbies,
+  botPlayersAdded,
+  forceStarts,
+  gamesStarted,
+  lobbyExtensions,
+  nextGameNotifications,
+  playersFled,
+  playersJoined,
+  pmFailures,
+  smiteActions,
+} from '../monitoring/metrics.js';
 
 const WARNING_SECONDS: readonly number[] = [60, 30, 10];
 const ANNOUNCE_JOINED_EVERY_SECONDS = 30;
@@ -75,6 +88,7 @@ export class GameLobbyManager {
     // Mirrors `StartGame`'s `if (grp.CreatedBy == "BAN")` check: a `/bangroup`'d group never gets
     // to start another game, even after re-inviting the bot - it just leaves again on sight.
     if (group.banned) {
+      groupBans.inc();
       try {
         await this.bot.api.leaveChat(chatNumber(chatId));
       } catch (err) {
@@ -156,6 +170,12 @@ export class GameLobbyManager {
       haveExtended: new Set(),
     };
     this.sessions.set(chatId, session);
+    activeLobbies.inc();
+
+    this.logger.info(
+      { chatId: chatId.toString(), starterId: starter.id.toString(), mode, joinTimeSeconds: this.joinTimeSeconds },
+      'Lobby opened successfully',
+    );
   }
 
   /**
@@ -168,7 +188,10 @@ export class GameLobbyManager {
     const waiting = await this.notifyGames.listWaiting(chatId);
     for (const userId of waiting) {
       if (userId === starterId) continue;
-      await this.sendToUser(userId, language, 'NotifyNewGame', groupTitle);
+      const sent = await this.sendToUser(userId, language, 'NotifyNewGame', groupTitle);
+      if (sent) {
+        nextGameNotifications.inc();
+      }
     }
   }
 
@@ -255,9 +278,15 @@ export class GameLobbyManager {
 
     try {
       session.game.addPlayer(telegramUser.id, uniqueName);
+      playersJoined.inc();
+      this.logger.info(
+        { chatId: chatId.toString(), playerId: telegramUser.id.toString(), uniqueName, lobbyPlayers: session.game.players.length },
+        'Player joined game lobby',
+      );
     } catch (err) {
       if (err instanceof GameError && err.code === 'ALREADY_JOINED') return;
       if (err instanceof GameError && err.code === 'GROUP_FULL') {
+        this.logger.warn({ chatId: chatId.toString(), playerId: telegramUser.id.toString() }, 'Player join failed — group full');
         await this.send(chatId, language, 'PlayerLimitReached');
         return;
       }
@@ -271,6 +300,7 @@ export class GameLobbyManager {
     session.playersJoinedSinceAnnounce.push(uniqueName);
     const sentPm = await this.sendToUser(telegramUser.id, language, 'YouJoined', formatGroupTitle(group.title, language, session.game.mode));
     if (!sentPm) {
+      pmFailures.inc();
       const botUsername = this.bot.botInfo?.username ?? '';
       const keyboard = botUsername
         ? new InlineKeyboard().url(this.t.translate(language, 'StartPmButton'), `https://t.me/${botUsername}`)
@@ -298,6 +328,8 @@ export class GameLobbyManager {
     }
 
     session.forceStarted = true;
+    forceStarts.inc();
+    this.logger.info({ chatId: chatId.toString(), playersCount: session.game.players.length }, 'Game lobby force-started by admin');
     await this.send(chatId, language, 'ForceStarted');
   }
 
@@ -336,6 +368,12 @@ export class GameLobbyManager {
 
     session.secondsLeft = Math.max(session.secondsLeft + seconds, 0);
     session.haveExtended.add(playerId);
+    lobbyExtensions.inc();
+
+    this.logger.info(
+      { chatId: chatId.toString(), playerId: playerId.toString(), isAdmin, secondsAdded: seconds, newSecondsLeft: session.secondsLeft },
+      'Lobby countdown extended',
+    );
 
     const key = seconds >= 0 ? 'SecondsAdded' : 'SecondsRemoved';
     await this.send(chatId, language, key, Math.abs(seconds), session.secondsLeft);
@@ -394,6 +432,8 @@ export class GameLobbyManager {
       await this.send(chatId, language, 'NotPlaying');
       return;
     }
+    playersFled.inc();
+    this.logger.info({ chatId: chatId.toString(), playerId: player.id.toString(), playerName: player.name, phase: game.phase }, 'Player fled game');
     await this.send(chatId, language, 'FledGame', player.name);
   }
 
@@ -409,7 +449,11 @@ export class GameLobbyManager {
     if (!game) return false;
 
     const removed = game.removePlayer(target.id);
-    if (removed) await this.send(chatId, group.language, 'PlayerSmitten', target.name);
+    if (removed) {
+      smiteActions.inc();
+      this.logger.warn({ chatId: chatId.toString(), targetId: target.id.toString(), targetName: target.name }, 'Player smitten by admin');
+      await this.send(chatId, group.language, 'PlayerSmitten', target.name);
+    }
     return removed;
   }
 
@@ -441,8 +485,13 @@ export class GameLobbyManager {
 
   private async finishJoining(session: LobbySession): Promise<void> {
     this.sessions.delete(session.chatId);
+    activeLobbies.dec();
 
     if (!session.game.canStart()) {
+      this.logger.info(
+        { chatId: session.chatId.toString(), playerCount: session.game.players.length },
+        'Game lobby cancelled — not enough players',
+      );
       await this.send(session.chatId, session.language, 'NotEnoughPlayers');
       this.games.remove(session.chatId);
       return;
@@ -451,6 +500,7 @@ export class GameLobbyManager {
     await this.send(session.chatId, session.language, 'GameStarting');
 
     session.game.start();
+    gamesStarted.labels(session.game.mode).inc();
     await this.notifyGames.clearForGroup(session.chatId);
 
     const group = await this.groups.getOrCreate(session.chatId, null, null);
@@ -467,6 +517,7 @@ export class GameLobbyManager {
     );
     const undelivered = session.game.players.filter((p, index) => !p.isBot && !delivered[index]).map((p) => p.name);
     if (undelivered.length > 0) {
+      pmFailures.inc(undelivered.length);
       const botUsername = this.bot.botInfo?.username ?? '';
       const keyboard = botUsername
         ? new InlineKeyboard().url(this.t.translate(session.language, 'StartPmButton'), `https://t.me/${botUsername}`)
@@ -481,7 +532,7 @@ export class GameLobbyManager {
     // The night/day loop sends its own richer "Night N falls, you have X seconds" message right
     // as it takes over - no need to also announce a bare NightFalls here.
     this.logger.info(
-      { chatId: session.chatId.toString(), gameId, players: session.game.players.length },
+      { chatId: session.chatId.toString(), gameId, mode: session.game.mode, players: session.game.players.length },
       'Game started, handing off to the night/day loop',
     );
     const grp = await this.groups.getOrCreate(session.chatId, null, null);
@@ -596,6 +647,11 @@ export class GameLobbyManager {
       } catch {
         break;
       }
+    }
+    if (addedCount > 0) {
+      botPlayersAdded.labels(session.game.mode).inc(addedCount);
+      playersJoined.inc(addedCount);
+      this.logger.info({ chatId: chatId.toString(), addedCount, totalInLobby: session.game.players.length }, 'Bot players added to lobby');
     }
     return addedCount;
   }

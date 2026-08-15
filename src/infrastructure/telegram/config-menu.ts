@@ -8,6 +8,7 @@ import { InlineKeyboard } from 'grammy';
 import { ROLE_META, ROLE_NAMES, type RoleName } from '../../domain/roles/role.js';
 import { GroupRepository, type GroupWithConfig } from '../persistence/group.repository.js';
 import type { Translator } from '../i18n/translator.js';
+import { configMenuInteractions } from '../monitoring/metrics.js';
 
 const DISABLEABLE_ROLES: readonly RoleName[] = ROLE_NAMES.filter((name) => ROLE_META[name].canBeDisabled);
 const ROLES_PER_PAGE = 8;
@@ -92,6 +93,7 @@ export class ConfigMenu {
    * instead of erroring if it does).
    */
   async handleAction(groupTelegramId: bigint, action: string, rest: string[]): Promise<MenuScreen | null> {
+    configMenuInteractions.inc();
     const group = await this.groups.getOrCreate(groupTelegramId, null, null);
 
     switch (action) {

@@ -19,6 +19,11 @@ const envSchema = z.object({
     .optional()
     .transform((value) => (value ? BigInt(value) : undefined)),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
+  SLACK_WEBHOOK_URL: z.string().optional(),
+  MAILGUN_API_KEY: z.string().optional(),
+  MAILGUN_DOMAIN: z.string().optional(),
+  MAILGUN_TO_EMAIL: z.string().optional(),
+  LOKI_HOST: z.string().optional(),
 });
 
 export type Env = Readonly<{
@@ -28,6 +33,11 @@ export type Env = Readonly<{
   devUserIds: readonly bigint[];
   errorChatId?: bigint;
   logLevel: 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace';
+  slackWebhookUrl?: string;
+  mailgunApiKey?: string;
+  mailgunDomain?: string;
+  mailgunToEmail?: string;
+  lokiHost?: string;
 }>;
 
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
@@ -45,5 +55,10 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     devUserIds: data.DEV_USER_IDS,
     ...(data.ERROR_CHAT_ID !== undefined ? { errorChatId: data.ERROR_CHAT_ID } : {}),
     logLevel: data.LOG_LEVEL,
+    ...(data.SLACK_WEBHOOK_URL ? { slackWebhookUrl: data.SLACK_WEBHOOK_URL } : {}),
+    ...(data.MAILGUN_API_KEY ? { mailgunApiKey: data.MAILGUN_API_KEY } : {}),
+    ...(data.MAILGUN_DOMAIN ? { mailgunDomain: data.MAILGUN_DOMAIN } : {}),
+    ...(data.MAILGUN_TO_EMAIL ? { mailgunToEmail: data.MAILGUN_TO_EMAIL } : {}),
+    ...(data.LOKI_HOST ? { lokiHost: data.LOKI_HOST } : {}),
   };
 }

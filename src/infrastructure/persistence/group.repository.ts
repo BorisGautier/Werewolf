@@ -1,6 +1,7 @@
 import type { Group, GroupDisabledRole, PrismaClient } from '@prisma/client';
 import { ROLE_BIT, ROLE_VALID, type RoleFlags } from '../../domain/roles/role.js';
 import type { GameMode } from '../../domain/game/game-mode.js';
+import { activeGroups, totalGroupsSeen } from '../monitoring/metrics.js';
 
 export type GroupWithConfig = Group & { disabledRoles: GroupDisabledRole[] };
 
@@ -11,6 +12,7 @@ export class GroupRepository {
   async getOrCreate(telegramId: bigint, title?: string | null, username?: string | null): Promise<GroupWithConfig> {
     const titleValue = title ?? null;
     const usernameValue = username ?? null;
+    totalGroupsSeen.inc();
     return this.prisma.group.upsert({
       where: { telegramId },
       create: { telegramId, title: titleValue, username: usernameValue },
@@ -20,6 +22,7 @@ export class GroupRepository {
   }
 
   async findByTelegramId(telegramId: bigint): Promise<GroupWithConfig | null> {
+    activeGroups.inc();
     return this.prisma.group.findUnique({ where: { telegramId }, include: { disabledRoles: true } });
   }
 

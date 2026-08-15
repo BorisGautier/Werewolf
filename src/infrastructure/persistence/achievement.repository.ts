@@ -1,5 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
 import { ACHIEVEMENTS, type AchievementCode } from '../../domain/achievements/catalog.js';
+import { achievementSeedOps, achievementUnlocks } from '../monitoring/metrics.js';
 
 export interface UnlockedAchievement {
   code: AchievementCode;
@@ -38,6 +39,7 @@ export class AchievementRepository {
         update: { name: meta.name, description: meta.description },
       });
     }
+    achievementSeedOps.inc();
   }
 
   /** Records the unlock if new; returns false if the player already had it (or doesn't exist). */
@@ -51,6 +53,7 @@ export class AchievementRepository {
     if (existing) return false;
 
     await this.prisma.playerAchievement.create({ data: { playerId: player.id, achievementCode: code } });
+    achievementUnlocks.labels(code).inc();
     return true;
   }
 

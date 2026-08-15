@@ -14,6 +14,7 @@ import { WOLF_ROLES } from './game-balancing.js';
 import { shuffle } from '../shared/shuffle.js';
 import type { Player } from './player.js';
 import type { GameEvent } from './game-event.js';
+import { seerChecks, seerWolfFinds } from '../../infrastructure/monitoring/metrics.js';
 
 /**
  * Port of the Seer's role-disguise `switch` in the `#region Seer / Fool`
@@ -21,19 +22,30 @@ import type { GameEvent } from './game-event.js';
  * the original). Everything else not listed here is also seen accurately.
  */
 export function seerSees(targetRole: Role, random: () => number = Math.random): Role {
+  seerChecks.inc();
+  let seen: Role;
   switch (targetRole) {
     case ROLE_BIT.Traitor:
-      return Math.floor(random() * 100) < 50 ? ROLE_BIT.Wolf : ROLE_BIT.Villager;
+      seen = Math.floor(random() * 100) < 50 ? ROLE_BIT.Wolf : ROLE_BIT.Villager;
+      break;
     case ROLE_BIT.WolfCub:
     case ROLE_BIT.AlphaWolf:
-      return ROLE_BIT.Wolf; // the Seer can't tell wolf sub-types apart
+      seen = ROLE_BIT.Wolf; // the Seer can't tell wolf sub-types apart
+      break;
     case ROLE_BIT.WolfMan:
-      return ROLE_BIT.Wolf; // deceptively shown as a wolf despite being village-aligned
+      seen = ROLE_BIT.Wolf; // deceptively shown as a wolf despite being village-aligned
+      break;
     case ROLE_BIT.Lycan:
-      return ROLE_BIT.Villager; // deceptively shown as a villager despite being wolf-aligned
+      seen = ROLE_BIT.Villager; // deceptively shown as a villager despite being wolf-aligned
+      break;
     default:
-      return targetRole;
+      seen = targetRole;
+      break;
   }
+  if (seen === ROLE_BIT.Wolf || WOLF_ROLES.includes(seen)) {
+    seerWolfFinds.inc();
+  }
+  return seen;
 }
 
 /**

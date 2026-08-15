@@ -35,7 +35,7 @@ export class ScenarioRunner {
     try {
       const game = this.gameManager.create(1001n, { mode: 'Normal', minPlayers: 6 });
       for (let i = 1; i <= 6; i++) {
-        game.addPlayer(BigInt(i), `Bot${i}`, `bot${i}`, true);
+        game.addPlayer(BigInt(i), `Bot${i}`, true);
       }
       game.start();
 
@@ -73,7 +73,7 @@ export class ScenarioRunner {
     try {
       const game = this.gameManager.create(1002n, { mode: 'Normal', minPlayers: 6 });
       for (let i = 1; i <= 6; i++) {
-        game.addPlayer(BigInt(i), `Bot${i}`, `bot${i}`, true);
+        game.addPlayer(BigInt(i), `Bot${i}`, true);
       }
       game.start();
       game.phase = 'Day';
@@ -131,7 +131,7 @@ export class ScenarioRunner {
     try {
       const game = this.gameManager.create(1004n, { mode: 'Normal', minPlayers: 6 });
       for (let i = 1; i <= 6; i++) {
-        game.addPlayer(BigInt(i), `Bot${i}`, `bot${i}`, true);
+        game.addPlayer(BigInt(i), `Bot${i}`, true);
       }
       game.start();
 
@@ -158,7 +158,7 @@ export class ScenarioRunner {
     try {
       const game = this.gameManager.create(1005n, { mode: 'Normal', minPlayers: 6 });
       for (let i = 1; i <= 6; i++) {
-        game.addPlayer(BigInt(i), `Bot${i}`, `bot${i}`, true);
+        game.addPlayer(BigInt(i), `Bot${i}`, true);
       }
       game.start();
 
@@ -191,7 +191,7 @@ export class ScenarioRunner {
     try {
       const game = this.gameManager.create(1006n, { mode: 'Normal', minPlayers: 6 });
       for (let i = 1; i <= 6; i++) {
-        game.addPlayer(BigInt(i), `Bot${i}`, `bot${i}`, true);
+        game.addPlayer(BigInt(i), `Bot${i}`, true);
       }
       game.start();
 
@@ -219,7 +219,7 @@ export class ScenarioRunner {
     try {
       const game = this.gameManager.create(1007n, { mode: 'Chaos', minPlayers: 8 });
       for (let i = 1; i <= 8; i++) {
-        game.addPlayer(BigInt(i), `Bot${i}`, `bot${i}`, true);
+        game.addPlayer(BigInt(i), `Bot${i}`, true);
       }
       game.start();
 
