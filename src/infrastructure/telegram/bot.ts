@@ -145,6 +145,19 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     );
   });
 
+  // Auto-capture Telegram group title and username into database whenever a group interacts with the bot
+  bot.use(async (ctx, next) => {
+    if (ctx.chat && (ctx.chat.type === 'group' || ctx.chat.type === 'supergroup')) {
+      const chatId = BigInt(ctx.chat.id);
+      const title = 'title' in ctx.chat ? (ctx.chat.title as string | null) : null;
+      const username = 'username' in ctx.chat ? (ctx.chat.username as string | null) : null;
+      if (title || username) {
+        deps.groupRepository.getOrCreate(chatId, title, username).catch(() => {});
+      }
+    }
+    return next();
+  });
+
   // Port of `AddCount`/`SpamDetection`/`SpamBanList`: flags a Telegram user flooding the bot with
   // commands, warns them, then bans them (escalating duration) if they keep going. Registered
   // before every command handler below so a banned/flooding user's message never reaches one.

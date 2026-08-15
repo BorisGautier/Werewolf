@@ -17,6 +17,7 @@ import { disconnectPrisma, getPrismaClient } from './infrastructure/persistence/
 import { startCronJobs } from './infrastructure/cron/scheduler.js';
 import { AlertService } from './infrastructure/monitoring/alert-service.js';
 import { startMetricsServer, stopMetricsServer, botUptime } from './infrastructure/monitoring/metrics.js';
+import { AdminServer } from './infrastructure/web/admin-server.js';
 
 async function main(): Promise<void> {
   const env = loadEnv();
@@ -61,9 +62,10 @@ async function main(): Promise<void> {
 
   // ── Bot initialization ──────────────────────────────────────────────────────
   logger.info('Initializing Telegram bot...');
+  const gameManager = new GameManager();
   const bot = createBot(env, logger, {
     translator,
-    gameManager: new GameManager(),
+    gameManager,
     groupRepository: new GroupRepository(prisma),
     playerRepository: new PlayerRepository(prisma),
     gameRepository: new GameRepository(prisma),
@@ -81,6 +83,10 @@ async function main(): Promise<void> {
     },
     'Bot initialized successfully',
   );
+
+  // ── Admin Web Dashboard Server ──────────────────────────────────────────────
+  const adminServer = new AdminServer({ prisma, gameManager, logger, bot });
+  await adminServer.start();
 
   // ── Error monitoring ────────────────────────────────────────────────────────
   const alertService = new AlertService(bot, env, logger);
@@ -107,6 +113,7 @@ async function main(): Promise<void> {
   // ── Graceful shutdown ───────────────────────────────────────────────────────
   const shutdown = async (signal: string) => {
     logger.warn({ signal }, 'Shutdown signal received — initiating graceful shutdown...');
+    await adminServer.stop();
     stopCronJobs();
     stopMetricsServer();
     if (runner.isRunning()) {

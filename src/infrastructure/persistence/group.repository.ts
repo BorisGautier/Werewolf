@@ -16,7 +16,11 @@ export class GroupRepository {
     return this.prisma.group.upsert({
       where: { telegramId },
       create: { telegramId, title: titleValue, username: usernameValue },
-      update: { title: titleValue, username: usernameValue, botInGroup: true },
+      update: {
+        ...(titleValue ? { title: titleValue } : {}),
+        ...(usernameValue ? { username: usernameValue } : {}),
+        botInGroup: true,
+      },
       include: { disabledRoles: true },
     });
   }

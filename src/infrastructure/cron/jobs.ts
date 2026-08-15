@@ -13,6 +13,7 @@
 
 import type { PrismaClient } from '@prisma/client';
 import type { Logger } from '../logging/logger.js';
+import { DatabaseBackupManager } from '../persistence/db-backup.js';
 import {
   bansExpired,
   cronJobDuration,
@@ -202,5 +203,31 @@ export async function purgeStaleGames(prisma: PrismaClient, logger: Logger, maxA
     cronJobDuration.labels(jobName).observe(elapsed / 1000);
     logger.error({ err, job: jobName, elapsedMs: elapsed }, 'Cron job failed: purgeStaleGames');
     throw err;
+  }
+}
+
+/**
+ * Creates a daily PostgreSQL database backup with 15-day retention.
+ */
+export async function runDailyDatabaseBackup(logger: Logger): Promise<void> {
+  const jobName = 'runDailyDatabaseBackup';
+  const startTime = Date.now();
+  cronJobRuns.labels(jobName).inc();
+  logger.info({ job: jobName }, 'Cron job starting: daily database backup');
+
+  try {
+    const backupManager = new DatabaseBackupManager({ logger, retentionDays: 15 });
+    const backup = await backupManager.createBackup();
+    const elapsed = Date.now() - startTime;
+    cronJobDuration.labels(jobName).observe(elapsed / 1000);
+    logger.info(
+      { job: jobName, filename: backup.filename, sizeBytes: backup.sizeBytes, elapsedMs: elapsed },
+      'Cron job finished: daily database backup completed',
+    );
+  } catch (err) {
+    const elapsed = Date.now() - startTime;
+    cronJobFailures.labels(jobName).inc();
+    cronJobDuration.labels(jobName).observe(elapsed / 1000);
+    logger.error({ err, job: jobName, elapsedMs: elapsed }, 'Cron job failed: runDailyDatabaseBackup');
   }
 }
