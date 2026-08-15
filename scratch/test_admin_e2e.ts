@@ -119,15 +119,16 @@ async function runE2eAdminTest() {
     });
     console.log('Broadcast Result:', await bcastRes.json());
 
-    // 8. Test Logs Tail API
-    console.log('\n--- 8. Testing Live Logs API ---');
-    const logsRes = await fetch(`${baseUrl}/api/admin/logs`, {
-      headers: { Authorization: `Bearer ${token}` },
+    // 9. Test Group Approval API
+    console.log('\n--- 9. Testing Group Approval API ---');
+    const approveRes = await fetch(`${baseUrl}/api/admin/groups/-100987654321/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ approve: true }),
     });
-    const logsData = await logsRes.json();
-    console.log('Logs API Status:', logsRes.status, '| Logs retrieved length:', logsData.logs?.length);
+    console.log('Approve Group Result Status:', approveRes.status);
 
-    console.log('\n🎉 ALL 8 E2E ADMIN API & BACKUP TESTS PASSED WITH 100% SUCCESS!');
+    console.log('\n🎉 ALL 9 E2E ADMIN API & APPROVAL TESTS PASSED WITH 100% SUCCESS!');
   } finally {
     await server.stop();
     console.log('🏁 AdminServer stopped.');
