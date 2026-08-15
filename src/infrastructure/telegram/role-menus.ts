@@ -14,7 +14,7 @@ import { ROLE_BIT, type Role } from '../../domain/roles/role.js';
 import { WOLF_ROLES } from '../../domain/game/game-balancing.js';
 import { alivePlayers, type Player } from '../../domain/game/player.js';
 
-/** Roles offered a plain "pick a living player (not yourself)" night menu. */
+/** Roles offered a plain "pick a player" night menu. */
 export const NIGHT_TARGET_ROLES: readonly Role[] = [
   ROLE_BIT.Seer,
   ROLE_BIT.Sorcerer,
@@ -28,6 +28,16 @@ export const NIGHT_TARGET_ROLES: readonly Role[] = [
   ROLE_BIT.Cultist,
   ROLE_BIT.Chemist,
   ROLE_BIT.Thief,
+  ROLE_BIT.GraveDigger,
+  ROLE_BIT.Augur,
+  ROLE_BIT.Watchman,
+  ROLE_BIT.Tracker,
+  ROLE_BIT.Priestess,
+  ROLE_BIT.Mimic,
+  ROLE_BIT.Archangel,
+  ROLE_BIT.Necromancer,
+  ROLE_BIT.Reflector,
+  ROLE_BIT.Crow,
   ...WOLF_ROLES,
 ];
 
@@ -43,8 +53,12 @@ export const DAY_ABILITY_ROLES: readonly Role[] = [
   ROLE_BIT.Troublemaker,
 ];
 
-/** Living players a given role can target tonight - always excludes self and the dead. */
+/** Players a given role can target tonight - excludes self (unless specified). */
 export function nightTargets(players: readonly Player[], actor: Player): Player[] {
+  if (actor.role === ROLE_BIT.Necromancer) {
+    return players.filter((p) => p.isDead);
+  }
+
   const alive = alivePlayers(players).filter((p) => p.id !== actor.id);
 
   if (actor.role === ROLE_BIT.Arsonist) {

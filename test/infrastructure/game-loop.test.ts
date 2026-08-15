@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { InputFile, type Bot } from 'grammy';
 import { GameManager } from '../../src/application/game-manager.js';
 import { ROLE_BIT } from '../../src/domain/roles/role.js';
+import { getTeamForRole } from '../../src/domain/game/team.js';
 import { GameLoop } from '../../src/infrastructure/telegram/game-loop.js';
 import { LocalGifPack } from '../../src/infrastructure/telegram/local-gif-pack.js';
 import { getDefaultLocale, loadLocales } from '../../src/infrastructure/i18n/locale-loader.js';
@@ -726,5 +727,35 @@ describe('GameLoop', () => {
     loop.killGame(game.chatId);
 
     expect(() => gameManager.create(game.chatId, { mode: 'Normal', minPlayers: 5 })).not.toThrow();
+  });
+
+  it('handles Troublemaker double lynch properly across both voting attempts with human and bot votes', () => {
+    const { gameManager } = createHarness();
+    const game = dealtGame(gameManager);
+    const tm = game.players[0]!;
+    tm.role = ROLE_BIT.Troublemaker;
+    tm.team = getTeamForRole(ROLE_BIT.Troublemaker);
+
+    // Troublemaker uses double lynch ability
+    const success = game.useTroublemakerDoubleLynch(tm.id);
+    expect(success).toBe(true);
+
+    game.phase = 'Day';
+    game.startLynch();
+    expect(game.lynchAttemptsPlanned).toBe(2);
+
+    // Attempt 1: vote for target 1
+    const p1 = game.players[1]!;
+    const p2 = game.players[2]!;
+    tm.choice = p1.id;
+    expect(game.players.find((p) => p.id === tm.id)?.choice).toBe(p1.id);
+
+    // Restart lynch vote for attempt 2 resets choices for all living players
+    game.restartLynchVote();
+    expect(game.players.find((p) => p.id === tm.id)?.choice).toBeNull();
+
+    // Attempt 2: human can vote again for target 2
+    tm.choice = p2.id;
+    expect(game.players.find((p) => p.id === tm.id)?.choice).toBe(p2.id);
   });
 });

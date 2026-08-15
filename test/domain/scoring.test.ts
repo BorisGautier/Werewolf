@@ -33,7 +33,7 @@ describe('calculateGamePoints', () => {
 
     const wolfResult = results.find((r) => r.playerId === 3n)!;
     expect(wolfResult.won).toBe(false);
-    expect(wolfResult.points).toBe(5); // 5 participation
+    expect(wolfResult.points).toBe(-5); // 5 participation - 10 defeat penalty
   });
 
   it('calculates points for a Wolf win correctly', () => {
@@ -45,16 +45,20 @@ describe('calculateGamePoints', () => {
     const wolfResult = results.find((r) => r.playerId === 1n)!;
     expect(wolfResult.won).toBe(true);
     expect(wolfResult.points).toBe(30); // 5 participation + 25 living wolf win
+
+    const villagerResult = results.find((r) => r.playerId === 2n)!;
+    expect(villagerResult.won).toBe(false);
+    expect(villagerResult.points).toBe(-5); // 5 participation - 10 defeat penalty
   });
 
   it('applies AFK penalty when player is marked AFK', () => {
     const p1 = createMockPlayer(1n, 'AFKGuy', 'Village', false);
     const afkSet = new Set<bigint>([1n]);
 
-    const results = calculateGamePoints([p1], 'Village', null, afkSet);
+    const results = calculateGamePoints([p1], 'Wolf', null, afkSet);
     const result = results[0]!;
 
-    expect(result.breakdown.afkPenalty).toBe(-10);
-    expect(result.points).toBe(15); // 5 participation + 20 win - 10 AFK penalty
+    expect(result.breakdown.afkPenalty).toBe(-15);
+    expect(result.points).toBe(-20); // 5 participation - 10 defeat - 15 AFK penalty
   });
 });

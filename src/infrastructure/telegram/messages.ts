@@ -162,6 +162,9 @@ export function describeEvent(
     case 'ThiefStealForced':
       return [{ audience: event.thiefId, key: 'ThiefStealChosen', args: [name(event.targetId)] }];
 
+    case 'PlayerBitten':
+      return [{ audience: event.playerId, key: 'PlayerBittenPM', args: [] }];
+
     case 'CursedTurnedWolf':
       return [{ audience: event.playerId, key: 'CursedTurnedWolfMsg', args: [name(event.playerId)] }];
 
@@ -308,7 +311,6 @@ export function describeEvent(
     case 'WolfCubKilled':
     case 'CultConversionFailed':
     case 'SerialKillerRandomKill':
-    case 'PlayerBitten':
     case 'RoleModelChosen':
     case 'WolfPackAteTwice':
     case 'AlphaWolfLuckyDay':

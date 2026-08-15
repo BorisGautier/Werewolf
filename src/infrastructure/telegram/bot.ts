@@ -18,6 +18,8 @@ import { NotifyGameRepository } from '../persistence/notify-game.repository.js';
 import { DONATION_TIERS, PlayerRepository, donorBadge } from '../persistence/player.repository.js';
 import { GameLobbyManager } from './game-lobby.js';
 import { GameLoop } from './game-loop.js';
+import { AlertService } from '../monitoring/alert-service.js';
+import { registerModesGuideCommands } from './modes-guide.js';
 import { ConfigMenu } from './config-menu.js';
 import {
   nonNumericWords,
@@ -153,21 +155,25 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
   // Registered before the generic `callback_query:data` catch-all further down (which doesn't
   // call next()) so its own `stopwaiting:...` callback data actually gets a chance to match.
   registerWaitlistCommands(bot, deps);
+  registerModesGuideCommands(bot);
+
+  const alertService = new AlertService(bot, env, logger);
 
   bot.catch((error) => {
-    const { ctx } = error;
-    const err = error.error;
-    if (err instanceof GrammyError) {
-      logger.error({ err, updateId: ctx.update.update_id }, 'Telegram API error while handling update');
-    } else if (err instanceof HttpError) {
-      logger.error({ err, updateId: ctx.update.update_id }, 'Network error while contacting Telegram');
-    } else {
-      logger.error({ err, updateId: ctx.update.update_id }, 'Unhandled error while handling update');
-    }
+    alertService.handleBotError(error.error, `Update #${error.ctx.update.update_id}`);
   });
 
   bot.command('ping', async (ctx) => {
     await ctx.reply('pong');
+  });
+
+  bot.command(['testscenarios', 'testsuite', 'auditsuite'], async (ctx) => {
+    if (!ctx.from || !env.devUserIds.includes(BigInt(ctx.from.id))) return;
+    await ctx.reply('🧪 Running Automated Scenario Audit Suite...');
+    const runner = new (await import('../testing/scenario-runner.js')).ScenarioRunner();
+    const results = await runner.runAllScenarios();
+    const report = results.map((r) => `${r.passed ? '✅' : '❌'} <b>${r.name}</b>\n└─ ${r.details}`).join('\n\n');
+    await ctx.reply(`📊 <b>SCENARIO TEST REPORT</b>\n\n${report}`, { parse_mode: 'HTML' });
   });
 
   bot.command('testgif', async (ctx) => {
@@ -555,6 +561,32 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     await ctx.reply(deps.translator.translate(language, 'ReportReceived', reportedName));
   });
 
+  bot.command('accuse', async (ctx) => {
+    if (!ctx.from) return;
+    const text = ctx.match?.trim();
+    if (!text) {
+      await ctx.reply("🎭 Usage : /accuse @joueur [motif] (ex: /accuse @Gautier Il a l'air louche)");
+      return;
+    }
+
+    const parts = text.split(' ');
+    const accused = parts[0]!;
+    const motive = parts.slice(1).join(' ').trim() || undefined;
+    const accuser = ctx.from.first_name;
+
+    const templates = [
+      `🎭 <b>TIRADE D'ACCUSATION SPECTACULAIRE !</b> 📜\n\n<i>${accuser} pointe un doigt accusateur et tremblant vers <b>${accused}</b> !</i>\n\n💬 « Regardez-le ! Ses mains tremblent comme les feuilles d'un saule pleureur ! ${motive ? `Il affirme que "${motive}", mais ` : ''}Hier soir, je l'ai vu rôder près de la porcherie... <b>${accused} est un Loup-Garou, c'est une certitude !</b> » 🐺🔥`,
+      `🏛️ <b>DISCOURS DE LA POTENCE !</b> ⚖️\n\n<i>${accuser} monte sur une caisse en bois et harangue la foule au sujet de <b>${accused}</b> !</i>\n\n💬 « Oyez, oyez, braves habitants ! ${accused} tente de nous amadouer${motive ? ` en prétextant : "${motive}"` : ''}, mais les ombres ne mentent pas ! Son silence est bien trop suspect pour être innocent ! Aux armes, Village ! » ⚔️🩸`,
+      `🔥 <b>L'INQUISITION DU VILLAGE A PARLÉ !</b> 🔍\n\n<i>${accuser} jette une poignée de sel rituel aux pieds de <b>${accused}</b> !</i>\n\n💬 « Arrière, démon ! ${motive ? `Tu dis que "${motive}" ? Tes mensonges` : 'Tes grognements nocturnes'} ne tromperont personne ! Le feu de la vérité brûlera ton déguisement de loup ! » 🐺✨`,
+      `🌾 <b>RUMEUR ET TRAHISON À THIERCELIEUX !</b> 📢\n\n<i>${accuser} murmure théâtralement aux oreilles des villageois en observant <b>${accused}</b>...</i>\n\n💬 « Avez-vous vu le sang sous ses ongles ? ${motive ? `Il prétend "${motive}", mais ` : ''}Je mettrais ma tête à couper que ${accused} a croqué un pauvre villageois cette nuit ! » 🩸🍖`,
+    ];
+
+    const randomIndex = Math.floor(Math.random() * templates.length);
+    const msg = templates[randomIndex]!;
+
+    await ctx.reply(msg, { parse_mode: 'HTML' });
+  });
+
   bot.command('reports', async (ctx) => {
     if (!ctx.from) return;
     if (!(await deps.adminRepository.isGlobalAdmin(BigInt(ctx.from.id)))) return;
@@ -683,7 +715,7 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
   bot.on('callback_query:data', async (ctx) => {
     if (!ctx.from || !ctx.chat) return;
     const text = await gameLoop.handleCallback(BigInt(ctx.from.id), BigInt(ctx.chat.id), ctx.callbackQuery.data);
-    await ctx.answerCallbackQuery(text ? { text } : undefined).catch(() => null);
+    await ctx.answerCallbackQuery({ text: text ?? '✅ Choix enregistré !' }).catch(() => null);
     if (text) {
       if (ctx.chat.type === 'private') {
         await ctx.editMessageText(`✅ <b>${text}</b>`, { parse_mode: 'HTML' }).catch(async () => {
@@ -710,6 +742,26 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     if (!ctx.chat || ctx.chat.type === 'private' || !ctx.from) return;
     const name = `${ctx.from.first_name} ${ctx.from.last_name ?? ''}`.trim();
     await lobby.flee(BigInt(ctx.chat.id), { id: BigInt(ctx.from.id), name });
+  });
+
+  bot.command(['addbots', 'addbot'], async (ctx) => {
+    if (!ctx.chat || ctx.chat.type === 'private') return;
+    const count = parseInt((ctx.match as string | undefined) ?? '', 10) || 4;
+    const added = await lobby.addBotPlayers(BigInt(ctx.chat.id), count);
+    if (added > 0) {
+      await ctx.reply(`🤖 <b>${added} joueur(s) IA</b> ont été ajouté(s) à la partie !`, { parse_mode: 'HTML' });
+    } else {
+      await ctx.reply(`⚠️ Lance d'abord une partie avec /startgame pour pouvoir ajouter des bots !`);
+    }
+  });
+
+  bot.command('botgame', async (ctx) => {
+    if (!ctx.chat || ctx.chat.type === 'private' || !ctx.from) return;
+    const name = `${ctx.from.first_name} ${ctx.from.last_name ?? ''}`.trim();
+    await lobby.startGame(BigInt(ctx.chat.id), ctx.chat.title ?? null, { id: BigInt(ctx.from.id), name }, 'Normal');
+    const added = await lobby.addBotPlayers(BigInt(ctx.chat.id), 5);
+    await ctx.reply(`🎮 <b>Partie IA démarrée avec toi + ${added} joueurs virtuels (IA) !</b>`, { parse_mode: 'HTML' });
+    await lobby.forceStart(BigInt(ctx.chat.id), true);
   });
 
   bot.command('extend', async (ctx) => {
