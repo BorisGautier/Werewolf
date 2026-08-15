@@ -133,11 +133,16 @@ export class AdminServer {
         await this.handlePlayerBan(res, telegramIdStr, body);
       } else if (pathname === '/api/admin/groups' && req.method === 'GET') {
         await this.handleGetGroups(res);
-      } else if (pathname.startsWith('/api/admin/groups/') && pathname.endsWith('/ban') && req.method === 'POST') {
-        const parts = pathname.split('/');
-        const chatIdStr = parts[4] ?? '';
+      } else if (pathname.match(/^\/api\/admin\/groups\/([^/]+)\/ban$/) && req.method === 'POST') {
+        const matches = pathname.match(/^\/api\/admin\/groups\/([^/]+)\/ban$/)!;
+        const chatIdStr = matches[1]!;
         const body = await this.readJsonBody(req);
         await this.handleGroupBan(res, chatIdStr, body);
+      } else if (pathname.match(/^\/api\/admin\/groups\/([^/]+)\/approve$/) && req.method === 'POST') {
+        const matches = pathname.match(/^\/api\/admin\/groups\/([^/]+)\/approve$/)!;
+        const chatIdStr = matches[1]!;
+        const body = await this.readJsonBody(req);
+        await this.handleGroupApprove(res, chatIdStr, body);
       } else if (pathname === '/api/admin/backups' && req.method === 'GET') {
         await this.handleGetBackups(res);
       } else if (pathname === '/api/admin/backups/create' && req.method === 'POST') {
@@ -164,6 +169,7 @@ export class AdminServer {
     const activeGamesCount = this.gameManager ? this.gameManager.size : 0;
     const totalPlayers = this.prisma ? await this.prisma.player.count() : 0;
     const totalGroups = this.prisma ? await this.prisma.group.count() : 0;
+    const pendingGroups = this.prisma ? await this.prisma.group.count({ where: { isApproved: false } }) : 0;
 
     this.sendJson(res, 200, {
       success: true,
@@ -171,6 +177,7 @@ export class AdminServer {
         activeGames: activeGamesCount,
         totalPlayers,
         totalGroups,
+        pendingGroups,
         uptimeSeconds: Math.floor(process.uptime()),
         memory: process.memoryUsage(),
         nodeVersion: process.version,
@@ -299,6 +306,7 @@ export class AdminServer {
         title: g.title || (g.username ? `@${g.username}` : `Groupe #${g.telegramId}`),
         gameMode: g.mode,
         isBanned: g.banned,
+        isApproved: g.isApproved,
         createdAt: g.createdAt,
       })),
     });
@@ -318,6 +326,22 @@ export class AdminServer {
     });
 
     this.sendJson(res, 200, { success: true, chatId: chatIdStr, isBanned: banned });
+  }
+
+  private async handleGroupApprove(res: ServerResponse, chatIdStr: string, body: Record<string, unknown>): Promise<void> {
+    if (!this.prisma) {
+      this.sendJson(res, 400, { success: false, error: 'Database not available' });
+      return;
+    }
+    const telegramId = BigInt(chatIdStr);
+    const approve = Boolean(body.approve);
+
+    await this.prisma.group.updateMany({
+      where: { telegramId },
+      data: { isApproved: approve },
+    });
+
+    this.sendJson(res, 200, { success: true, chatId: chatIdStr, isApproved: approve });
   }
 
   private async handleGetBackups(res: ServerResponse): Promise<void> {
@@ -500,6 +524,7 @@ export class AdminServer {
     .badge-purple { background: rgba(139, 92, 246, 0.15); color: var(--accent-purple); border: 1px solid rgba(139, 92, 246, 0.3); }
     .badge-emerald { background: rgba(16, 185, 129, 0.15); color: var(--accent-emerald); border: 1px solid rgba(16, 185, 129, 0.3); }
     .badge-rose { background: rgba(244, 63, 94, 0.15); color: var(--accent-rose); border: 1px solid rgba(244, 63, 94, 0.3); }
+    .badge-amber { background: rgba(245, 158, 11, 0.15); color: var(--accent-amber); border: 1px solid rgba(245, 158, 11, 0.3); }
 
     /* Logs Console */
     .log-box { background: #050811; border: 1px solid var(--border); border-radius: 16px; padding: 20px; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; height: 500px; overflow-y: auto; color: #a7f3d0; line-height: 1.6; white-space: pre-wrap; }
@@ -657,6 +682,11 @@ export class AdminServer {
             </div>
             <div class="stat-card">
               <div class="stat-icon" style="background:rgba(245,158,11,0.15); color:var(--accent-amber);"><i class="fa-solid fa-clock"></i></div>
+              <div class="stat-lbl">Groupes En Attente</div>
+              <div class="stat-val">\${s.pendingGroups || 0}</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon" style="background:rgba(16,185,129,0.15); color:var(--accent-emerald);"><i class="fa-solid fa-server"></i></div>
               <div class="stat-lbl">Uptime Système</div>
               <div class="stat-val">\${s.uptimeSeconds}s</div>
             </div>
@@ -726,8 +756,12 @@ export class AdminServer {
           <tr>
             <td><strong>\${g.title || (g.username ? '@' + g.username : 'Groupe #' + g.chatId)}</strong><br><small style="color:var(--text-muted);">ID: \${g.chatId}</small></td>
             <td><span class="badge badge-purple">\${g.gameMode}</span></td>
+            <td>\${g.isApproved ? '<span class="badge badge-emerald">APPROUVÉ</span>' : '<span class="badge badge-amber">EN ATTENTE</span>'}</td>
             <td>\${g.isBanned ? '<span class="badge badge-rose">BLOQUÉ</span>' : '<span class="badge badge-emerald">AUTORISÉ</span>'}</td>
             <td>
+              <button class="btn \${g.isApproved ? 'btn-secondary' : 'btn-primary'}" onclick="toggleGroupApprove('\${g.chatId}', \${!g.isApproved})" style="margin-right:6px;">
+                <i class="fa-solid \${g.isApproved ? 'fa-circle-xmark' : 'fa-circle-check'}"></i> \${g.isApproved ? 'Révoquer' : 'Approuver'}
+              </button>
               <button class="btn \${g.isBanned ? 'btn-primary' : 'btn-danger'}" onclick="toggleGroupBan('\${g.chatId}', \${!g.isBanned})">
                 <i class="fa-solid \${g.isBanned ? 'fa-unlock' : 'fa-lock'}"></i> \${g.isBanned ? 'Débloquer' : 'Bloquer'}
               </button>
@@ -736,13 +770,13 @@ export class AdminServer {
         \`).join('');
 
         main.innerHTML = \`
-          <div class="page-header"><h1 class="page-title">🏢 Modération des Groupes Telegram</h1></div>
+          <div class="page-header"><h1 class="page-title">🏢 Modération & Approbation des Groupes Telegram</h1></div>
           <div class="table-container">
             <table>
               <thead>
-                <tr><th>Groupe</th><th>Mode Préféré</th><th>Statut</th><th>Actions</th></tr>
+                <tr><th>Groupe</th><th>Mode Préféré</th><th>Approbation</th><th>Statut</th><th>Actions</th></tr>
               </thead>
-              <tbody>\${rows || '<tr><td colspan="4" style="text-align:center; padding:30px; color:var(--text-muted);">Aucun groupe enregistré</td></tr>'}</tbody>
+              <tbody>\${rows || '<tr><td colspan="5" style="text-align:center; padding:30px; color:var(--text-muted);">Aucun groupe enregistré</td></tr>'}</tbody>
             </table>
           </div>
         \`;
@@ -880,6 +914,16 @@ export class AdminServer {
         body: JSON.stringify({ ban })
       });
       showToast(ban ? 'Groupe bloqué' : 'Groupe débloqué');
+      loadTab('groups');
+    }
+
+    async function toggleGroupApprove(chatId, approve) {
+      const res = await apiFetch('/api/admin/groups/' + chatId + '/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ approve })
+      });
+      showToast(approve ? 'Groupe approuvé avec succès !' : 'Approbation du groupe révoquée');
       loadTab('groups');
     }
 

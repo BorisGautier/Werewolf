@@ -60,6 +60,10 @@ export class GroupRepository {
     await this.prisma.group.update({ where: { telegramId }, data: { botInGroup: false } });
   }
 
+  async approveGroup(telegramId: bigint, isApproved: boolean): Promise<void> {
+    await this.prisma.group.update({ where: { telegramId }, data: { isApproved } });
+  }
+
   /** `/usegifpack`: opts (or un-opts, via `null`) this group into an approved custom gif pack. */
   async setDefaultGifPack(telegramId: bigint, gifPackId: number | null): Promise<void> {
     await this.prisma.group.update({ where: { telegramId }, data: { defaultGifPackId: gifPackId } });

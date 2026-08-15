@@ -52,6 +52,7 @@ function fakeGroup(telegramId: bigint, title: string | null, overrides: Partial<
     secretLynchShowVoters: false,
     botInGroup: true,
     banned: false,
+    isApproved: true,
     memberCount: null,
     preferred: false,
     inviteLink: null,

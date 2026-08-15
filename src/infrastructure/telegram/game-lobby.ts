@@ -97,6 +97,14 @@ export class GameLobbyManager {
       return;
     }
 
+    if (!group.isApproved) {
+      const msg = language === 'fr'
+        ? "⚠️ <b>Groupe Non Approuvé</b>\n\nCe groupe n'a pas encore été autorisé par les administrateurs. Un administrateur doit approuver votre groupe dans le Control Center Admin avant de pouvoir lancer une partie."
+        : "⚠️ <b>Group Not Approved</b>\n\nThis group has not been authorized by platform administrators yet. An admin must approve your group in the Admin Control Center before games can be started.";
+      await this.bot.api.sendMessage(chatNumber(chatId), msg, { parse_mode: 'HTML' });
+      return;
+    }
+
     if (this.sessions.has(chatId)) {
       await this.join(chatId, {
         id: starter.id,
