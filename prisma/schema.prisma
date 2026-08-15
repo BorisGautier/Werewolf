@@ -241,8 +241,9 @@ model Group {
   secretLynch              Boolean @default(false)
   secretLynchShowVotes     Boolean @default(false)
   secretLynchShowVoters    Boolean @default(false)
-  pmLynchVote              Boolean @default(false)
-  muteDead                 Boolean @default(false)
+  pmLynchVote              Boolean @default(true)
+  muteDead                 Boolean @default(true)
+  tagAllOnStart            Boolean @default(false)
 
   botInGroup   Boolean  @default(true)
   memberCount  Int?
@@ -264,8 +265,23 @@ model Group {
   disabledRoles GroupDisabledRole[]
   games         Game[]
   dailyStats    DailyStat[]
+  members       GroupMember[]
 
   @@map("groups")
+}
+
+model GroupMember {
+  id          Int      @id @default(autoincrement())
+  groupId     Int
+  group       Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  telegramId  BigInt
+  username    String?
+  displayName String?
+  updatedAt   DateTime @updatedAt
+
+  @@unique([groupId, telegramId])
+  @@index([groupId])
+  @@map("group_members")
 }
 
 /// Port of `CustomGifData`: one custom gif pack per player, one Telegram `file_id` per

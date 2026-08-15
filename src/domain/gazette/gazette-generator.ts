@@ -9,95 +9,141 @@ export interface GazetteStory {
 export const LAST_GAZETTES_BY_CHAT = new Map<string, GazetteStory>();
 
 /**
- * Generates an epic, humorous theatrical story ("La Gazette du Village") summarizing the game events.
+ * Generates an epic, hilarious theatrical story ("La Gazette du Village")
+ * explicitly featuring player names and funny event breakdowns.
  */
 export function generateGazette(game: Game, batches: (readonly GameEvent[])[], language: string = 'fr'): GazetteStory {
   const isFr = language === 'fr';
+  const playerMap = new Map(game.players.map((p) => [p.id, p.name]));
 
   const title = isFr
-    ? '📜 <b>LA GAZETTE DU VILLAGE — ÉDITION DU SOIR</b> 🗞️'
-    : '📜 <b>THE VILLAGE GAZETTE — EVENING EDITION</b> 🗞️';
+    ? '📜 <b>LA GAZETTE DU VILLAGE — ÉDITION HILARANTE DE FIN DE PARTIE</b> 🗞️'
+    : '📜 <b>THE VILLAGE GAZETTE — HILARIOUS END EDITION</b> 🗞️';
 
   const lines: string[] = [];
 
   const winningTeam = game.winningTeam ?? 'Village';
   const totalPlayers = game.players.length;
-  const deadCount = game.players.filter((p) => p.isDead).length;
 
   // Intro
   if (isFr) {
-    lines.push(`<i>Le soleil s'est couché sur Thiercelieux... Une bataille d'esprits et de crocs s'est jouée entre ${totalPlayers} habitants.</i>\n`);
+    lines.push(`<i>Le calme revient enfin sur Thiercelieux après un véritable feu d'artifice de trahisons entre ${totalPlayers} habitants ! Voici les nouvelles fraîches de la gazette :</i>\n`);
   } else {
-    lines.push(`<i>The sun has set over Thiercelieux... A battle of wits and fangs unfolded among ${totalPlayers} villagers.</i>\n`);
+    lines.push(`<i>Calm finally returns to Thiercelieux after a fireworks display of betrayals among ${totalPlayers} villagers! Here is the latest gossip from the gazette:</i>\n`);
   }
 
-  // Highlights analysis
-  let wolfKills = 0;
-  let lynchKills = 0;
-  let specialKills = 0;
+  // Parse events & group by type with player names
+  const wolfVictims: string[] = [];
+  const lynchVictims: string[] = [];
+  const specialVictims: string[] = [];
 
   for (const batch of batches) {
     for (const event of batch) {
       if (event.type === 'PlayerDied') {
-        if (event.method === 'Eat') wolfKills++;
-        else if (event.method === 'Lynch') lynchKills++;
-        else specialKills++;
+        const victimName = playerMap.get(event.playerId) ?? `Joueur #${event.playerId}`;
+        if (event.method === 'Eat') {
+          wolfVictims.push(victimName);
+        } else if (event.method === 'Lynch') {
+          lynchVictims.push(victimName);
+        } else {
+          specialVictims.push(victimName);
+        }
       }
     }
   }
 
+  // Breakdown of deaths with comical commentary and player names
   if (isFr) {
-    if (wolfKills > 0) {
-      lines.push(`🩸 <b>Attaques Nocturnes :</b> La meute de loups a frappé ${wolfKills} fois dans les ombres de la nuit.`);
+    if (wolfVictims.length > 0) {
+      lines.push(`🐺 <b>Casse-Croûte des Loups :</b>`);
+      wolfVictims.forEach((name) => {
+        lines.push(`  • <b>${name}</b> s'est fait dévorer en pyjama au beau milieu de la nuit !`);
+      });
+      lines.push('');
     }
-    if (lynchKills > 0) {
-      lines.push(`⚖️ <b>Justice Populaire :</b> Le village en colère a mené ${lynchKills} condamnation(s) à la potence.`);
+    if (lynchVictims.length > 0) {
+      lines.push(`⚖️ <b>Procès de la Potence :</b>`);
+      lynchVictims.forEach((name) => {
+        lines.push(`  • <b>${name}</b> a été traîné au gibet sous les tomates et les huées de la foule !`);
+      });
+      lines.push('');
     }
-    if (specialKills > 0) {
-      lines.push(`⚡️ <b>Pouvoirs Sombre & Potions :</b> La sorcellerie et les balles ont fait ${specialKills} victime(s) supplémentaire(s).`);
+    if (specialVictims.length > 0) {
+      lines.push(`💥 <b>Morts Insolites & Magie Noire :</b>`);
+      specialVictims.forEach((name) => {
+        lines.push(`  • <b>${name}</b> a goûté à une balle en argent ou à une potion douteuse...`);
+      });
+      lines.push('');
     }
   } else {
-    if (wolfKills > 0) {
-      lines.push(`🩸 <b>Nightly Raids:</b> The wolfpack struck ${wolfKills} time(s) under the cover of darkness.`);
+    if (wolfVictims.length > 0) {
+      lines.push(`🐺 <b>Wolf Midnight Snack:</b>`);
+      wolfVictims.forEach((name) => {
+        lines.push(`  • <b>${name}</b> got munched on in pajamas in the dead of night!`);
+      });
+      lines.push('');
     }
-    if (lynchKills > 0) {
-      lines.push(`⚖️ <b>Village Justice:</b> An angry mob carried out ${lynchKills} lynchings at the gallows.`);
+    if (lynchVictims.length > 0) {
+      lines.push(`⚖️ <b>Gallows Trial:</b>`);
+      lynchVictims.forEach((name) => {
+        lines.push(`  • <b>${name}</b> was dragged to the rope amid flying tomatoes and crowd jeers!`);
+      });
+      lines.push('');
     }
-    if (specialKills > 0) {
-      lines.push(`⚡️ <b>Dark Magic & Bullets:</b> Spells and silver bullets claimed ${specialKills} additional victim(s).`);
+    if (specialVictims.length > 0) {
+      lines.push(`💥 <b>Unusual Fatalities & Dark Magic:</b>`);
+      specialVictims.forEach((name) => {
+        lines.push(`  • <b>${name}</b> tested out a silver bullet or a shady potion...`);
+      });
+      lines.push('');
+    }
+  }
+
+  // Survivors list
+  const survivors = game.players.filter((p) => !p.isDead).map((p) => p.name);
+  if (survivors.length > 0) {
+    if (isFr) {
+      lines.push(`🥂 <b>Les Glorieux Survivants :</b> <b>${survivors.join(', ')}</b> (qui fêtent ça à la taverne du village !)\n`);
+    } else {
+      lines.push(`🥂 <b>Glorious Survivors:</b> <b>${survivors.join(', ')}</b> (currently partying at the village pub!)\n`);
+    }
+  } else {
+    if (isFr) {
+      lines.push(`🪦 <b>Cimetière Général :</b> Plus un seul habitant debout... le cimetière affiche complet !\n`);
+    } else {
+      lines.push(`🪦 <b>Ghost Town:</b> Not a single soul survived... absolute zero!\n`);
     }
   }
 
   // Climax / Outcome
-  lines.push('');
   const winningTeamStr = String(winningTeam);
   if (isFr) {
     if (winningTeamStr === 'Village') {
-      lines.push(`✨ <b>DÉNOUEMENT :</b> Les villageois ont triomphé ! Les démons ont été démasqués et la paix règne de nouveau.`);
+      lines.push(`✨ <b>DÉNOUEMENT :</b> Les villageois ont triomphé ! Les monstres sont démasqués et la sérénité revient à Thiercelieux.`);
     } else if (winningTeamStr === 'Wolves' || winningTeamStr === 'Wolf') {
-      lines.push(`🐺 <b>DÉNOUEMENT :</b> Les loups ont dévoré le village... Les hurlements de la meute résonnent à jamais.`);
+      lines.push(`🐺 <b>DÉNOUEMENT :</b> Les loups ont croqué tout le monde ! Le village est devenu leur terrain de jeu personnel.`);
     } else if (winningTeamStr === 'Tanner') {
-      lines.push(`🤡 <b>DÉNOUEMENT :</b> Le Tanneur a trompé tout le monde et rit aux éclats depuis la potence !`);
+      lines.push(`🤡 <b>DÉNOUEMENT :</b> Le Tanneur a berné toute la communauté et rigole aux éclats depuis la potence !`);
     } else if (winningTeamStr === 'Cult') {
-      lines.push(`🔮 <b>DÉNOUEMENT :</b> Le Culte a étendu son emprise secrète. Tout le village s'est agenouillé !`);
+      lines.push(`🔮 <b>DÉNOUEMENT :</b> Le Culte a embrigadé tout le village. Tout le monde chante sous les étoiles !`);
     } else if (winningTeamStr === 'SerialKiller') {
-      lines.push(`🔪 <b>DÉNOUEMENT :</b> Le Tueur en série est le seul survivant dans une clairière couverte de cadavres...`);
+      lines.push(`🔪 <b>DÉNOUEMENT :</b> Le Tueur en série est le seul debout dans une clairière couverte de cadavres...`);
     } else {
-      lines.push(`🏆 <b>DÉNOUEMENT :</b> Victoire éclatante de l'équipe <b>${winningTeamStr}</b> ! (${deadCount} morts au total)`);
+      lines.push(`🏆 <b>DÉNOUEMENT :</b> Victoire héroïque de l'équipe <b>${winningTeamStr}</b> !`);
     }
   } else {
     if (winningTeamStr === 'Village') {
-      lines.push(`✨ <b>OUTCOME:</b> The villagers prevailed! The beasts were unmasked and peace returned.`);
+      lines.push(`✨ <b>OUTCOME:</b> The villagers won! The monsters were exposed and peace returns to Thiercelieux.`);
     } else if (winningTeamStr === 'Wolves' || winningTeamStr === 'Wolf') {
-      lines.push(`🐺 <b>OUTCOME:</b> The wolves devoured the entire village... Howls echo through the dark forest.`);
+      lines.push(`🐺 <b>OUTCOME:</b> The wolves ate everyone! The village is now their private kingdom.`);
     } else if (winningTeamStr === 'Tanner') {
-      lines.push(`🤡 <b>OUTCOME:</b> The Tanner fooled everyone and is laughing out loud from the gallows!`);
+      lines.push(`🤡 <b>OUTCOME:</b> The Tanner duped the entire town and is cackling happily from the gallows!`);
     } else if (winningTeamStr === 'Cult') {
-      lines.push(`🔮 <b>OUTCOME:</b> The Cult converted the whole village. Everyone kneels before the altar!`);
+      lines.push(`🔮 <b>OUTCOME:</b> The Cult brainwashed the village. Everyone is chanting under the stars!`);
     } else if (winningTeamStr === 'SerialKiller') {
-      lines.push(`🔪 <b>OUTCOME:</b> The Serial Killer stands alone over a clearing of fallen bodies...`);
+      lines.push(`🔪 <b>OUTCOME:</b> The Serial Killer is the last soul standing in a clearing of fallen bodies...`);
     } else {
-      lines.push(`🏆 <b>OUTCOME:</b> Spectacular victory for team <b>${winningTeamStr}</b>! (${deadCount} total casualties)`);
+      lines.push(`🏆 <b>OUTCOME:</b> Epic victory for team <b>${winningTeamStr}</b>!`);
     }
   }
 

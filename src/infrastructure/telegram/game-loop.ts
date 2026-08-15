@@ -77,6 +77,10 @@ export class GameLoop {
     private readonly localGifPack: LocalGifPack = new LocalGifPack(),
   ) {}
 
+  getGame(chatId: bigint): Game | undefined {
+    return this.games.get(chatId);
+  }
+
   /**
    * Entry point: `game` is already in its first Night (dealt by `GameLobbyManager.finishJoining`,
    * which is also who already created the `games` DB row - `gameId` is that row's id, so `finish()`
@@ -156,6 +160,7 @@ export class GameLoop {
     if (!game.nightSkipped) {
       const seconds = this.nightSeconds(game, group);
       await this.send(game.chatId, group.language, 'NightBeginsTimed', game.dayNumber, seconds);
+      await this.sendGifCategory(game.chatId, group, 'NightStart');
       await this.sendNightMenus(game, group.language);
       await this.phaseSleep(game.chatId, seconds * 1000);
     }
@@ -252,6 +257,7 @@ export class GameLoop {
     game.startDay();
     const seconds = group.dayTimerSeconds;
     await this.send(game.chatId, group.language, 'DayTime', game.dayNumber, formatDuration(seconds));
+    await this.sendGifCategory(game.chatId, group, 'DayStart');
     await this.sendDayMenus(game, group.language);
 
     await this.phaseSleep(game.chatId, seconds * 1000);
@@ -286,6 +292,7 @@ export class GameLoop {
   private async runLynch(game: Game): Promise<void> {
     const group = await this.groups.getOrCreate(game.chatId, null, null);
     game.startLynch();
+    await this.sendGifCategory(game.chatId, group, 'LynchStart');
     const attempts = game.lynchAttemptsPlanned;
     const seconds = group.lynchTimerSeconds;
 
@@ -563,7 +570,7 @@ export class GameLoop {
    */
   async handleCallback(playerId: bigint, chatId: bigint, data: string): Promise<string | null> {
     const [action, ...rest] = data.split(':');
-    const game = action === 'vote' ? this.games.get(chatId) : this.games.findByPlayer(playerId);
+    const game = this.games.findByPlayer(playerId) ?? this.games.get(chatId);
     if (!game) return null;
 
     const language = (await this.groups.getOrCreate(game.chatId, null, null)).language;
@@ -669,13 +676,15 @@ export class GameLoop {
     const voter = game.players.find((p) => p.id === playerId);
     if (!voter || voter.isDead) return null;
     const result = this.applyChoice(game, playerId, 'choice', rawTarget);
-    if (result !== 'ChoiceRecorded' || rawTarget === 'abstain') return result;
+    if (result !== 'ChoiceRecorded') return result;
     game.registerLynchVoteCast(playerId);
 
     const group = await this.groups.getOrCreate(game.chatId, null, null);
     if (group.secretLynch) {
       const voted = alivePlayers(game.players).filter((p) => p.choice !== null).length;
       await this.send(game.chatId, group.language, 'PlayerVoteCounts', voted, alivePlayers(game.players).length);
+    } else if (rawTarget === 'abstain') {
+      await this.send(game.chatId, group.language, 'PlayerVotedLynchAbstain', voter.name);
     } else {
       const target = game.players.find((p) => p.id === BigInt(rawTarget));
       if (target) await this.send(game.chatId, group.language, 'PlayerVotedLynch', voter.name, target.name);
@@ -763,7 +772,7 @@ export class GameLoop {
     this.logEvents(game.chatId, events);
 
     for (const event of events) {
-      for (const msg of describeEvent(event, game.players, group.showRolesOnDeath)) {
+      for (const msg of describeEvent(event, game.players, group.showRolesOnDeath, this.t, group.language)) {
         if (msg.audience === 'group') {
           await this.send(game.chatId, group.language, msg.key, ...msg.args);
         } else {
@@ -829,6 +838,18 @@ export class GameLoop {
       }
     }
     this.mutedPlayers.delete(chatId);
+  }
+
+  async sendGifCategory(chatId: bigint, group: GroupWithConfig, category: GifCategory): Promise<void> {
+    const fileId = this.gifPacks ? await this.gifPacks.getApprovedFileId(category, group.defaultGifPackId) : null;
+    const media = fileId ?? this.localGifPack.resolve(category);
+    if (!media) return;
+
+    try {
+      await this.bot.api.sendAnimation(chatNumber(chatId), media);
+    } catch (err) {
+      this.logger.warn({ err, chatId: chatId.toString(), category }, 'Failed to send gif animation');
+    }
   }
 
   /**

@@ -4,7 +4,7 @@ import { Game } from '../../src/domain/game/game.aggregate.js';
 import type { GameEvent } from '../../src/domain/game/game-event.js';
 
 describe('Gazette Generator', () => {
-  it('generates a theatrical story in French by default', () => {
+  it('generates a theatrical story in French featuring player names', () => {
     const game = new Game(BigInt(100), { minPlayers: 5, maxPlayers: 10 });
     game.addPlayer(BigInt(1), 'Alice');
     game.addPlayer(BigInt(2), 'Bob');
@@ -17,13 +17,16 @@ describe('Gazette Generator', () => {
     const gazette = generateGazette(game, [events], 'fr');
 
     expect(gazette.title).toContain('LA GAZETTE DU VILLAGE');
-    expect(gazette.lines.some((l) => l.includes('Justice Populaire'))).toBe(true);
-    expect(gazette.lines.some((l) => l.includes('Les villageois ont triomphé'))).toBe(true);
+    expect(gazette.lines.some((l) => l.includes('Bob'))).toBe(true);
+    expect(gazette.lines.some((l) => l.includes('Procès de la Potence'))).toBe(true);
+    expect(gazette.lines.some((l) => l.includes('Les Glorieux Survivants'))).toBe(true);
+    expect(gazette.lines.some((l) => l.includes('Alice'))).toBe(true);
   });
 
-  it('generates a story in English when language is en', () => {
+  it('generates a story in English featuring player names', () => {
     const game = new Game(BigInt(100), { minPlayers: 5, maxPlayers: 10 });
     game.addPlayer(BigInt(1), 'Alice');
+    game.addPlayer(BigInt(2), 'Charlie');
     game.winningTeam = 'Wolves';
 
     const events: GameEvent[] = [
@@ -33,7 +36,9 @@ describe('Gazette Generator', () => {
     const gazette = generateGazette(game, [events], 'en');
 
     expect(gazette.title).toContain('THE VILLAGE GAZETTE');
-    expect(gazette.lines.some((l) => l.includes('Nightly Raids'))).toBe(true);
-    expect(gazette.lines.some((l) => l.includes('The wolves devoured the entire village'))).toBe(true);
+    expect(gazette.lines.some((l) => l.includes('Alice'))).toBe(true);
+    expect(gazette.lines.some((l) => l.includes('pajamas'))).toBe(true);
+    expect(gazette.lines.some((l) => l.includes('Glorious Survivors'))).toBe(true);
+    expect(gazette.lines.some((l) => l.includes('Charlie'))).toBe(true);
   });
 });

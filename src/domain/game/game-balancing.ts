@@ -162,11 +162,15 @@ export function balance(options: BalanceOptions): BalanceResult {
       rolesToAssign[idx] = ROLE_BIT.Seer;
     }
 
-    // Need at least two teams: some villagers, and at least one "real" enemy.
+    // Need at least two teams: some villagers, and at least one "real" threat (Wolf, SK, Arsonist, or Cultist).
+    const PRIMARY_THREAT_ROLES: readonly Role[] = [
+      ...WOLF_ROLES_WITH_SNOW,
+      ROLE_BIT.SerialKiller,
+      ROLE_BIT.Arsonist,
+      ROLE_BIT.Cultist,
+    ];
     const hasVillageTeam = rolesToAssign.some((r) => !NON_VILLAGE_ROLES.includes(r));
-    const hasRealEnemy = rolesToAssign.some(
-      (r) => NON_VILLAGE_ROLES.includes(r) && r !== ROLE_BIT.Sorcerer && r !== ROLE_BIT.Tanner && r !== ROLE_BIT.Thief,
-    );
+    const hasRealEnemy = rolesToAssign.some((r) => PRIMARY_THREAT_ROLES.includes(r));
     balanced = hasVillageTeam && hasRealEnemy;
 
     // Enemy count must stay below village count.
