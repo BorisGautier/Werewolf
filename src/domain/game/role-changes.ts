@@ -17,6 +17,12 @@ import type { GameEvent } from './game-event.js';
 import type { Player } from './player.js';
 import { getTeamForRole } from './team.js';
 import { promoteToWolf } from './transform.js';
+import {
+  cupidLoverLinks,
+  doppelgangerAssignments,
+  wildChildAssignments,
+  wildChildTransformations,
+} from '../../infrastructure/monitoring/metrics.js';
 
 function chooseRandomPlayerId(
   players: readonly Player[],
@@ -36,6 +42,7 @@ function checkWildChild(players: Player[], checkBitten: boolean): GameEvent[] {
   const roleModel = players.find((p) => p.id === wc.roleModel);
   if (roleModel?.isDead) {
     promoteToWolf(wc);
+    wildChildTransformations.inc();
     return [{ type: 'WildChildTurnedWolf', playerId: wc.id, roleModelId: roleModel.id }];
   }
   return [];
@@ -60,12 +67,6 @@ function checkDoppelganger(players: Player[], checkBitten: boolean): GameEvent[]
   return [];
 }
 
-/**
- * Port of `CheckRoleChanges`: promotes the Apprentice Seer if the Seer has
- * died, and re-checks the Wild Child/Doppelganger's role-model-death
- * transformations. Called after essentially every death in the original;
- * callers here should do the same.
- */
 export function checkRoleChanges(players: Player[], checkBitten = false): GameEvent[] {
   const events: GameEvent[] = [];
 
@@ -86,14 +87,13 @@ export function checkRoleChanges(players: Player[], checkBitten = false): GameEv
   return events;
 }
 
-/** Port of `AddLover`: picks a random partner, links them to `existingId` if given. */
 function addLover(players: readonly Player[], existingId: bigint | null, random: () => number): Player | null {
   const loverId = chooseRandomPlayerId(players, existingId, false, random);
   const lover = players.find((p) => p.id === loverId);
   if (!lover) return null;
 
   lover.inLove = true;
-  lover.speedDating = true; // auto-picked by the bot, not chosen by Cupid (OnlineDating)
+  lover.speedDating = true;
   if (existingId !== null) {
     const existing = players.find((p) => p.id === existingId);
     if (existing) {
@@ -104,7 +104,6 @@ function addLover(players: readonly Player[], existingId: bigint | null, random:
   return lover;
 }
 
-/** Port of `CreateLovers`: forces the "in love" set down to exactly two players. */
 function createLovers(players: Player[], random: () => number): void {
   const inLove = players.filter((p) => p.inLove);
 
@@ -121,12 +120,10 @@ function createLovers(players: Player[], random: () => number): void {
     return;
   }
 
-  // inLove.length < 2
   const existing = players.find((p) => p.inLove) ?? addLover(players, null, random);
   if (existing) addLover(players, existing.id, random);
 }
 
-/** Port of `NotifyLovers`: ensures exactly two lovers exist (via `createLovers`) and reports them. */
 function notifyLovers(players: Player[], random: () => number): GameEvent[] {
   let inLove = players.filter((p) => p.inLove);
   if (inLove.length !== 2) {
@@ -134,17 +131,12 @@ function notifyLovers(players: Player[], random: () => number): GameEvent[] {
     inLove = players.filter((p) => p.inLove);
   }
   if (inLove.length === 2) {
+    cupidLoverLinks.inc();
     return [{ type: 'LoversCreated', lover1Id: inLove[0]!.id, lover2Id: inLove[1]!.id }];
   }
   return [];
 }
 
-/**
- * Port of `ValidateSpecialRoleChoices`: day-1-only. Assigns a random role
- * model to a Wild Child/Doppelganger who never picked one (their own choice
- * is normally made through a Telegram menu, outside this domain layer), and
- * guarantees a valid lover pair exists if there's a Cupid in the game.
- */
 export function validateSpecialRoleChoices(players: Player[], dayNumber: number, random: () => number): GameEvent[] {
   const events: GameEvent[] = [];
   if (dayNumber !== 1) return events;
@@ -154,6 +146,7 @@ export function validateSpecialRoleChoices(players: Player[], dayNumber: number,
     const choiceId = chooseRandomPlayerId(players, wildChild.id, false, random);
     if (choiceId !== null) {
       wildChild.roleModel = choiceId;
+      wildChildAssignments.inc();
       events.push({ type: 'RoleModelChosen', playerId: wildChild.id, roleModelId: choiceId });
     }
   }
@@ -163,6 +156,7 @@ export function validateSpecialRoleChoices(players: Player[], dayNumber: number,
     const choiceId = chooseRandomPlayerId(players, doppelganger.id, false, random);
     if (choiceId !== null) {
       doppelganger.roleModel = choiceId;
+      doppelgangerAssignments.inc();
       events.push({ type: 'RoleModelChosen', playerId: doppelganger.id, roleModelId: choiceId });
     }
   }

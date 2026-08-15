@@ -42,10 +42,23 @@ import type { GameEvent } from './game-event.js';
 import type { GameMode } from './game-mode.js';
 import type { GamePhase } from './game-phase.js';
 import { ABSTAIN, alivePlayers, createPlayer, type Player } from './player.js';
-import { ROLE_BIT, type Role, type RoleFlags } from '../roles/role.js';
+import { ROLE_BIT, roleName, type Role, type RoleFlags } from '../roles/role.js';
 import { getTeamForRole, type Team } from './team.js';
 import { shuffle } from '../shared/shuffle.js';
 import type { KillMethod } from './kill-method.js';
+import {
+  blacksmithSilverSpreads,
+  botOnlyGamesStarted,
+  loversWins,
+  mayorAnnouncements,
+  pacifistPeaces,
+  roleAssignments,
+  roleWins,
+  sandmanSleepActivations,
+  soloWins,
+  teamWins,
+  troublemakerDoubleLynches,
+} from '../../infrastructure/monitoring/metrics.js';
 
 export class GameError extends Error {
   constructor(
@@ -199,7 +212,15 @@ export class Game {
       const role = rolesToAssign[index]!;
       player.role = role;
       player.team = getTeamForRole(role);
+      try {
+        roleAssignments.labels(roleName(role)).inc();
+      } catch {
+        // ignore
+      }
     });
+    if (this.players.every((p) => p.isBot)) {
+      botOnlyGamesStarted.inc();
+    }
     this.possibleRoles = possibleRoles;
 
     this.players.forEach((player) => {
@@ -441,43 +462,38 @@ export class Game {
     const mayor = this.players.find((p) => p.id === playerId && p.role === ROLE_BIT.Mayor && !p.isDead);
     if (!mayor || mayor.hasUsedAbility) return false;
     mayor.hasUsedAbility = true;
+    mayorAnnouncements.inc();
     return true;
   }
 
-  /** Mirrors the Pacifist's "peace" button: cancels the next lynch, overriding a pending Troublemaker double lynch. */
   usePacifistPeace(playerId: bigint): boolean {
     const pacifist = this.players.find((p) => p.id === playerId && p.role === ROLE_BIT.Pacifist && !p.isDead);
     if (!pacifist || pacifist.hasUsedAbility) return false;
     pacifist.hasUsedAbility = true;
     this.pacifistUsed = true;
     this.doubleLynchPending = false;
+    pacifistPeaces.inc();
     return true;
   }
 
-  /**
-   * Mirrors the Blacksmith's "spread silver" button: protects the village from being eaten by
-   * wolves tonight. Returns the resulting events (empty if the ability didn't fire) rather than
-   * a bare boolean so `WastedSilver` (Blacksmith and Sandman both act the same day) can be
-   * detected from the day's event batch alone.
-   */
   useBlacksmithSpreadSilver(playerId: bigint): GameEvent[] {
     const blacksmith = this.players.find((p) => p.id === playerId && p.role === ROLE_BIT.Blacksmith && !p.isDead);
     if (!blacksmith || blacksmith.hasUsedAbility) return [];
     blacksmith.hasUsedAbility = true;
     this.silverSpread = true;
+    blacksmithSilverSpreads.inc();
     return [{ type: 'BlacksmithSpreadSilver', playerId, dayNumber: this.dayNumber }];
   }
 
-  /** Mirrors the Sandman's "sleep" button: the whole village (and every role's action) skips tonight. */
   useSandmanSleep(playerId: bigint): GameEvent[] {
     const sandman = this.players.find((p) => p.id === playerId && p.role === ROLE_BIT.Sandman && !p.isDead);
     if (!sandman || sandman.hasUsedAbility) return [];
     sandman.hasUsedAbility = true;
     this.sandmanSleep = true;
+    sandmanSleepActivations.inc();
     return [{ type: 'SandmanUsedSleep', playerId, dayNumber: this.dayNumber }];
   }
 
-  /** Mirrors the Troublemaker's "double lynch" button: forces two lynch attempts today, overriding a pending Pacifist peace. */
   useTroublemakerDoubleLynch(playerId: bigint): boolean {
     const troublemaker = this.players.find((p) => p.id === playerId && p.role === ROLE_BIT.Troublemaker && !p.isDead);
     if (!troublemaker || troublemaker.hasUsedAbility) return false;
@@ -487,6 +503,7 @@ export class Game {
       this.lynchAttemptsPlanned = 2;
     }
     this.pacifistUsed = false;
+    troublemakerDoubleLynches.inc();
     return true;
   }
 
@@ -602,7 +619,33 @@ export class Game {
     const result = evaluateWinCondition(this.players, context);
     if (result.finished) {
       this.phase = 'Ended';
-      if (result.winningTeam) this.winningTeam = result.winningTeam;
+      if (result.winningTeam) {
+        this.winningTeam = result.winningTeam;
+        try {
+          teamWins.labels(result.winningTeam).inc();
+        } catch {
+          // ignore
+        }
+        if (['Tanner', 'SerialKiller', 'Arsonist', 'Cultist'].includes(result.winningTeam)) {
+          try {
+            soloWins.labels(result.winningTeam).inc();
+          } catch {
+            // ignore
+          }
+        }
+        if (result.winningTeam === 'Lovers') {
+          loversWins.inc();
+        }
+        for (const p of this.players) {
+          if (!p.isDead && p.won) {
+            try {
+              roleWins.labels(roleName(p.role)).inc();
+            } catch {
+              // ignore
+            }
+          }
+        }
+      }
     }
     return result;
   }

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { expireBans, purgeStaleGames, rotateDailyStats } from '../../src/infrastructure/cron/jobs.js';
 
 function fakeLogger() {
-  return { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as import('../../src/infrastructure/logging/logger.js').Logger;
+  return { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as import('../../src/infrastructure/logging/logger.js').Logger;
 }
 
 describe('rotateDailyStats', () => {
@@ -117,7 +117,7 @@ describe('purgeStaleGames', () => {
         data: expect.objectContaining({ endedAt: expect.any(Date) }),
       }),
     );
-    expect(logger.info).toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalled();
   });
 
   it('stays quiet when nothing needed purging', async () => {

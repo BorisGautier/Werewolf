@@ -41,6 +41,34 @@ import { LocalGifPack } from './local-gif-pack.js';
 import { dayOneTargets, DAY_ABILITY_ROLES, DAY_TARGET_ROLES, NIGHT_TARGET_ROLES, nightTargets } from './role-menus.js';
 import { buildEndGameSummary } from './end-game-summary.js';
 import { calculateGamePoints } from '../../domain/scoring.js';
+import {
+  archivistReports,
+  botNightActions,
+  dayPhaseDuration,
+  daysStarted,
+  daysResolved,
+  gameDrawsTotal,
+  gameDurationSeconds,
+  gamesEnded,
+  gameRoundsTotal,
+  gazetteGenerations,
+  gifSends,
+  hitmanKills,
+  judgePardons,
+  lynchesResolved,
+  lynchesStarted,
+  lynchPhaseDuration,
+  lynchTies,
+  mimicUsages,
+  necromancerResurrections,
+  nightPhaseDuration,
+  nightsResolved,
+  nightsStarted,
+  pacifistPeaces,
+  skipVoteActions,
+  witchPoisonPotions,
+  witchSavePotions,
+} from '../monitoring/metrics.js';
 
 const NIGHT_ONE_MIN_SECONDS = 120;
 
@@ -154,16 +182,17 @@ export class GameLoop {
   private async runNight(game: Game): Promise<void> {
     const group = await this.groups.getOrCreate(game.chatId, null, null);
 
-    // The very first night is already entered by GameLobbyManager's game.start() before this loop
-    // ever sees the game (so game.phase is already 'Night' the first time runNight() runs) - every
-    // subsequent night is entered here, coming from a finished Lynch phase.
     if (game.phase === 'Lynch') {
       const startEvents = game.startNight();
       await this.broadcast(game, group, startEvents, 'Night');
     }
 
+    nightsStarted.inc();
+    this.logger.info({ chatId: game.chatId.toString(), dayNumber: game.dayNumber, mode: game.mode }, 'Night phase started');
+
     if (!game.nightSkipped) {
       const seconds = this.nightSeconds(game, group);
+      nightPhaseDuration.observe(seconds);
       await this.send(game.chatId, group.language, 'NightBeginsTimed', game.dayNumber, seconds);
       if (game.dayNumber === 1) {
         const weather = WEATHER_DETAILS[game.weather];
@@ -181,6 +210,8 @@ export class GameLoop {
     if (this.consumeKilled(game.chatId)) return;
 
     const events = game.resolveNightActions();
+    nightsResolved.inc();
+    this.logger.info({ chatId: game.chatId.toString(), dayNumber: game.dayNumber, eventsCount: events.length }, 'Night phase resolved');
     await this.broadcast(game, group, events, 'Night');
     if (await this.handleHunterShots(game, group, events, 'Night')) return;
     if (game.phase === 'Ended') return this.finish(game);
@@ -207,6 +238,7 @@ export class GameLoop {
         continue;
       }
       if (actor.role === ROLE_BIT.Archivist) {
+        archivistReports.inc();
         await this.sendArchivistReport(actor, game.players, game.dayNumber, language);
         continue;
       }
@@ -295,7 +327,12 @@ export class GameLoop {
   private async runDay(game: Game): Promise<void> {
     const group = await this.groups.getOrCreate(game.chatId, null, null);
     game.startDay();
+    daysStarted.inc();
+    gameRoundsTotal.labels(game.mode).inc();
+    this.logger.info({ chatId: game.chatId.toString(), dayNumber: game.dayNumber, mode: game.mode }, 'Day phase started');
+
     const seconds = group.dayTimerSeconds;
+    dayPhaseDuration.observe(seconds);
     await this.send(game.chatId, group.language, 'DayTime', game.dayNumber, formatDuration(seconds));
     await this.sendGifCategory(game.chatId, group, 'DayStart');
     await this.sendDayMenus(game, group.language);
@@ -304,6 +341,8 @@ export class GameLoop {
     if (this.consumeKilled(game.chatId)) return;
 
     const events = game.resolveDayActions();
+    daysResolved.inc();
+    this.logger.info({ chatId: game.chatId.toString(), dayNumber: game.dayNumber, eventsCount: events.length }, 'Day phase resolved');
     await this.broadcast(game, group, events, 'Day');
     if (await this.handleHunterShots(game, group, events, 'Day')) return;
     if (game.phase === 'Ended') return this.finish(game);
@@ -332,9 +371,13 @@ export class GameLoop {
   private async runLynch(game: Game): Promise<void> {
     const group = await this.groups.getOrCreate(game.chatId, null, null);
     game.startLynch();
+    lynchesStarted.inc();
+    this.logger.info({ chatId: game.chatId.toString(), dayNumber: game.dayNumber, mode: game.mode }, 'Lynch phase started');
+
     await this.sendGifCategory(game.chatId, group, 'LynchStart');
     const attempts = game.lynchAttemptsPlanned;
     const seconds = group.lynchTimerSeconds;
+    lynchPhaseDuration.observe(seconds);
 
     for (let attempt = 1; attempt <= attempts; attempt++) {
       if (attempt > 1) {
@@ -419,14 +462,17 @@ export class GameLoop {
     language: string,
     resolution: { outcome: string; playerId?: bigint },
   ): Promise<void> {
+    lynchesResolved.labels(resolution.outcome).inc();
     switch (resolution.outcome) {
       case 'Tied':
+        lynchTies.inc();
         await this.send(game.chatId, language, 'LynchTied');
         return;
       case 'NoVotes':
         await this.send(game.chatId, language, 'NoOneCastLynch');
         return;
       case 'PacifistPeace':
+        pacifistPeaces.inc();
         await this.send(game.chatId, language, 'PacifistNoLynchNow');
         return;
       case 'PrinceSurvived': {
@@ -435,6 +481,7 @@ export class GameLoop {
         return;
       }
       case 'JudgePardoned': {
+        judgePardons.inc();
         const victim = resolution.playerId ? findName(game.players, resolution.playerId) : '';
         const judgeId = (resolution as any).judgeId;
         const judgeName = judgeId ? findName(game.players, judgeId) : '';
@@ -522,6 +569,24 @@ export class GameLoop {
     if (gameId !== undefined) {
       try {
         startedAt = await this.gameRepo.finalizeGame(gameId, game.winningTeam, game.players);
+        const durationMs = Date.now() - startedAt.getTime();
+        gameDurationSeconds.labels(game.mode).observe(durationMs / 1000);
+        gamesEnded.labels(game.mode, (game.winningTeam as string) ?? 'NoWinner').inc();
+        if (!game.winningTeam || (game.winningTeam as string) === 'NoWinner') {
+          gameDrawsTotal.inc();
+        }
+
+        this.logger.info(
+          {
+            chatId: game.chatId.toString(),
+            gameId,
+            mode: game.mode,
+            winningTeam: game.winningTeam,
+            durationSeconds: Math.round(durationMs / 1000),
+            playerCount: game.players.length,
+          },
+          'Game finished and recorded in DB',
+        );
       } catch (err) {
         this.logger.error({ err, chatId: game.chatId.toString(), gameId }, 'Failed to persist finished game');
       }
@@ -556,9 +621,6 @@ export class GameLoop {
       }
     }
 
-    // Mirrors the recap `DoGameEnd` sends right after the win announcement (`switch
-    // (DbGroup.ShowRolesEnd) { ... }` plus the trailing `EndTime` line): who was who, who's still
-    // standing, and how long the game ran.
     try {
       const group = await this.groups.getOrCreate(game.chatId, null, null);
       const durationMs = startedAt ? Date.now() - startedAt.getTime() : null;
@@ -571,6 +633,7 @@ export class GameLoop {
         LAST_GAZETTES_BY_CHAT.set(game.chatId.toString(), gazette);
         const gazetteMsg = `${gazette.title}\n\n${gazette.lines.join('\n')}`;
         await this.sendRaw(game.chatId, gazetteMsg);
+        gazetteGenerations.inc();
       } catch (err) {
         this.logger.error({ err, chatId: game.chatId.toString() }, 'Failed to generate village gazette');
       }
@@ -959,6 +1022,7 @@ export class GameLoop {
     if (aliveBots.length === 0) return;
 
     for (const botPlayer of aliveBots) {
+      botNightActions.inc();
       const otherAlive = alivePlayers(game.players).filter((p) => p.id !== botPlayer.id);
       if (otherAlive.length === 0) continue;
 
@@ -1010,7 +1074,9 @@ export class GameLoop {
         const otherAlive = alivePlayers(game.players).filter((p) => p.id !== botPlayer.id);
         const shouldAbstain = Math.random() < 0.1;
         let rawTarget = 'abstain';
-        if (!shouldAbstain && otherAlive.length > 0) {
+        if (shouldAbstain) {
+          skipVoteActions.inc();
+        } else if (otherAlive.length > 0) {
           const target = otherAlive[Math.floor(Math.random() * otherAlive.length)]!;
           rawTarget = target.id.toString();
         }
@@ -1021,6 +1087,11 @@ export class GameLoop {
   }
 
   async sendGifCategory(chatId: bigint, group: GroupWithConfig, category: GifCategory): Promise<void> {
+    try {
+      gifSends.labels(category).inc();
+    } catch {
+      // ignore
+    }
     const fileId = this.gifPacks ? await this.gifPacks.getApprovedFileId(category, group.defaultGifPackId) : null;
     const media = fileId ?? this.localGifPack.resolve(category);
     if (!media) return;
@@ -1040,6 +1111,7 @@ export class GameLoop {
    * no-op (today's text-only behavior, unchanged) until either one is actually supplied.
    */
   private async sendGifForEvent(game: Game, group: GroupWithConfig, event: GameEvent): Promise<void> {
+    this.recordRoleAbilityMetrics(event);
     let category: GifCategory | null = null;
     let playerId: bigint | undefined;
 
@@ -1059,6 +1131,21 @@ export class GameLoop {
       await this.bot.api.sendAnimation(chatNumber(game.chatId), media);
     } catch (err) {
       this.logger.warn({ err, chatId: game.chatId.toString(), category }, 'Failed to send gif pack animation');
+    }
+  }
+
+  private recordRoleAbilityMetrics(event: GameEvent): void {
+    const type = event.type as string;
+    if (event.type === 'PlayerDied') {
+      const method = (event as any).method as string;
+      if (method === 'WitchPotion') witchPoisonPotions.inc();
+      if (method === 'Hitman') hitmanKills.inc();
+    } else if (type === 'WitchSavedPlayer') {
+      witchSavePotions.inc();
+    } else if (type === 'PlayerResurrected') {
+      necromancerResurrections.inc();
+    } else if (type === 'MimicCopiedRole') {
+      mimicUsages.inc();
     }
   }
 

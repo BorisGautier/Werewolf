@@ -4,6 +4,7 @@ import type { Team } from '../../domain/game/team.js';
 import type { GameMode } from '../../domain/game/game-mode.js';
 import type { KillMethod } from '../../domain/game/kill-method.js';
 import { killMethodToPrisma, killPhaseToPrisma, roleToPrisma, teamToPrisma } from './mappers.js';
+import { gameRecordsSaved, killRecordsSaved } from '../monitoring/metrics.js';
 
 /** Wraps the `games`/`game_players`/`game_kills` tables - the history/stats record written as a game plays out. */
 export class GameRepository {
@@ -17,6 +18,7 @@ export class GameRepository {
         mode: mode === 'Chaos' ? 'CHAOS' : 'NORMAL',
       },
     });
+    gameRecordsSaved.inc();
     return game.id;
   }
 
@@ -85,6 +87,7 @@ export class GameRepository {
         dayNumber,
       },
     });
+    killRecordsSaved.inc();
   }
 
   /** Powers `/getidles`: how many times this player has been killed for idling (not voting) recently. */

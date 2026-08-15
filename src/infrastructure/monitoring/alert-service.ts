@@ -1,6 +1,11 @@
 import type { Bot } from 'grammy';
 import type { Env } from '../config/env.js';
 import type { Logger } from '../logging/logger.js';
+import {
+  adminAlertsSent,
+  botErrors,
+  transientNetworkErrors,
+} from './metrics.js';
 
 export class AlertService {
   private lastAlertTime = new Map<string, number>();
@@ -17,11 +22,21 @@ export class AlertService {
    */
   async notifyAdmin(errorTitle: string, details: string, errorKey = 'generic'): Promise<void> {
     const adminId = this.env.errorChatId ?? (this.env.devUserIds.length > 0 ? this.env.devUserIds[0] : undefined);
-    if (!adminId) return;
+    if (!adminId) {
+      this.logger.warn(
+        { errorTitle, errorKey },
+        'Admin alert skipped — no ERROR_CHAT_ID or DEV_USER_IDS configured',
+      );
+      return;
+    }
 
     const now = Date.now();
     const last = this.lastAlertTime.get(errorKey) ?? 0;
     if (now - last < 60_000) {
+      this.logger.debug(
+        { errorKey, cooldownRemainingMs: 60_000 - (now - last) },
+        'Admin alert throttled — within 60s cooldown window',
+      );
       return;
     }
     this.lastAlertTime.set(errorKey, now);
@@ -35,10 +50,111 @@ export class AlertService {
       `🕒 <b>Horodatage (UTC) :</b> ${timeStr}\n\n` +
       `<code>${cleanDetails}</code>`;
 
+    this.logger.info(
+      { errorTitle, errorKey, adminId: adminId.toString() },
+      'Sending monitoring alert to admin via Telegram PM',
+    );
+
     try {
       await this.bot.api.sendMessage(Number(adminId), alertMessage, { parse_mode: 'HTML' });
+      adminAlertsSent.inc();
+      this.logger.info({ errorTitle, errorKey }, 'Admin monitoring alert sent via Telegram');
     } catch (err) {
-      this.logger.error({ err }, 'Failed to send monitoring alert to admin');
+      this.logger.error({ err, errorTitle, errorKey }, 'Failed to send monitoring alert via Telegram');
+      botErrors.labels('alertService', 'sendMessageFailed').inc();
+    }
+
+    // Concurrent Dispatch to Slack Webhook if configured
+    if (this.env.slackWebhookUrl) {
+      void this.sendSlackAlert(errorTitle, cleanDetails, timeStr);
+    }
+
+    // Concurrent Dispatch to Mailgun if configured
+    if (this.env.mailgunApiKey && this.env.mailgunDomain && this.env.mailgunToEmail) {
+      void this.sendMailgunAlert(errorTitle, cleanDetails, timeStr);
+    }
+  }
+
+  /**
+   * Dispatches an alert to Slack via Webhook.
+   */
+  private async sendSlackAlert(errorTitle: string, cleanDetails: string, timeStr: string): Promise<void> {
+    try {
+      const payload = {
+        blocks: [
+          {
+            type: 'header',
+            text: { type: 'plain_text', text: '🚨 Werewolf Bot Monitoring Incident', emoji: true },
+          },
+          {
+            type: 'section',
+            fields: [
+              { type: 'mrkdwn', text: `*Incident:*\n${errorTitle}` },
+              { type: 'mrkdwn', text: `*Horodatage (UTC):*\n${timeStr}` },
+            ],
+          },
+          {
+            type: 'section',
+            text: { type: 'mrkdwn', text: `\`\`\`${cleanDetails.slice(0, 2000)}\`\`\`` },
+          },
+        ],
+      };
+
+      const res = await fetch(this.env.slackWebhookUrl!, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        this.logger.warn({ status: res.status, errorTitle }, 'Slack webhook returned non-OK status');
+      } else {
+        this.logger.info({ errorTitle }, 'Slack alert sent successfully');
+      }
+    } catch (err) {
+      this.logger.error({ err, errorTitle }, 'Failed to send Slack webhook alert');
+    }
+  }
+
+  /**
+   * Dispatches an alert email via Mailgun REST API.
+   */
+  private async sendMailgunAlert(errorTitle: string, cleanDetails: string, timeStr: string): Promise<void> {
+    try {
+      const domain = this.env.mailgunDomain!;
+      const apiKey = this.env.mailgunApiKey!;
+      const toEmail = this.env.mailgunToEmail!;
+      const url = `https://api.mailgun.net/v3/${domain}/messages`;
+
+      const formData = new URLSearchParams();
+      formData.append('from', `Werewolf Bot Monitoring <alerts@${domain}>`);
+      formData.append('to', toEmail);
+      formData.append('subject', `[ALERT] ${errorTitle}`);
+      formData.append(
+        'html',
+        `<h2>🚨 Werewolf Bot Monitoring Alert</h2>` +
+          `<p><strong>Incident :</strong> ${errorTitle}</p>` +
+          `<p><strong>Horodatage (UTC) :</strong> ${timeStr}</p>` +
+          `<pre style="background:#f4f4f4;padding:12px;border-radius:6px;overflow-x:auto;">${cleanDetails}</pre>`,
+      );
+
+      const authHeader = 'Basic ' + Buffer.from(`api:${apiKey}`).toString('base64');
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          Authorization: authHeader,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: formData.toString(),
+      });
+
+      if (!res.ok) {
+        this.logger.warn({ status: res.status, errorTitle }, 'Mailgun API returned non-OK status');
+      } else {
+        this.logger.info({ errorTitle, toEmail }, 'Mailgun alert email sent successfully');
+      }
+    } catch (err) {
+      this.logger.error({ err, errorTitle }, 'Failed to send Mailgun email alert');
     }
   }
 
@@ -51,6 +167,8 @@ export class AlertService {
     const errorObj = err as any;
     const innerError = errorObj?.error ?? errorObj;
     const errorCode = innerError?.code ?? innerError?.errno ?? errorObj?.code;
+    const errorName = innerError?.name as string | undefined;
+    const errorMessage = typeof innerError?.message === 'string' ? (innerError.message as string) : '';
 
     // Transient socket / long-polling drops that grammY runner automatically retries
     if (
@@ -58,15 +176,24 @@ export class AlertService {
       errorCode === 'ETIMEDOUT' ||
       errorCode === 'ENOTFOUND' ||
       errorCode === 'EPIPE' ||
-      innerError?.name === 'FetchError' ||
-      (typeof innerError?.message === 'string' && innerError.message.includes('ECONNRESET'))
+      errorName === 'FetchError' ||
+      errorMessage.includes('ECONNRESET')
     ) {
-      this.logger.warn({ source, code: errorCode }, 'Transient network connection reset during getUpdates (auto-retrying)');
+      const code = errorCode ?? errorName ?? 'UNKNOWN_NETWORK';
+      transientNetworkErrors.labels(code).inc();
+      this.logger.warn(
+        { source, code, errorName },
+        'Transient network connection reset during getUpdates — grammY runner will auto-retry',
+      );
       return;
     }
 
     // Critical operational error: log full stack & dispatch admin alert
-    this.logger.error({ err: innerError, source }, `Critical bot error in ${source}`);
+    botErrors.labels(source, errorCode ?? 'unknown').inc();
+    this.logger.error(
+      { err: innerError, source, errorCode, errorName },
+      `Critical bot error caught in ${source} — dispatching admin alert`,
+    );
     const message = innerError?.stack ?? innerError?.message ?? String(innerError);
     void this.notifyAdmin(`Erreur Critique (${source})`, message, source);
   }

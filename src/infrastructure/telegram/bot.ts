@@ -1,6 +1,6 @@
 import { exec } from 'node:child_process';
 import * as os from 'node:os';
-import { Bot, GrammyError, HttpError, InlineKeyboard, type Context } from 'grammy';
+import { Bot, GrammyError, InlineKeyboard, type Context } from 'grammy';
 import { GameManager } from '../../application/game-manager.js';
 import type { Env } from '../config/env.js';
 import type { Logger } from '../logging/logger.js';
@@ -21,6 +21,7 @@ import { GameLoop } from './game-loop.js';
 import { AlertService } from '../monitoring/alert-service.js';
 import { registerModesGuideCommands } from './modes-guide.js';
 import { ConfigMenu } from './config-menu.js';
+import { runWithTraceContext } from '../monitoring/tracing.js';
 import {
   nonNumericWords,
   numericIdTargets,
@@ -32,6 +33,16 @@ import { ABOUT_ROLE_BY_TRIGGER, aboutLocaleKey, resolveRoleFromTrigger } from '.
 import { ROLE_META, roleName } from '../../domain/roles/role.js';
 import { ACHIEVEMENT_CODES, ACHIEVEMENTS } from '../../domain/achievements/catalog.js';
 import { SpamGuard } from './spam-guard.js';
+import {
+  bansApplied,
+  callbacksProcessed,
+  commandResponseTime,
+  commandsProcessed,
+  playerReports,
+  spamDetections,
+  telegramApiErrors,
+  telegramApiLatency,
+} from '../monitoring/metrics.js';
 
 /** Mirrors `AdminRepository.banForSpam`'s tier order: index 0 is the 1st spam ban, etc. - anything
  * past the array (4th ban onward) is permanent. */
@@ -111,6 +122,29 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
   );
   const configMenu = new ConfigMenu(deps.groupRepository, deps.translator);
 
+  bot.use(async (ctx, next) => {
+    const start = Date.now();
+    return runWithTraceContext(
+      {
+        ...(ctx.update?.update_id !== undefined ? { updateId: ctx.update.update_id } : {}),
+        ...(ctx.from?.id !== undefined ? { userId: BigInt(ctx.from.id) } : {}),
+        ...(ctx.chat?.id !== undefined ? { chatId: BigInt(ctx.chat.id) } : {}),
+      },
+      async () => {
+        try {
+          await next();
+        } catch (err) {
+          telegramApiErrors.inc();
+          throw err;
+        } finally {
+          const duration = (Date.now() - start) / 1000;
+          commandResponseTime.observe(duration);
+          telegramApiLatency.observe(duration);
+        }
+      },
+    );
+  });
+
   // Port of `AddCount`/`SpamDetection`/`SpamBanList`: flags a Telegram user flooding the bot with
   // commands, warns them, then bans them (escalating duration) if they keep going. Registered
   // before every command handler below so a banned/flooding user's message never reaches one.
@@ -121,12 +155,17 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     if (fromId === undefined || text === undefined || !(text.startsWith('/') || text.startsWith('!'))) {
       return next();
     }
+    const cmdMatch = text.match(/^[/!]([a-zA-Z0-9_]+)/);
+    const commandName = cmdMatch ? cmdMatch[1]! : 'unknown';
+    commandsProcessed.labels(commandName).inc();
+
     const telegramId = BigInt(fromId);
     if (spamGuard.isBanned(telegramId)) return;
 
     const verdict = spamGuard.record(telegramId);
     if (verdict === 'ok') return next();
 
+    spamDetections.inc();
     const player = await deps.playerRepository.findByTelegramId(telegramId);
     const language = player?.languageCode ?? 'en';
     if (verdict === 'warn') {
@@ -135,6 +174,7 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     }
 
     const { expiresAt, tempBanCount } = await deps.adminRepository.banForSpam(telegramId);
+    bansApplied.inc();
     spamGuard.markBanned(telegramId, expiresAt);
     const duration = deps.translator.translate(language, spamBanDurationKey(tempBanCount));
     await ctx.reply(deps.translator.translate(language, 'SpamBanned', duration));
@@ -391,6 +431,7 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
 
   bot.callbackQuery(/^settitle:(.+)$/, async (ctx) => {
     if (!ctx.from) return;
+    callbacksProcessed.labels('settitle').inc();
     const titleId = ctx.match[1]!;
     const newTitle = titleId === 'none' ? null : titleId;
     await deps.playerRepository.setEquippedTitle(BigInt(ctx.from.id), newTitle);
@@ -531,6 +572,7 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     }
 
     const groupId = ctx.chat?.type !== 'private' ? BigInt(ctx.chat.id) : null;
+    playerReports.inc();
     await deps.reportRepository?.createReport({
       reporterId,
       reportedId,
@@ -1031,6 +1073,7 @@ function registerModerationCommands(
 
     for (const target of targets) {
       await deps.adminRepository.ban(target.id, reason, BigInt(ctx.from.id));
+      bansApplied.inc();
       await lobby.smite(BigInt(ctx.chat.id), target);
       await ctx.reply(deps.translator.translate(group.language, 'BanConfirmed', target.name));
     }

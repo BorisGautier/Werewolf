@@ -36,7 +36,7 @@ COPY assets ./assets
 COPY package.json ./
 COPY docker-entrypoint.sh ./
 
-RUN chmod +x docker-entrypoint.sh && chown -R werewolf:werewolf /app
+EXPOSE 9090
 
 USER werewolf
 

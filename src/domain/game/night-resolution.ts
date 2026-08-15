@@ -33,6 +33,26 @@ import { visitPlayer, graveDiggerDetectionChance, type VisitContext } from './ni
 import { promoteToCultist, promoteToWolf } from './transform.js';
 import { getTeamForRole } from './team.js';
 import type { FreezeFlavor, GameEvent } from './game-event.js';
+import {
+  arsonistBurnKills,
+  arsonistBurns,
+  arsonistDousings,
+  chemistDrunkApplications,
+  cultConversions,
+  cultistHunterDetections,
+  guardianAngelProtections,
+  guardianAngelSaves,
+  harlotDeaths,
+  harlotVisits,
+  serialKillerBlocked,
+  serialKillerStrikes,
+  snowWolfFreezeAttempts,
+  snowWolfFreezeSuccess,
+  thiefRoleSteal,
+  wolfAttacksBlocked,
+  wolfAttacksTotal,
+  wolfKillsTotal,
+} from '../../infrastructure/monitoring/metrics.js';
 
 /**
  * Cross-role mutable state for a single night's resolution.
@@ -97,6 +117,7 @@ export function resolveSnowWolfNight(
 
   const snowWolf = players.find((p) => p.role === ROLE_BIT.SnowWolf && !p.isDead);
   if (!snowWolf || snowWolf.choice === null || snowWolf.choice === ABSTAIN) return events;
+  snowWolfFreezeAttempts.inc();
 
   const target = players.find((p) => p.id === snowWolf.choice);
   const { result, events: visitEvents } = visitPlayer(visitCtx, snowWolf, target);
@@ -105,6 +126,7 @@ export function resolveSnowWolfNight(
 
   if (target.role === ROLE_BIT.SerialKiller) {
     target.frozen = true;
+    snowWolfFreezeSuccess.inc();
     events.push({ type: 'PlayerFrozen', playerId: target.id, cause: 'SnowWolf', snowWolfId: snowWolf.id, flavor: 'SerialKiller' });
     return events;
   }
@@ -118,6 +140,7 @@ export function resolveSnowWolfNight(
   if (target.role === ROLE_BIT.Hunter) {
     if (Math.floor(random() * 100) < 50) {
       target.frozen = true;
+      snowWolfFreezeSuccess.inc();
       // Mirrors the original sending the generic `DefaultFrozen` text here, not a Hunter-specific one.
       events.push({ type: 'PlayerFrozen', playerId: target.id, cause: 'SnowWolf', snowWolfId: snowWolf.id, flavor: 'Default' });
     } else {
@@ -135,6 +158,7 @@ export function resolveSnowWolfNight(
   // undone; a frozen Thief only gets their own flavor text in a "ThiefFull" game (matches
   // `case IRole.Thief: ... : GetLocaleString("DefaultFrozen")` otherwise).
   target.frozen = true;
+  snowWolfFreezeSuccess.inc();
   let flavor: FreezeFlavor = 'Default';
   switch (target.role) {
     case ROLE_BIT.Harlot:
@@ -342,6 +366,7 @@ export function resolveWolfNight(players: Player[], state: NightState, visitCtx:
   for (const choiceId of choices) {
     voteWolves = votingWolves();
     if (voteWolves.length === 0) break;
+    wolfAttacksTotal.inc();
 
     const target = players.find((p) => p.id === choiceId);
     const visitorWolf = voteWolves[Math.floor(random() * voteWolves.length)]!;
@@ -352,8 +377,10 @@ export function resolveWolfNight(players: Player[], state: NightState, visitCtx:
       successCount++;
       if (state.guardianAngel?.choice === target.id) {
         target.wasSavedLastNight = true;
+        wolfAttacksBlocked.labels('GuardianAngel').inc();
         events.push({ type: 'GuardianAngelBlockedWolfAttack', targetId: target.id });
       } else {
+        wolfKillsTotal.inc();
         const alpha = voteWolves.find((w) => w.role === ROLE_BIT.AlphaWolf) ?? null;
         lastAlphaId = alpha?.id ?? lastAlphaId;
         const bitten = alpha !== null && Math.floor(random() * 100) < 20; // Settings.AlphaWolfConversionChance
@@ -398,10 +425,12 @@ export function resolveArsonistNight(players: Player[], state: NightState, visit
   if (!arsonist) return events;
 
   if (arsonist.choice === SPARK) {
+    arsonistBurns.inc();
     const burning = players.filter((p) => !p.isDead && p.doused && p.role !== ROLE_BIT.Arsonist);
     const unprotectedIds = new Set(
       burning.filter((p) => state.guardianAngel?.choice !== p.id).map((p) => p.id),
     );
+    arsonistBurnKills.inc(unprotectedIds.size);
 
     for (const victim of burning) {
       if (state.guardianAngel?.choice === victim.id) {
@@ -428,6 +457,7 @@ export function resolveArsonistNight(players: Player[], state: NightState, visit
     events.push(...visitEvents);
     if (result === 'Success') {
       doused.doused = true;
+      arsonistDousings.inc();
       events.push({ type: 'PlayerDoused', playerId: doused.id, arsonistId: arsonist.id });
     }
   }
@@ -456,18 +486,17 @@ export function resolveSerialKillerNight(
       const originalTarget = skilled;
       const eligible = players.filter((p) => p.role !== ROLE_BIT.SerialKiller && !p.isDead);
       const newTarget = eligible[Math.floor(random() * eligible.length)]!;
-      // Side-effecting call for parity with the original (e.g. it could trigger another grave-stumble),
-      // its result is intentionally not used to gate the kill below.
       events.push(...visitPlayer(visitCtx, sk, newTarget).events);
       skilled = newTarget;
       events.push({ type: 'SerialKillerRandomKill', originalTargetId: originalTarget.id, newTargetId: newTarget.id });
     }
 
-    // The Guardian Angel can't protect the Harlot from the Serial Killer - she's never "found at home".
     if (state.guardianAngel?.choice === skilled.id && skilled.role !== ROLE_BIT.Harlot) {
       skilled.wasSavedLastNight = true;
+      serialKillerBlocked.inc();
       events.push({ type: 'GuardianAngelBlockedSerialKiller', targetId: skilled.id });
     } else {
+      serialKillerStrikes.inc();
       events.push(...killPlayer(players, skilled.id, 'SerialKilled', { killerIds: [sk.id] }));
     }
   }
@@ -487,7 +516,6 @@ export function resolveSerialKillerNight(
 export function resolveCultistHunterNight(players: Player[], visitCtx: VisitContext): GameEvent[] {
   const events: GameEvent[] = [];
 
-  // Mirrors `Players.GetPlayerForRole(IRole.CultistHunter)` - default aliveOnly: true.
   const hunter = players.find((p) => p.role === ROLE_BIT.CultistHunter && !p.isDead);
   if (!hunter || hunter.frozen) return events;
 
@@ -496,9 +524,9 @@ export function resolveCultistHunterNight(players: Player[], visitCtx: VisitCont
   events.push(...visitEvents);
 
   if (result === 'Success' && hunted && hunted.role === ROLE_BIT.Cultist) {
+    cultistHunterDetections.inc();
     events.push(...killPlayer(players, hunted.id, 'Hunt', { killerIds: [hunter.id] }));
   }
-  // Fail/AlreadyDead/a non-Cultist Success target: no state change, message-only in the original.
 
   return events;
 }
@@ -527,6 +555,7 @@ const CULT_CONVERSION_CHANCE = new Map<Role, number>([
 function convertToCult(target: Player, chance: number, dayNumber: number, random: () => number): GameEvent[] {
   if (Math.floor(random() * 100) < chance) {
     promoteToCultist(target, dayNumber);
+    cultConversions.inc();
     return [{ type: 'PlayerConvertedToCult', playerId: target.id }];
   }
   return [{ type: 'CultConversionFailed', targetId: target.id }];
@@ -670,12 +699,10 @@ export function resolveChemistNight(players: Player[], visitCtx: VisitContext): 
   events.push(...visitEvents);
 
   if (result === 'Success' && target) {
+    chemistDrunkApplications.inc();
     chemist.hasUsedAbility = false; // the brewed potion is used up either way
     if (Math.floor(random() * 100) < 50) {
-      // Settings.ChemistSuccessChance
       if (target.role === ROLE_BIT.WiseElder) {
-        // Guilt over killing the Wise Elder costs the Chemist their role entirely, same as the
-        // Gunner/Spumpkin's day-action equivalent in day-actions.ts.
         chemist.role = ROLE_BIT.Villager;
         chemist.team = getTeamForRole(ROLE_BIT.Villager);
         chemist.changedRolesCount++;
@@ -684,7 +711,6 @@ export function resolveChemistNight(players: Player[], visitCtx: VisitContext): 
       events.push({ type: 'ChemistPoisoned', chemistId: chemist.id, targetId: target.id });
       events.push(...killPlayer(players, target.id, 'Chemistry', { killerIds: [chemist.id] }));
     } else {
-      // Oops - the Chemist blew themselves up instead.
       events.push({ type: 'ChemistBackfired', chemistId: chemist.id, targetId: target.id });
       events.push(...killPlayer(players, chemist.id, 'Chemistry', { killerIds: [chemist.id] }));
     }
@@ -693,25 +719,12 @@ export function resolveChemistNight(players: Player[], visitCtx: VisitContext): 
   } else if (result === 'Fail' && target) {
     events.push({ type: 'ChemistTargetEmpty', chemistId: chemist.id, targetId: target.id });
   } else if (result === 'VisitorDied' && target && (target.role === ROLE_BIT.SerialKiller || target.role === ROLE_BIT.GraveDigger)) {
-    // Mirrors the original's `switch (target.PlayerRole) { case SerialKiller: ...; case GraveDigger: ...; }`
-    // with no default - dying to some other visit-death cause (e.g. a burning target) tells neither
-    // party anything beyond the public death announcement, same silent gap as the original.
     events.push({ type: 'ChemistDiedVisiting', chemistId: chemist.id, targetId: target.id });
   }
 
   return events;
 }
 
-/**
- * Port of the `#region Harlot Night` block. The one non-obvious mechanical
- * branch: visiting someone who turns out to already be dead *this same
- * night* at a wolf's or the Serial Killer's hands gets the Harlot killed too
- * (she stumbled onto the murder) - everything else in this block is
- * message-only. `playersVisited`/`hasStayedHome`/`hasRepeatedVisit` are
- * updated unconditionally on the choice itself (Promiscuous/Affectionate),
- * before the visit's success/failure is even resolved - mirrors the
- * original checking these ahead of its own `VisitPlayer` switch.
- */
 export function resolveHarlotNight(players: Player[], visitCtx: VisitContext): GameEvent[] {
   const events: GameEvent[] = [];
 
@@ -720,6 +733,7 @@ export function resolveHarlotNight(players: Player[], visitCtx: VisitContext): G
 
   const target = players.find((p) => p.id === harlot.choice);
   if (target) {
+    harlotVisits.inc();
     if (harlot.playersVisited.has(target.id)) harlot.hasRepeatedVisit = true;
     harlot.playersVisited.add(target.id);
     events.push({ type: 'HarlotVisited', harlotId: harlot.id, targetId: target.id });
@@ -735,6 +749,7 @@ export function resolveHarlotNight(players: Player[], visitCtx: VisitContext): G
     const diedToWolfOrSerialKiller =
       killerRole !== null && (WOLF_ROLES.includes(killerRole) || killerRole === ROLE_BIT.SerialKiller);
     if (target.diedLastNight && diedToWolfOrSerialKiller && !target.diedByVisitingKiller && !target.diedByVisitingVictim) {
+      harlotDeaths.inc();
       events.push(
         ...killPlayer(players, harlot.id, 'VisitVictim', {
           killerIds: [target.id],
@@ -748,18 +763,6 @@ export function resolveHarlotNight(players: Player[], visitCtx: VisitContext): G
   return events;
 }
 
-/**
- * Port of the `#region GA Night` block: "only notifies the GA about the
- * impact of his actions, and cleans kerosene" - the original's comment is
- * accurate, this is almost entirely messages. The one real state change is
- * clearing `doused` off whoever the GA protected, and *only* in two of the
- * three narrative branches: when they weren't otherwise attacked tonight
- * (preventive cleaning, the only branch that counts towards `Firefighter`),
- * or when they were specifically saved from a spark (the Arsonist chose
- * SPARK). A player saved from a wolf/Serial Killer attack who happens to
- * also be doused does *not* get cleaned here - that asymmetry is exactly
- * what the original's nested if/else encodes.
- */
 export function resolveGuardianAngelNight(
   players: Player[],
   state: NightState,
@@ -770,6 +773,9 @@ export function resolveGuardianAngelNight(
   if (!ga || ga.frozen || (ga.isDead && !ga.diedLastNight)) return events;
 
   const save = players.find((p) => p.id === ga.choice);
+  if (save) {
+    guardianAngelProtections.inc();
+  }
   const { result, events: visitEvents } = visitPlayer(visitCtx, ga, save);
   events.push(...visitEvents);
 
@@ -777,6 +783,7 @@ export function resolveGuardianAngelNight(
     if (WOLF_ROLES.includes(save.role) && !save.wasSavedLastNight) ga.gaGuardWolfCount++;
     let cleanedDoused = false;
     if (save.wasSavedLastNight) {
+      guardianAngelSaves.labels('WolfOrFire').inc();
       const arsonist = players.find((p) => p.role === ROLE_BIT.Arsonist);
       if (save.doused && arsonist?.choice === SPARK) {
         save.doused = false;
@@ -789,8 +796,6 @@ export function resolveGuardianAngelNight(
       cleanedDoused = true;
       events.push({ type: 'GuardianAngelCleanedDouse', gaId: ga.id, playerId: save.id });
     }
-    // Mirrors `if (!save.WasSavedLastNight && !save.DiedLastNight && !cleanedDoused)`: only told
-    // "nothing happened" when the target wasn't attacked, didn't die, and wasn't just doused.
     if (!save.wasSavedLastNight && !save.diedLastNight && !cleanedDoused) {
       events.push({ type: 'GuardianAngelNoAttack', gaId: ga.id, targetId: save.id });
     }
@@ -803,18 +808,6 @@ export function resolveGuardianAngelNight(
   return events;
 }
 
-/**
- * Port of `StealRole`: swaps the Thief and their target's role (and the
- * target-specific stats that ride along with a role: bullet count,
- * hasUsedAbility, roleModel). The target becomes a Villager (or, in
- * "ThiefFull" games, a plain Thief); the original Thief takes over
- * everything about the stolen role.
- *
- * If the target turns out to be dead (only possible in the non-ThiefFull,
- * night-1 path - `VisitPlayer` lets a non-full Thief's visit "succeed" even
- * against a dead target), a random living player is picked instead, exactly
- * like the original's `ChooseRandomPlayerId` fallback.
- */
 function stealRole(
   players: Player[],
   thief: Player,
@@ -836,6 +829,8 @@ function stealRole(
   const { result, events: visitEvents } = visitPlayer(visitCtx, thief, target);
   events.push(...visitEvents);
   if (result !== 'Success') return events;
+
+  thiefRoleSteal.inc();
 
   const stolenRole = target.role;
   const stolenRoleModel = target.roleModel;

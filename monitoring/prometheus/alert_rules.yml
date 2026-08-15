@@ -1,0 +1,65 @@
+groups:
+  - name: werewolf_bot_alerts
+    rules:
+      - alert: HighTelegramApiLatency
+        expr: histogram_quantile(0.95, sum(rate(werewolf_telegram_api_latency_seconds_bucket[5m])) by (le)) > 2
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High Telegram API Latency (P95 > 2s)"
+          description: "Telegram API latency P95 is {{ $value }}s over the last 5 minutes."
+
+      - alert: TelegramApiErrorsSpike
+        expr: rate(werewolf_telegram_api_errors_total[5m]) > 0.1
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High Telegram API Error Rate"
+          description: "Telegram API requests are failing at a rate of {{ $value }} errors/sec."
+
+      - alert: DatabaseQueryErrorSpike
+        expr: rate(werewolf_db_errors_total[5m]) > 0.05
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Database Query Errors Detected"
+          description: "Prisma DB queries are producing errors at {{ $value }} errors/sec."
+
+      - alert: DatabaseSlowQueries
+        expr: histogram_quantile(0.95, sum(rate(werewolf_db_query_duration_seconds_bucket[5m])) by (le)) > 1
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slow Database Queries (P95 > 1s)"
+          description: "Database queries P95 latency is {{ $value }}s."
+
+      - alert: BotPMFailuresSpike
+        expr: rate(werewolf_pm_failures_total[5m]) > 0.5
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Spike in User PM Failures"
+          description: "Users are blocking the bot or PM sending is failing at {{ $value }} failures/sec."
+
+      - alert: StaleGameAccumulation
+        expr: werewolf_games_abandoned_total > 5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Stale Games Purged"
+          description: "More than 5 stale unended games were abandoned and purged."
+
+      - alert: HighMemoryUsage
+        expr: process_resident_memory_bytes > 536870912
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Node.js Process Memory High (> 512 MB)"
+          description: "Resident memory usage has reached {{ $value }} bytes."
