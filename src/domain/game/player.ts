@@ -21,6 +21,7 @@ export interface Player {
    * player *started* as even after a Thief/Doppelganger swap, an infection, or a Wise Elder demotion. */
   originalRole: Role;
   team: Team;
+  isBot?: boolean;
 
   isDead: boolean;
   diedLastNight: boolean;
@@ -128,13 +129,14 @@ export interface Player {
   hasRepeatedVisit: boolean;
 }
 
-export function createPlayer(id: bigint, name: string, role: Role, team: Team): Player {
+export function createPlayer(id: bigint, name: string, role: Role, team: Team, isBot = false): Player {
   return {
     id,
     name,
     role,
     originalRole: role,
     team,
+    isBot,
     isDead: false,
     diedLastNight: false,
     timeDied: null,

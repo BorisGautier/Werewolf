@@ -15,6 +15,7 @@ import { PlayerRepository } from './infrastructure/persistence/player.repository
 import { createBot } from './infrastructure/telegram/bot.js';
 import { disconnectPrisma, getPrismaClient } from './infrastructure/persistence/prisma-client.js';
 import { startCronJobs } from './infrastructure/cron/scheduler.js';
+import { AlertService } from './infrastructure/monitoring/alert-service.js';
 
 async function main(): Promise<void> {
   const env = loadEnv();
@@ -45,6 +46,16 @@ async function main(): Promise<void> {
   });
   await bot.init();
   logger.info({ username: bot.botInfo.username }, 'Bot initialized');
+
+  const alertService = new AlertService(bot, env, logger);
+
+  process.on('unhandledRejection', (reason) => {
+    alertService.handleBotError(reason, 'unhandledRejection');
+  });
+
+  process.on('uncaughtException', (err) => {
+    alertService.handleBotError(err, 'uncaughtException');
+  });
 
   const runner = run(bot);
   const stopCronJobs = startCronJobs(prisma, logger);

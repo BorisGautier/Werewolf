@@ -41,11 +41,15 @@ export class GameManager {
    * a player's night/day menu callbacks arrive over their private chat, not the group's, so there's
    * no chat id to look the game up by directly.
    */
-  findByPlayer(playerId: bigint): Game | undefined {
+  findByPlayer(playerId: bigint, preferredPhase?: Game['phase']): Game | undefined {
+    let fallback: Game | undefined;
     for (const game of this.games.values()) {
-      if (game.players.some((p) => p.id === playerId)) return game;
+      if (game.players.some((p) => p.id === playerId)) {
+        if (!preferredPhase || game.phase === preferredPhase) return game;
+        fallback ??= game;
+      }
     }
-    return undefined;
+    return fallback;
   }
 
   activeChatIds(): bigint[] {

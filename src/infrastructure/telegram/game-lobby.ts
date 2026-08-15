@@ -16,7 +16,8 @@ import { Bot, InlineKeyboard } from 'grammy';
 import { GameAlreadyRunningError, GameManager } from '../../application/game-manager.js';
 import { Game, GameError } from '../../domain/game/game.aggregate.js';
 import type { GameMode } from '../../domain/game/game-mode.js';
-import { ROLE_META, roleName } from '../../domain/roles/role.js';
+import { ROLE_BIT, ROLE_META, roleName } from '../../domain/roles/role.js';
+import { WOLF_ROLES } from '../../domain/game/game-balancing.js';
 import { GameRepository } from '../persistence/game.repository.js';
 import { groupToGameOptions, GroupRepository, resolveGameMode } from '../persistence/group.repository.js';
 import { NotifyGameRepository } from '../persistence/notify-game.repository.js';
@@ -462,9 +463,9 @@ export class GameLobbyManager {
     await this.gameRepo.recordPlayers(gameId, session.game.players, playerDbIdByTelegramId);
 
     const delivered = await Promise.all(
-      session.game.players.map((p) => this.notifyRole(p.id, session.language, p.role)),
+      session.game.players.map((p) => (p.isBot ? Promise.resolve(true) : this.notifyRole(p, session.game, session.language))),
     );
-    const undelivered = session.game.players.filter((_, index) => !delivered[index]).map((p) => p.name);
+    const undelivered = session.game.players.filter((p, index) => !p.isBot && !delivered[index]).map((p) => p.name);
     if (undelivered.length > 0) {
       const botUsername = this.bot.botInfo?.username ?? '';
       const keyboard = botUsername
@@ -488,7 +489,9 @@ export class GameLobbyManager {
     this.gameLoop.start(session.game, gameId);
   }
 
-  private async notifyRole(telegramId: bigint, language: string, role: bigint): Promise<boolean> {
+  private async notifyRole(player: { id: bigint; role: bigint; name: string }, game: Game, language: string): Promise<boolean> {
+    const telegramId = player.id;
+    const role = player.role;
     const name = roleName(role);
     const localized = this.t.translate(language, `Role_${name}`);
     const displayName = localized.startsWith('Role_') ? name : localized;
@@ -504,7 +507,54 @@ export class GameLobbyManager {
       // Ignore missing role description key
     }
 
-    const roleMsg = `${this.t.translate(language, 'YourRoleIs', `${emoji} ${displayName}`)}${description}`;
+    let teamInfo = '';
+    if (role === ROLE_BIT.Mason) {
+      const coMasons = game.players.filter((p) => p.id !== player.id && p.role === ROLE_BIT.Mason);
+      if (coMasons.length > 0) {
+        const names = coMasons.map((p) => p.name).join(', ');
+        teamInfo = language === 'fr'
+          ? `\n\n👷 <b>Vos confrères Maçons sont :</b> ${names}`
+          : `\n\n👷 <b>Your fellow Masons are:</b> ${names}`;
+      } else {
+        teamInfo = language === 'fr'
+          ? `\n\n👷 <b>Vous êtes le seul Maçon de cette partie.</b>`
+          : `\n\n👷 <b>You are the only Mason in this game.</b>`;
+      }
+    } else if (WOLF_ROLES.includes(role) || role === ROLE_BIT.SnowWolf) {
+      const pack = game.players.filter((p) => p.id !== player.id && (WOLF_ROLES.includes(p.role) || p.role === ROLE_BIT.SnowWolf));
+      if (pack.length > 0) {
+        const names = pack.map((p) => `${p.name} (${ROLE_META[roleName(p.role)].emoji} ${this.t.translate(language, `Role_${roleName(p.role)}`)})`).join('\n• ');
+        teamInfo = language === 'fr'
+          ? `\n\n🐺 <b>Vos camarades Loups-Garous sont :</b>\n• ${names}`
+          : `\n\n🐺 <b>Your fellow Werewolves are:</b>\n• ${names}`;
+      } else {
+        teamInfo = language === 'fr'
+          ? `\n\n🐺 <b>Vous êtes le seul Loup-Garou au départ.</b>`
+          : `\n\n🐺 <b>You are the only Werewolf at the start.</b>`;
+      }
+    } else if (role === ROLE_BIT.Cultist) {
+      const cult = game.players.filter((p) => p.id !== player.id && p.role === ROLE_BIT.Cultist);
+      if (cult.length > 0) {
+        const names = cult.map((p) => p.name).join(', ');
+        teamInfo = language === 'fr'
+          ? `\n\n🔮 <b>Vos Frères du Culte sont :</b> ${names}`
+          : `\n\n🔮 <b>Your fellow Cultists are:</b> ${names}`;
+      }
+    } else if (role === ROLE_BIT.Hitman && game.hitmanTargetMap.has(player.id)) {
+      const targetId = game.hitmanTargetMap.get(player.id)!;
+      const targetName = game.players.find((p) => p.id === targetId)?.name ?? '???';
+      teamInfo = language === 'fr'
+        ? `\n\n🎯 <b>Votre cible d'assassinat est :</b> ${targetName}`
+        : `\n\n🎯 <b>Your assassination target is:</b> ${targetName}`;
+    } else if (role === ROLE_BIT.Avenger && game.avengerTargetMap.has(player.id)) {
+      const targetId = game.avengerTargetMap.get(player.id)!;
+      const targetName = game.players.find((p) => p.id === targetId)?.name ?? '???';
+      teamInfo = language === 'fr'
+        ? `\n\n💀 <b>Votre rival juré est :</b> ${targetName}`
+        : `\n\n💀 <b>Your sworn rival is:</b> ${targetName}`;
+    }
+
+    const roleMsg = `${this.t.translate(language, 'YourRoleIs', `${emoji} ${displayName}`)}${description}${teamInfo}`;
 
     try {
       await this.bot.api.sendMessage(chatNumber(telegramId), roleMsg, { parse_mode: 'HTML' });
@@ -513,6 +563,41 @@ export class GameLobbyManager {
       this.logger.warn({ telegramId: telegramId.toString(), err: (err as Error).message }, 'Could not PM role to player');
       return false;
     }
+  }
+
+  async addBotPlayers(chatId: bigint, count = 4): Promise<number> {
+    const session = this.sessions.get(chatId);
+    if (!session) return 0;
+
+    const botNames = [
+      '🤖 Alex (IA)',
+      '🤖 Beatrice (IA)',
+      '🤖 Clement (IA)',
+      '🤖 Diana (IA)',
+      '🤖 Enzo (IA)',
+      '🤖 Florence (IA)',
+      '🤖 Gabriel (IA)',
+      '🤖 Helene (IA)',
+      '🤖 Ismael (IA)',
+      '🤖 Julia (IA)',
+    ];
+
+    let addedCount = 0;
+    const existingCount = session.game.players.length;
+    const startId = 990001n + BigInt(existingCount);
+
+    for (let i = 0; i < count; i++) {
+      if (session.game.players.length >= 35) break;
+      const botId = startId + BigInt(i);
+      const name = botNames[i % botNames.length]!;
+      try {
+        session.game.addPlayer(botId, name, true);
+        addedCount++;
+      } catch {
+        break;
+      }
+    }
+    return addedCount;
   }
 
   private async send(chatId: bigint, language: string, key: string, ...args: unknown[]): Promise<void> {

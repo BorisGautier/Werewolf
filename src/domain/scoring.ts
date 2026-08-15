@@ -8,6 +8,7 @@ export interface PlayerScoreResult {
   breakdown: {
     participation: number;
     victoryBonus: number;
+    defeatPenalty: number;
     consolation: number;
     afkPenalty: number;
   };
@@ -25,13 +26,14 @@ export function calculateGamePoints(
   return players.map((player) => {
     let won = false;
     let victoryBonus = 0;
+    let defeatPenalty = 0;
     const participation = 5; // +5 pts for completing a game
     let consolation = 0;
     let afkPenalty = 0;
 
     // Check if player was AFK in this game
     if (afkPlayerIds?.has(player.id)) {
-      afkPenalty = -10;
+      afkPenalty = -15;
     }
 
     // First lynch victim consolation bonus
@@ -57,9 +59,11 @@ export function calculateGamePoints(
       } else {
         victoryBonus = player.isDead ? 10 : 20;
       }
+    } else {
+      defeatPenalty = -10; // -10 pts penalty for loss (+5 participation - 10 defeat = -5 net pts)
     }
 
-    const totalPoints = Math.max(0, participation + victoryBonus + consolation + afkPenalty);
+    const totalPoints = participation + victoryBonus + defeatPenalty + consolation + afkPenalty;
 
     return {
       playerId: player.id,
@@ -68,6 +72,7 @@ export function calculateGamePoints(
       breakdown: {
         participation,
         victoryBonus,
+        defeatPenalty,
         consolation,
         afkPenalty,
       },

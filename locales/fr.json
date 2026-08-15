@@ -33,6 +33,9 @@
     "LynchTime": ["C'est l'heure du vote ! Vous avez {0} pour décider qui pendre."],
     "PacifistNoLynchNow": ["Le Pacifiste a convaincu le village de ne pendre personne aujourd'hui."],
     "TroubleDoubleLynchNow": ["Quelque chose cloche... le village va voter deux fois aujourd'hui."],
+    "TroubleDoubleLynchSecondVote": [
+      "🤯 <b>SECOND VOTE DE PENDAISON !</b>\nSuite aux perturbations du Fauteur de troubles, le village s'apprête à procéder à sa DEUXIÈME exécution du jour !"
+    ],
     "NoOneCastLynch": ["Personne n'a été pendu aujourd'hui - les votes étaient trop partagés."],
     "VillagersWin": ["Le village a éliminé toutes les menaces. Les villageois gagnent !"],
     "WolvesWin": ["Les loups ont dévoré le village. Les loups-garous gagnent !"],
@@ -135,13 +138,23 @@
     "GuardEmptyHouse": ["Vous vous êtes rendus chez {0}, mais personne n'était à la maison !"],
     "CleanDoused": ["Vous n'avez aucun ennemi à combattre chez {0} cette nuit, vous en profitez pour faire un petit tour des lieux. Vous remarquez que la maison a été aspergée de kérosène ! Comme vous n'avez rien d'autre à faire, vous la nettoyez pour lui."],
     "GuardWolf": ["Vous avez tenté de protéger un être maléfique, il vous a mangé."],
-    "GuardKiller": ["En amateur de chocapics, vous vouliez protéger le Céréales Killer… celui-ci ne s'est pas laissé faire et vous a plumé comme un poulet. Vous êtes mort, lamentablement mort, et ça pique…"],
+    "GuardKiller": ["En amateur de sensations fortes, vous vouliez protéger le Tueur en série… celui-ci ne s'est pas laissé faire et vous a plumé comme un poulet. Vous êtes mort, lamentablement mort..."],
     "GAFell": ["Le destin n'était pas de votre côté ce soir… Vous vouliez juste protéger {0}, mais vous êtes tombé dans une tombe ouverte après avoir marché dans un piège à ours et êtes mort ! Pourquoi le fossoyeur prend-t-il même la peine de sécuriser des tombes ?"],
     "YouWereDoused": ["Quelqu'un t'a arrosé(e) d'essence ! Espère que l'Incendiaire ne frappe pas à nouveau..."],
 
     "AskGunner": ["Qui veux-tu abattre ?"],
     "AskSpumpkin": ["Près de qui veux-tu détoner ?"],
     "AskDetective": ["Les activités de qui veux-tu enquêter ?"],
+    "AskGraveDigger": ["Qui voulez-vous inspecter au cimetière ce soir ?"],
+    "AskAugur": ["Sur quel joueur voulez-vous lire les présages ?"],
+    "AskWatchman": ["Quel joueur voulez-vous surveiller cette nuit ?"],
+    "AskTracker": ["Quel joueur voulez-vous pister cette nuit ?"],
+    "AskPriestess": ["Quelle maison voulez-vous bénir cette nuit ?"],
+    "AskMimic": ["Quel joueur voulez-vous mimer cette nuit ?"],
+    "AskArchangel": ["Quel joueur voulez-vous protéger avec la grâce archangélique ?"],
+    "AskNecromancer": ["Quel joueur décédé voulez-vous ressusciter ?"],
+    "AskReflector": ["Sur quel joueur souhaitez-vous refléter les pouvoirs ?"],
+    "AskCrow": ["Quel joueur voulez-vous maudire pour le vote de demain ?"],
     "DetectiveSnoop": ["Ton enquête révèle que {0} est un(e) {1}."],
     "DetectiveCaught": ["Tu remarques que {0} fouine dans le coin et pose des questions sur la meute..."],
     "MayorButton": ["🎖 Te révéler comme Maire (double ton vote)"],
@@ -206,33 +219,33 @@
     ],
 
     "BlacksmithKilled": [
-      "Il semblerait que {0}, le Forgeron, soit extrêmement malchanceux. Cinq couteaux de sa propre armurerie sont plantés dans son corps, le punaisant contre le mur... Le Céréales Killer semble avoir agrandi sa collection d'organes..."
+      "Il semblerait que {0}, le Forgeron, soit extrêmement malchanceux. Cinq couteaux de sa propre armurerie sont plantés dans son corps, le punaisant contre le mur... Le Tueur en série semble avoir agrandi sa collection d'organes..."
     ],
     "CultistKilled": [
-      "{0} est retrouvé poignardé avec un chandelier... Le Céréales Killer semble n'avoir que faire de la religion ! {0} était un Cultiste."
+      "{0} est retrouvé poignardé avec un chandelier... Le Tueur en série semble n'avoir que faire de la religion ! {0} était un Cultiste."
     ],
     "CupidKilled": [
       "Le jour se lève et les villageois découvrent le cœur brisé de {0} alias Cupidon, dépecé par un psychopathe collectionneur de doigts de pieds..."
     ],
     "DrunkKilled": [
-      "Les villageois se rendent chez {0} pour l'apéro, mais ne retrouvent chez lui qu'un grand couteau et un foie complètement cirrhosé. Il semblerait que des années d'alcoolisme aient sauvé son foie du Céréales Killer. Le reste en revanche..."
+      "Les villageois se rendent chez {0} pour l'apéro, mais ne retrouvent chez lui qu'un grand couteau et un foie complètement cirrhosé. Il semblerait que des années d'alcoolisme aient sauvé son foie du Tueur en série. Le reste en revanche..."
     ],
-    "GuardianAngelKilled": ["{0} aurait en théorie pu vaincre le Céréales Killer, mais il semblerait qu'il en soit advenu autrement. {0} est mort."],
+    "GuardianAngelKilled": ["{0} aurait en théorie pu vaincre le Tueur en série, mais il semblerait qu'il en soit advenu autrement. {0} est mort."],
     "GunnerKilled": [
-      "{0} devait dormir très profondément cette nuit ! Un coup de feu a été entendu, et on l'a retrouvé avec un trou dans la tête, et un doigt de pied manquant. Le Céréales Killer a encore frappé..."
+      "{0} devait dormir très profondément cette nuit ! Un coup de feu a été entendu, et on l'a retrouvé avec un trou dans la tête, et un doigt de pied manquant. Le Tueur en série a encore frappé..."
     ],
     "MayorKilled": [
-      "Au meurtre ! {0} le Maire est retrouvé poignardé, gisant sur son bureau sur des documents officiels. Il s'agit clairement d'un coup du Céréales Killer."
+      "Au meurtre ! {0} le Maire est retrouvé poignardé, gisant sur son bureau sur des documents officiels. Il s'agit clairement d'un coup du Tueur en série."
     ],
     "PrinceKilled": [
-      "Les cloches sonnent ce matin, et les gardes enquêtent sur la disparition du Prince {0}. Aucun indice n'est retrouvé, on soupçonne un coup du Céréales Killer...",
-      "Les gardes royaux se sont permis une petite sieste... Les restes princiers de {0} sont retrouvés dispersés en plusieurs endroits du palais. Le Céréales Killer s'est bien amusé..."
+      "Les cloches sonnent ce matin, et les gardes enquêtent sur la disparition du Prince {0}. Aucun indice n'est retrouvé, on soupçonne un coup du Tueur en série...",
+      "Les gardes royaux se sont permis une petite sieste... Les restes princiers de {0} sont retrouvés dispersés en plusieurs endroits du palais. Le Tueur en série s'est bien amusé..."
     ],
     "SeerKilled": [
       "Les villageois se réveillent et retrouvent le cadavre de {0}, criblé de coups de couteau. Bizarrement, il lui manque un doigt de pied... {0} était la Voyante."
     ],
     "DefaultKilled": [
-      "La nuit avait pourtant eu l'air bien calme... Les villageois se rassemblent à l'aube et découvrent le cadavre de {0}, presque intact. Il ne lui manque qu'un doigt de pied. Le Céréales Killer a encore frappé ! {1}"
+      "La nuit avait pourtant eu l'air bien calme... Les villageois se rassemblent à l'aube et découvrent le cadavre de {0}, presque intact. Il ne lui manque qu'un doigt de pied. Le Tueur en série a encore frappé ! {1}"
     ],
 
     "HarlotFellPublic": [
@@ -333,11 +346,12 @@
     "AskHunterShot": ["Pour ton dernier acte, qui veux-tu emporter avec toi ?"],
     "HunterShotFired": ["Dans son dernier souffle, {0} abat {1} !"],
 
-    "CursedTurnedWolfMsg": ["{0} a été mordu(e) par les loups et a immédiatement succombé - la malédiction se déclenche !"],
-    "BittenTurnedWolfMsg": ["{0} s'est transformé(e) en Loup pendant la nuit !"],
-    "WildChildTurnedWolfMsg": ["Le modèle de {0} est mort - dans son chagrin, il/elle s'est transformé(e) en Loup !"],
-    "DoppelgangerTransformedMsg": ["Le modèle de {0} est mort - il/elle a pris son rôle !"],
-    "ApprenticeSeerPromotedMsg": ["{0} s'est réveillé(e) avec les pouvoirs d'une Voyante !"],
+    "PlayerBittenPM": ["🐺 <b>ATTENTION ! VOUS AVEZ ÉTÉ MORDU(E) !</b>\n<i>Le Loup Alpha vous a mordu(e) cette nuit... À la prochaine nuit, la malédiction prendra le dessus et vous deviendrez un Loup-Garou !</i>"],
+    "CursedTurnedWolfMsg": ["🐺 <b>MALÉDICTION ÉVEILLÉE !</b>\n<i>Les loups vous ont attaqué(e), mais votre malédiction s'est activée... Vous êtes désormais un 🐺 Loup-Garou !</i>"],
+    "BittenTurnedWolfMsg": ["🐺 <b>TRANSFORMATION EN LOUP-GAROU !</b>\n<i>La malédiction a pris le dessus. Vous êtes désormais un 🐺 Loup-Garou ! Rejoignez la meute et dévorez le village !</i>"],
+    "WildChildTurnedWolfMsg": ["🐺 <b>VOTRE MODÈLE EST MORT !</b>\n<i>Pris d'une rage folle après le décès de votre modèle, vous êtes devenu un 🐺 Loup-Garou !</i>"],
+    "DoppelgangerTransformedMsg": ["🎭 <b>RÔLE HÉRITÉ !</b>\n<i>Votre modèle est mort. Vous avez hérité de son rôle et de ses pouvoirs !</i>"],
+    "ApprenticeSeerPromotedMsg": ["🔮 <b>PROMOTION EN VOYANTE !</b>\n<i>La Voyante est morte... Vous héritez de sa boule de cristal et de ses visions !</i>"],
     "LoversCreatedMsg": ["Cupidon a frappé ! Deux joueurs sont maintenant éperdument amoureux."],
     "SnowWolfBecameWolfMsg": ["Le dernier vrai loup est tombé - le Loup des neiges a pris sa place !"],
     "TraitorBecameWolfMsg": ["Le dernier vrai loup est tombé - le Traître a pris sa place !"],
@@ -354,7 +368,7 @@
     "HunterStandoffWin": ["Dans un dernier face-à-face, le Chasseur abat le dernier loup !"],
     "HunterStandoffLose": ["Dans un dernier face-à-face, le loup l'emporte sur le Chasseur !"],
     "WiseElderSurvived": ["Tu as été attaqué(e), mais ta sagesse t'a sauvé(e)... juste cette fois."],
-    "ConvertedToCult": ["Tu sens un appel obscur... tu as rejoint le Culte !"],
+    "ConvertedToCult": ["🔮 <b>CONVERSION AU CULTE !</b>\n<i>Vous avez été converti(e) au Culte ! Vous êtes désormais un Sectaire. Votre objectif est de faire triompher le Culte !</i>"],
     "RoleStolenPM": ["Tu as volé l'identité de {0} ! Tu es maintenant un(e) {1}."],
     "ThiefStealChosen": ["Ta cible est maintenant {0}."],
     "GunnerLostPowerMsg": ["Ta balle n'a eu aucun effet sur l'Ancien Sage - le choc t'a fait perdre ton pouvoir !"],

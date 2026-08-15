@@ -75,9 +75,12 @@ export interface GameOptions {
   thiefFull?: boolean;
 }
 
+import { getRandomWeather, type VillageWeather } from './village-weather.js';
+
 export class Game {
   readonly chatId: bigint;
   readonly mode: GameMode;
+  weather: VillageWeather = getRandomWeather();
   phase: GamePhase = 'Joining';
   dayNumber = 0;
   players: Player[] = [];
@@ -138,7 +141,7 @@ export class Game {
     this.thiefFull = options.thiefFull ?? false;
   }
 
-  addPlayer(id: bigint, name: string): Player {
+  addPlayer(id: bigint, name: string, isBot = false): Player {
     if (this.phase !== 'Joining') throw new GameError('Cannot join once the game has started.', 'NOT_JOINING');
     if (this.players.some((p) => p.id === id)) {
       throw new GameError('This player already joined.', 'ALREADY_JOINED');
@@ -147,7 +150,7 @@ export class Game {
       throw new GameError('This group is full.', 'GROUP_FULL');
     }
     // Villager/Village is a placeholder until assignRolesAndStart() deals real roles.
-    const player = createPlayer(id, name, ROLE_BIT.Villager, 'Village');
+    const player = createPlayer(id, name, ROLE_BIT.Villager, 'Village', isBot);
     this.players.push(player);
     return player;
   }
@@ -264,7 +267,7 @@ export class Game {
    * window has closed", either timing collapses to the same net effect: no
    * lynch happens this attempt).
    */
-  resolveLynch(): LynchResult & WinConditionResult {
+  resolveLynch(options?: Partial<LynchOptions>): LynchResult & WinConditionResult {
     this.assertPhase('Lynch');
 
     if (this.pacifistUsed) {
@@ -294,6 +297,7 @@ export class Game {
     const lynchOptions: LynchOptions = {
       lynchAttempt: this.lynchAttempt,
       randomLynchOnTie: this.randomLynchOnTie,
+      ...options,
     };
     const lynchResult = resolveLynchVotes(this.players, lynchOptions);
 
@@ -479,6 +483,9 @@ export class Game {
     if (!troublemaker || troublemaker.hasUsedAbility) return false;
     troublemaker.hasUsedAbility = true;
     this.doubleLynchPending = true;
+    if (this.phase === 'Lynch') {
+      this.lynchAttemptsPlanned = 2;
+    }
     this.pacifistUsed = false;
     return true;
   }

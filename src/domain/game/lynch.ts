@@ -20,6 +20,7 @@ export const SKIP_VOTE = ABSTAIN;
 export type LynchResolution =
   | { outcome: 'Lynched'; playerId: bigint }
   | { outcome: 'PrinceSurvived'; playerId: bigint }
+  | { outcome: 'JudgePardoned'; playerId: bigint; judgeId: bigint }
   | { outcome: 'TannerWinByLynch'; playerId: bigint }
   | { outcome: 'Tied'; tiedPlayerIds: bigint[] }
   | { outcome: 'NoVotes' }
@@ -30,6 +31,9 @@ export interface LynchOptions {
   lynchAttempt: number;
   /** Mirrors `Settings.RandomLynch`: pick one of the tied players at random instead of ending in a tie. */
   randomLynchOnTie?: boolean;
+  /** If Judge exercised Droit de Grâce */
+  judgePardon?: boolean;
+  judgeId?: bigint;
   random?: () => number;
 }
 
@@ -41,6 +45,7 @@ export interface LynchResult {
 /** Clears votes/choices at the start of a fresh voting round (mirrors the top of `LynchCycle`'s loop body). */
 export function resetLynchState(players: readonly Player[]): void {
   for (const p of players) {
+    p.choice = null;
     p.votedBy.clear();
     p.votes = 0;
   }
@@ -56,11 +61,6 @@ export function resolveLynchVotes(players: Player[], options: LynchOptions): Lyn
   const random = options.random ?? Math.random;
 
   // The Clumsy Guy has a 50% chance of fumbling their vote onto a random living player instead
-  // (mirrors the check in HandleReply, applied here at tally time instead of at vote-cast time -
-  // nothing reads `.choice` in between in the original either, so this is behaviorally identical).
-  // `ClumsyCorrectLynchCount` counts a vote as "correct" whenever the one that actually lands is
-  // the one they meant to cast: always on the 50% no-fumble roll, or on a fumble that coincidentally
-  // re-picks their original target (ImNotDrunk).
   for (const voter of alivePlayers(players)) {
     if (voter.role === ROLE_BIT.ClumsyGuy && voter.choice !== null && voter.choice !== ABSTAIN) {
       if (Math.floor(random() * 100) < 50) {
@@ -127,7 +127,11 @@ export function resolveLynchVotes(players: Player[], options: LynchOptions): Lyn
   }
 
   if (lynched && resolution.outcome === 'Lynched') {
-    if (lynched.role === ROLE_BIT.Prince && !lynched.hasUsedAbility) {
+    if (options.judgePardon && options.judgeId) {
+      const judge = players.find((p) => p.id === options.judgeId);
+      if (judge) judge.hasUsedAbility = true;
+      resolution = { outcome: 'JudgePardoned', playerId: lynched.id, judgeId: options.judgeId };
+    } else if (lynched.role === ROLE_BIT.Prince && !lynched.hasUsedAbility) {
       lynched.hasUsedAbility = true;
       resolution = { outcome: 'PrinceSurvived', playerId: lynched.id };
     } else {

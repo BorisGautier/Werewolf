@@ -18,11 +18,13 @@
 import { Bot, GrammyError, InlineKeyboard } from 'grammy';
 import { GameManager } from '../../application/game-manager.js';
 import { Game } from '../../domain/game/game.aggregate.js';
+import type { GamePhase } from '../../domain/game/game-phase.js';
 import { ROLE_BIT, roleName, type Role, type RoleName } from '../../domain/roles/role.js';
 import { WOLF_ROLES } from '../../domain/game/game-balancing.js';
 import { ABSTAIN, SPARK, alivePlayers, type Player } from '../../domain/game/player.js';
 import type { GameEvent } from '../../domain/game/game-event.js';
 import type { Team } from '../../domain/game/team.js';
+import { WEATHER_DETAILS } from '../../domain/game/village-weather.js';
 import { generateGazette, LAST_GAZETTES_BY_CHAT } from '../../domain/gazette/gazette-generator.js';
 import { evaluateGameAchievements, firstLynchVictimId } from '../../domain/achievements/evaluate.js';
 import { ACHIEVEMENTS, type AchievementCode } from '../../domain/achievements/catalog.js';
@@ -32,7 +34,7 @@ import { GameRepository } from '../persistence/game.repository.js';
 import { GroupRepository } from '../persistence/group.repository.js';
 import { GifPackRepository, type GifCategory } from '../persistence/gif-pack.repository.js';
 import { donorBadge, type PlayerRepository } from '../persistence/player.repository.js';
-import type { Translator } from '../i18n/translator.js';
+import { Translator, MissingLocaleStringError } from '../i18n/translator.js';
 import type { Logger } from '../logging/logger.js';
 import { describeEvent } from './messages.js';
 import { LocalGifPack } from './local-gif-pack.js';
@@ -155,13 +157,25 @@ export class GameLoop {
     // The very first night is already entered by GameLobbyManager's game.start() before this loop
     // ever sees the game (so game.phase is already 'Night' the first time runNight() runs) - every
     // subsequent night is entered here, coming from a finished Lynch phase.
-    if (game.phase === 'Lynch') game.startNight();
+    if (game.phase === 'Lynch') {
+      const startEvents = game.startNight();
+      await this.broadcast(game, group, startEvents, 'Night');
+    }
 
     if (!game.nightSkipped) {
       const seconds = this.nightSeconds(game, group);
       await this.send(game.chatId, group.language, 'NightBeginsTimed', game.dayNumber, seconds);
+      if (game.dayNumber === 1) {
+        const weather = WEATHER_DETAILS[game.weather];
+        const isFr = group.language === 'fr';
+        const weatherTitle = isFr ? weather.titleFr : weather.titleEn;
+        const weatherDesc = isFr ? weather.descFr : weather.descEn;
+        const weatherMsg = `${weather.emoji} <b>MÉTÉO DU VILLAGE : ${weatherTitle}</b>\n<i>${weatherDesc}</i>`;
+        await this.sendRaw(game.chatId, weatherMsg);
+      }
       await this.sendGifCategory(game.chatId, group, 'NightStart');
       await this.sendNightMenus(game, group.language);
+      await this.processBotNightActions(game);
       await this.phaseSleep(game.chatId, seconds * 1000);
     }
     if (this.consumeKilled(game.chatId)) return;
@@ -190,6 +204,10 @@ export class GameLoop {
 
       if (actor.role === ROLE_BIT.Arsonist) {
         await this.sendArsonistMenu(actor, game.players, language);
+        continue;
+      }
+      if (actor.role === ROLE_BIT.Archivist) {
+        await this.sendArchivistReport(actor, game.players, game.dayNumber, language);
         continue;
       }
       if (game.dayNumber === 1 && (actor.role === ROLE_BIT.WildChild || actor.role === ROLE_BIT.Doppelganger)) {
@@ -234,6 +252,28 @@ export class GameLoop {
     const dousedCount = alivePlayers(players).filter((p) => p.doused).length;
     if (dousedCount > 0) keyboard.text(this.t.translate(language, 'SparkButton'), 'spark').row();
     await this.sendPm(actor.id, language, 'AskArsonist', keyboard);
+  }
+
+  private async sendArchivistReport(actor: Player, players: readonly Player[], dayNumber: number, language: string): Promise<void> {
+    const alive = alivePlayers(players);
+    const villageCount = alive.filter((p) => p.team === 'Village').length;
+    const wolfCount = alive.filter((p) => p.team === 'Wolf').length;
+    const neutralCount = alive.filter((p) => p.team !== 'Village' && p.team !== 'Wolf').length;
+
+    const reportMsg = language === 'fr'
+      ? `📜 <b>Registres de l'Archiviste (Nuit ${dayNumber}) :</b>\n\n• 👱 <b>Villageois vivants :</b> ${villageCount}\n• 🐺 <b>Loups-Garous vivants :</b> ${wolfCount}\n• 🔮 <b>Rôles Neutres / Solos vivants :</b> ${neutralCount}`
+      : `📜 <b>Archivist Records (Night ${dayNumber}):</b>\n\n• 👱 <b>Living Villagers:</b> ${villageCount}\n• 🐺 <b>Living Werewolves:</b> ${wolfCount}\n• 🔮 <b>Living Neutrals / Solos:</b> ${neutralCount}`;
+
+    await this.sendPmRaw(actor.id, reportMsg);
+  }
+
+  private async sendPmRaw(telegramId: bigint, text: string): Promise<void> {
+    try {
+      await this.bot.api.sendMessage(chatNumber(telegramId), text, { parse_mode: 'HTML' });
+    } catch (err) {
+      if (err instanceof GrammyError) return;
+      throw err;
+    }
   }
 
   private async sendRoleModelMenu(actor: Player, players: readonly Player[], language: string): Promise<void> {
@@ -297,13 +337,54 @@ export class GameLoop {
     const seconds = group.lynchTimerSeconds;
 
     for (let attempt = 1; attempt <= attempts; attempt++) {
-      if (attempt > 1) game.restartLynchVote();
+      if (attempt > 1) {
+        game.restartLynchVote();
+        await this.send(game.chatId, group.language, 'TroubleDoubleLynchSecondVote');
+      }
 
       await this.sendLynchVoteMenu(game, group, seconds);
+      void this.processBotLynchVotes(game);
       await this.phaseSleep(game.chatId, seconds * 1000);
       if (this.consumeKilled(game.chatId)) return;
 
-      const result = game.resolveLynch();
+      let judgePardon = false;
+      let judgeId: bigint | undefined;
+      const judge = game.players.find((p) => !p.isDead && p.role === ROLE_BIT.Judge && !p.hasUsedAbility);
+
+      if (judge) {
+        const maxVotes = Math.max(0, ...game.players.map((p) => p.votes));
+        const tied = game.players.filter((p) => p.votes === maxVotes && maxVotes > 0);
+        if (tied.length === 1 && tied[0]!.id !== judge.id) {
+          const condemned = tied[0]!;
+          judge.choice = null;
+          const pardonKeyboard = new InlineKeyboard()
+            .text(group.language === 'fr' ? '⚖️ Accorder la Grâce' : '⚖️ Grant Pardon', 'judge_pardon')
+            .row()
+            .text(group.language === 'fr' ? '❌ Laisser exécuter' : '❌ Let Execute', 'judge_skip');
+
+          const promptMsg = group.language === 'fr'
+            ? `⚖️ <b>DROIT DE GRÂCE DU JUGE !</b>\n\nLe village vient de condamner <b>${condemned.name}</b> au gibet avec ${condemned.votes} vote(s) !\n\nVoulez-vous exercer votre Droit de Grâce (unique) pour annuler cette exécution ?`
+            : `⚖️ <b>JUDGE'S PARDON!</b>\n\nThe village has condemned <b>${condemned.name}</b> to the gallows with ${condemned.votes} vote(s)!\n\nDo you want to use your unique Right of Pardon to save them?`;
+
+          await this.bot.api.sendMessage(chatNumber(judge.id), promptMsg, {
+            parse_mode: 'HTML',
+            reply_markup: pardonKeyboard,
+          }).catch(() => null);
+
+          if (judge.isBot) {
+            if (Math.random() < 0.35) judge.choice = 1n;
+          } else {
+            await this.phaseSleep(game.chatId, 10000);
+          }
+
+          if (judge.choice === 1n) {
+            judgePardon = true;
+            judgeId = judge.id;
+          }
+        }
+      }
+
+      const result = game.resolveLynch(judgePardon && judgeId !== undefined ? { judgePardon: true, judgeId } : undefined);
       await this.sendSecretLynchSummary(game, group);
       await this.broadcastLynchOutcome(game, group.language, result.resolution);
       await this.broadcast(game, group, result.events, 'Lynch');
@@ -322,7 +403,9 @@ export class GameLoop {
     if (group.pmLynchVote) {
       await this.send(game.chatId, group.language, 'PmLynchVoteStarted');
       for (const actor of alive) {
-        await this.sendPm(actor.id, group.language, 'AskTarget', keyboard);
+        const targetsForActor = alive.filter((p) => p.id !== actor.id);
+        const actorKeyboard = targetKeyboard(targetsForActor, 'vote', group.language, this.t);
+        await this.sendPm(actor.id, group.language, 'AskTarget', actorKeyboard);
       }
     } else {
       await this.bot.api.sendMessage(chatNumber(game.chatId), this.t.translate(group.language, 'AskTarget'), {
@@ -349,6 +432,18 @@ export class GameLoop {
       case 'PrinceSurvived': {
         const prince = resolution.playerId ? findName(game.players, resolution.playerId) : '';
         await this.send(game.chatId, language, 'PrinceSurvivedLynch', prince);
+        return;
+      }
+      case 'JudgePardoned': {
+        const victim = resolution.playerId ? findName(game.players, resolution.playerId) : '';
+        const judgeId = (resolution as any).judgeId;
+        const judgeName = judgeId ? findName(game.players, judgeId) : '';
+        const msg = language === 'fr'
+          ? `⚖️ <b>DROIT DE GRÂCE DU JUGE !</b>\n\n<i>Le Juge <b>${judgeName}</b> a frappé le tribunal de son marteau ! Il exerce son Droit de Grâce et annule l'exécution de <b>${victim}</b> ! Personne ne sera pendu aujourd'hui.</i>`
+          : `⚖️ <b>JUDGE'S PARDON!</b>\n\n<i>Judge <b>${judgeName}</b> strikes the gavel! Exercising the Right of Pardon, the execution of <b>${victim}</b> is cancelled! No one will be lynched today.</i>`;
+        await this.bot.api.sendMessage(chatNumber(game.chatId), msg, { parse_mode: 'HTML' }).catch(() => null);
+        const grp = await this.groups.getOrCreate(game.chatId, null, null);
+        void this.sendGifCategory?.(game.chatId, grp, 'JudgePardon');
         return;
       }
       default:
@@ -570,7 +665,9 @@ export class GameLoop {
    */
   async handleCallback(playerId: bigint, chatId: bigint, data: string): Promise<string | null> {
     const [action, ...rest] = data.split(':');
-    const game = this.games.findByPlayer(playerId) ?? this.games.get(chatId);
+    const expectedPhase: GamePhase | undefined =
+      action === 'vote' ? 'Lynch' : action?.startsWith('nt') || action?.startsWith('dt') ? 'Night' : undefined;
+    const game = this.games.findByPlayer(playerId, expectedPhase) ?? this.games.get(chatId);
     if (!game) return null;
 
     const language = (await this.groups.getOrCreate(game.chatId, null, null)).language;
@@ -689,6 +786,12 @@ export class GameLoop {
       const target = game.players.find((p) => p.id === BigInt(rawTarget));
       if (target) await this.send(game.chatId, group.language, 'PlayerVotedLynch', voter.name, target.name);
     }
+
+    const alive = alivePlayers(game.players);
+    if (alive.length > 0 && alive.every((p) => p.choice !== null) && game.players.some((p) => p.isBot)) {
+      this.skipVote(game.chatId);
+    }
+
     return result;
   }
 
@@ -794,13 +897,24 @@ export class GameLoop {
     }
 
     for (const player of game.players) {
-      if (player.isDead && player.id > 0n && !mutedSet.has(player.id)) {
+      if (player.isDead && !player.isBot && player.id > 0n && !mutedSet.has(player.id)) {
         try {
           await this.bot.api.restrictChatMember(chatNumber(game.chatId), Number(player.id), {
             can_send_messages: false,
           });
           mutedSet.add(player.id);
         } catch (err) {
+          // Always mark player as processed to prevent retrying restrictChatMember on every cycle
+          mutedSet.add(player.id);
+          if (
+            err instanceof GrammyError &&
+            (err.description.includes("can't remove chat owner") ||
+              err.description.includes('PARTICIPANT_ID_INVALID') ||
+              err.description.includes('not enough rights') ||
+              err.description.includes('user is an administrator'))
+          ) {
+            continue;
+          }
           this.logger.warn(
             { err, chatId: game.chatId.toString(), playerId: player.id.toString() },
             'Failed to mute dead player in Telegram group',
@@ -838,6 +952,72 @@ export class GameLoop {
       }
     }
     this.mutedPlayers.delete(chatId);
+  }
+
+  private async processBotNightActions(game: Game): Promise<void> {
+    const aliveBots = alivePlayers(game.players).filter((p) => p.isBot && !p.isDead && p.choice === null);
+    if (aliveBots.length === 0) return;
+
+    for (const botPlayer of aliveBots) {
+      const otherAlive = alivePlayers(game.players).filter((p) => p.id !== botPlayer.id);
+      if (otherAlive.length === 0) continue;
+
+      if (game.dayNumber === 1 && (botPlayer.role === ROLE_BIT.WildChild || botPlayer.role === ROLE_BIT.Doppelganger) && botPlayer.roleModel === null) {
+        const target = otherAlive[Math.floor(Math.random() * otherAlive.length)]!;
+        botPlayer.roleModel = target.id;
+        continue;
+      }
+
+      if (game.dayNumber === 1 && botPlayer.role === ROLE_BIT.Cupid && !botPlayer.hasUsedAbility) {
+        if (otherAlive.length >= 2) {
+          const lover1 = otherAlive[0]!;
+          const lover2 = otherAlive[1]!;
+          lover1.inLove = true;
+          lover2.inLove = true;
+          lover1.loverId = lover2.id;
+          lover2.loverId = lover1.id;
+          botPlayer.hasUsedAbility = true;
+        }
+        continue;
+      }
+
+      if (botPlayer.role === ROLE_BIT.Arsonist) {
+        const doused = game.players.some((p) => p.doused && !p.isDead);
+        if (doused && Math.random() < 0.5) {
+          botPlayer.choice = SPARK;
+        } else {
+          const target = otherAlive[Math.floor(Math.random() * otherAlive.length)]!;
+          botPlayer.choice = target.id;
+        }
+        continue;
+      }
+
+      const target = otherAlive[Math.floor(Math.random() * otherAlive.length)]!;
+      botPlayer.choice = target.id;
+    }
+  }
+
+  private async processBotLynchVotes(game: Game): Promise<void> {
+    const aliveBots = alivePlayers(game.players).filter((p) => p.isBot && !p.isDead && p.choice === null);
+    if (aliveBots.length === 0) return;
+
+    await Promise.all(
+      aliveBots.map(async (botPlayer) => {
+        const delay = Math.floor(Math.random() * 2000) + 500;
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        if (game.phase !== 'Lynch' || botPlayer.isDead || botPlayer.choice !== null) return;
+
+        const otherAlive = alivePlayers(game.players).filter((p) => p.id !== botPlayer.id);
+        const shouldAbstain = Math.random() < 0.1;
+        let rawTarget = 'abstain';
+        if (!shouldAbstain && otherAlive.length > 0) {
+          const target = otherAlive[Math.floor(Math.random() * otherAlive.length)]!;
+          rawTarget = target.id.toString();
+        }
+
+        await this.applyLynchVote(game, botPlayer.id, rawTarget);
+      }),
+    );
   }
 
   async sendGifCategory(chatId: bigint, group: GroupWithConfig, category: GifCategory): Promise<void> {
@@ -923,7 +1103,7 @@ export class GameLoop {
   /** Sends an already-built message verbatim (e.g. `buildEndGameSummary`'s output) instead of translating a key. */
   private async sendRaw(chatId: bigint, text: string): Promise<void> {
     try {
-      await this.bot.api.sendMessage(chatNumber(chatId), text);
+      await this.bot.api.sendMessage(chatNumber(chatId), text, { parse_mode: 'HTML' });
     } catch (err) {
       if (err instanceof GrammyError) return;
       throw err;
@@ -932,7 +1112,17 @@ export class GameLoop {
 
   private async sendPm(telegramId: bigint, language: string, key: string, keyboard: InlineKeyboard): Promise<void> {
     try {
-      await this.bot.api.sendMessage(chatNumber(telegramId), this.t.translate(language, key), { reply_markup: keyboard });
+      let text: string;
+      try {
+        text = this.t.translate(language, key);
+      } catch (err) {
+        if (err instanceof MissingLocaleStringError && key !== 'AskTarget') {
+          text = this.t.translate(language, 'AskTarget');
+        } else {
+          throw err;
+        }
+      }
+      await this.bot.api.sendMessage(chatNumber(telegramId), text, { reply_markup: keyboard });
     } catch (err) {
       if (err instanceof GrammyError) return;
       throw err;
@@ -965,12 +1155,28 @@ const NIGHT_PROMPT_KEY: Partial<Record<RoleName, string>> = {
   Wolf: 'AskWolfPack',
   AlphaWolf: 'AskWolfPack',
   WolfCub: 'AskWolfPack',
+  TrapperWolf: 'AskWolfPack',
+  ChameleonWolf: 'AskWolfPack',
+  ViperWolf: 'AskWolfPack',
+  HowlerWolf: 'AskWolfPack',
+  HypnotistWolf: 'AskWolfPack',
+  BerserkerWolf: 'AskWolfPack',
   Lycan: 'AskWolfPack',
   SerialKiller: 'AskSerialKiller',
   CultistHunter: 'AskCultistHunter',
   Cultist: 'AskCultist',
   Chemist: 'AskChemist',
   Thief: 'AskThief',
+  GraveDigger: 'AskGraveDigger',
+  Augur: 'AskAugur',
+  Watchman: 'AskWatchman',
+  Tracker: 'AskTracker',
+  Priestess: 'AskPriestess',
+  Mimic: 'AskMimic',
+  Archangel: 'AskArchangel',
+  Necromancer: 'AskNecromancer',
+  Reflector: 'AskReflector',
+  Crow: 'AskCrow',
 };
 
 const DAY_PROMPT_KEY: Partial<Record<RoleName, string>> = {
