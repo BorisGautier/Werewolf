@@ -42,7 +42,11 @@ export class AlertService {
     this.lastAlertTime.set(errorKey, now);
 
     const timeStr = new Date().toLocaleString('fr-FR', { timeZone: 'UTC' });
-    const cleanDetails = details.length > 3000 ? details.slice(0, 3000) + '...' : details;
+    const rawDetails = details.length > 3000 ? details.slice(0, 3000) + '...' : details;
+    const cleanDetails = rawDetails
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
 
     const alertMessage =
       `🚨 <b>[WEREWOLF BOT MONITORING ALERT]</b>\n\n` +

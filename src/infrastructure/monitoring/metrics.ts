@@ -471,6 +471,9 @@ export const dbQueryDuration = histogram(
   [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1],
 );
 
+/** Total database automated & manual backups created. */
+export const dbBackupsTotal = counter('werewolf_db_backups_total', 'Total database backups created');
+
 /** Total achievement unlocks, by code. */
 export const achievementUnlocks = counter(
   'werewolf_achievement_unlocks_total',
@@ -606,6 +609,14 @@ export function startMetricsServer(logger: WinstonLogger, port = 9090): void {
     } else {
       res.writeHead(404);
       res.end('Not Found');
+    }
+  });
+
+  server.on('error', (err: any) => {
+    if (err.code === 'EADDRINUSE') {
+      logger.warn({ port }, `Prometheus metrics port ${port} is already in use. Metrics server disabled.`);
+    } else {
+      logger.error({ err }, 'Prometheus metrics server error');
     }
   });
 
