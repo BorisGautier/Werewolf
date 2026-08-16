@@ -128,12 +128,16 @@ jobs:
             # 3. Activer les modules Apache & le VirtualHost
             sudo a2enmod proxy proxy_http headers rewrite ssl || true
             sudo a2ensite epicwolf.borisgauty.com.conf || true
-            sudo systemctl reload apache2 || true
 
-            # 4. Certification SSL Certbot Automatique (si non encore configuré)
+            # 4. Certification SSL Certbot Automatique & Sync SSL (port 443)
             if [ ! -d "/etc/letsencrypt/live/epicwolf.borisgauty.com" ]; then
               sudo certbot --apache -d epicwolf.borisgauty.com --non-interactive --agree-tos -m admin@borisgauty.com --redirect || true
+            else
+              if [ -f "/etc/apache2/sites-available/epicwolf.borisgauty.com-le-ssl.conf" ]; then
+                sudo certbot --apache -d epicwolf.borisgauty.com --non-interactive --reinstall || true
+              fi
             fi
+            sudo systemctl reload apache2 || true
 
             # 5. Activer le Mode Maintenance (suspend les nouvelles parties tout en laissant finir les parties actives)
             echo "🛠️ Activation du Mode Maintenance pour le déploiement..."
