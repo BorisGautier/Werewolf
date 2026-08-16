@@ -178,11 +178,9 @@ jobs:
 
             # 7. Pull de la nouvelle image Docker
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            # 8. Synchronisation prioritaire de la base de données (avant le démarrage de l'app)
-            echo "🗄️ Synchronisation prioritaire des tables et colonnes de la base de données..."
-            docker compose run --rm app npx prisma db push --skip-generate --accept-data-loss || true
+            docker compose pull
 
-            # 9. Redémarrage de tous les services (App, DB, Grafana, Prometheus, Loki)
+            # 8. Redémarrage de tous les services (App, DB, Grafana, Prometheus, Loki)
             echo "🚀 Redémarrage de tous les services..."
             docker compose up -d --remove-orphans
 
