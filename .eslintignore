@@ -1,0 +1,6 @@
+node_modules/
+dist/
+coverage/
+scratch/
+scripts/
+legacy-csharp/
