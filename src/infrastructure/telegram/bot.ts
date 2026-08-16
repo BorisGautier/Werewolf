@@ -1997,8 +1997,7 @@ function registerDonationCommands(bot: Bot, env: Env, deps: BotDependencies): vo
     }
   });
 
-  /** `/adddonation <telegram id> <total stars>` - dev override to set a player's lifetime total
-   * directly (support/testing), same spirit as `/addach`. */
+  /** `/adddonation <telegram id> <total stars>` - dev override to set a player's lifetime total */
   bot.command('adddonation', async (ctx) => {
     if (!ctx.from || !isDev(BigInt(ctx.from.id))) return;
     const words = ((ctx.match as string | undefined) ?? '').trim().split(/\s+/).filter(Boolean);
@@ -2014,41 +2013,48 @@ function registerDonationCommands(bot: Bot, env: Env, deps: BotDependencies): vo
     );
   });
 
-  // Register Telegram Bot Command Menu for Auto-Complete UI
-  void bot.api
-    .setMyCommands([
-      { command: 'startgame', description: '🐺 Lancer une partie classique' },
-      { command: 'botgame', description: '🤖 Partie solo avec 5 bots IA Gemini 2.5' },
-      { command: 'startchaos', description: '🌀 Mode Chaos (rôles chaotiques)' },
-      { command: 'startnormal', description: '🎯 Mode Normal' },
-      { command: 'startbloodbath', description: '🩸 Mode Bain de Sang (massacre rapide)' },
-      { command: 'startdarkmagic', description: '🔮 Mode Magie Noire' },
-      { command: 'startwolfpack', description: '🐺 Mode Meute de Loups' },
-      { command: 'startcursed', description: '🧟 Mode Village Maudit' },
-      { command: 'startinfection', description: '☣️ Mode Infection' },
-      { command: 'startanarchy', description: '⚡ Mode Anarchie' },
-      { command: 'startholywar', description: '⚔️ Mode Sainte Guerre' },
-      { command: 'startassassins', description: '🗡️ Mode Assassins' },
-      { command: 'join', description: '✋ Rejoindre la partie en attente' },
-      { command: 'forcestart', description: '⚡ Lancer la partie sans attendre' },
-      { command: 'flee', description: '🏃 Quitter le lobby avant le démarrage' },
-      { command: 'extend', description: "⏳ Prolonger le temps d'attente du lobby" },
-      { command: 'players', description: '👥 Liste des joueurs vivants & morts' },
-      { command: 'role', description: '🕵️ Consulter son rôle secret en privé' },
-      { command: 'config', description: '⚙️ Configurer les options et rôles du groupe' },
-      { command: 'modes', description: '📘 Consulter le guide des modes de jeu' },
-      { command: 'stats', description: '📊 Voir tes statistiques de jeu' },
-      { command: 'leaderboard', description: '🏆 Classement mondial des joueurs' },
-      { command: 'profile', description: '👤 Voir sa carte de profil et son rang' },
-      { command: 'titles', description: "👑 Choisir et équiper son titre d'honneur" },
-      { command: 'setlang', description: '🌐 Changer la langue du bot (FR / EN)' },
-      { command: 'help', description: "❓ Obtenir de l'aide et les règles" },
-      { command: 'gazette', description: '📜 Lire le journal de la dernière partie' },
-      { command: 'donate', description: "⭐ Faire un don d'Étoiles et devenir Donateur" },
-      { command: 'report', description: '🚨 Signaler un joueur en fin de partie' },
-      { command: 'waitlist', description: '🔔 Recevoir une alerte quand une partie démarre' },
-    ])
-    .catch(() => {
-      // Ignore network errors on startup
-    });
+  // Register Telegram Bot Command Menu for Auto-Complete UI (Scoped & Prioritized)
+  const groupCommands = [
+    { command: 'startgame', description: '🐺 Lancer une partie classique' },
+    { command: 'botgame', description: '🤖 Partie solo avec 5 bots IA Gemini 2.5' },
+    { command: 'join', description: '✋ Rejoindre la partie en attente' },
+    { command: 'forcestart', description: '⚡ Lancer la partie sans attendre' },
+    { command: 'claim', description: '📢 Déclarer publiquement son rôle (ex: /claim Voyante)' },
+    { command: 'claims', description: '📜 Récapitulatif de tous les claims de la partie' },
+    { command: 'players', description: '👥 Liste des joueurs vivants & morts' },
+    { command: 'leaderboard', description: '🏆 Classement mondial des meilleurs joueurs' },
+    { command: 'profile', description: '👤 Voir sa carte de profil et son rang' },
+    { command: 'titles', description: "👑 Choisir et équiper son titre d'honneur" },
+    { command: 'setlang', description: '🌐 Changer la langue du bot (FR / EN)' },
+    { command: 'config', description: '⚙️ Configurer les options et rôles du groupe' },
+    { command: 'modes', description: '📘 Consulter le guide des modes de jeu' },
+    { command: 'stats', description: '📊 Voir tes statistiques de jeu' },
+    { command: 'startchaos', description: '🌀 Mode Chaos (rôles chaotiques)' },
+    { command: 'flee', description: '🏃 Quitter le lobby avant le démarrage' },
+    { command: 'extend', description: "⏳ Prolonger le temps d'attente du lobby" },
+    { command: 'help', description: "❓ Obtenir de l'aide et les règles" },
+    { command: 'gazette', description: '📜 Lire le journal de la dernière partie' },
+    { command: 'report', description: '🚨 Signaler un joueur en fin de partie' },
+    { command: 'waitlist', description: '🔔 Recevoir une alerte quand une partie démarre' },
+  ];
+
+  const privateCommands = [
+    { command: 'start', description: '🚀 Démarrer le bot' },
+    { command: 'role', description: '🕵️ Consulter son rôle secret en privé' },
+    { command: 'profile', description: '👤 Voir sa carte de profil et son rang' },
+    { command: 'titles', description: "👑 Choisir et équiper son titre d'honneur" },
+    { command: 'leaderboard', description: '🏆 Classement mondial des meilleurs joueurs' },
+    { command: 'stats', description: '📊 Voir tes statistiques de jeu' },
+    { command: 'setlang', description: '🌐 Changer la langue du bot (FR / EN)' },
+    { command: 'help', description: "❓ Obtenir de l'aide et les règles" },
+    { command: 'donate', description: "⭐ Faire un don d'Étoiles et devenir Donateur" },
+  ];
+
+  void Promise.all([
+    bot.api.setMyCommands(groupCommands, { scope: { type: 'all_group_chats' } }),
+    bot.api.setMyCommands(privateCommands, { scope: { type: 'all_private_chats' } }),
+    bot.api.setMyCommands(groupCommands),
+  ]).catch(() => {
+    // Ignore network errors on startup
+  });
 }
