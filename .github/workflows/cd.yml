@@ -178,11 +178,9 @@ jobs:
 
             # 7. Pull de la nouvelle image Docker
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            docker compose pull app
-
-            # 8. Relancer le service app
-            echo "🚀 Redémarrage de l'application..."
-            docker compose up -d --remove-orphans app db
+            docker compose pull
+            echo "🚀 Redémarrage de tous les services (App, DB, Grafana, Prometheus, Loki)..."
+            docker compose up -d --remove-orphans
 
             # 9. Appliquer les migrations de base de données
             docker compose exec -T app npm run prisma:deploy || true
