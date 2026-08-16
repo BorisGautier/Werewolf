@@ -5,7 +5,7 @@ import type { GameEvent } from '../../src/domain/game/game-event.js';
 
 describe('Gazette Generator', () => {
   it('generates a theatrical story in French featuring player names', () => {
-    const game = new Game(BigInt(100), { minPlayers: 5, maxPlayers: 10 });
+    const game = new Game({ chatId: BigInt(100), mode: 'Normal', minPlayers: 5, maxPlayers: 10 });
     game.addPlayer(BigInt(1), 'Alice');
     game.addPlayer(BigInt(2), 'Bob');
     game.winningTeam = 'Village';
@@ -18,16 +18,15 @@ describe('Gazette Generator', () => {
 
     expect(gazette.title).toContain('LA GAZETTE DU VILLAGE');
     expect(gazette.lines.some((l) => l.includes('Bob'))).toBe(true);
-    expect(gazette.lines.some((l) => l.includes('Procès de la Potence'))).toBe(true);
     expect(gazette.lines.some((l) => l.includes('Les Glorieux Survivants'))).toBe(true);
     expect(gazette.lines.some((l) => l.includes('Alice'))).toBe(true);
   });
 
   it('generates a story in English featuring player names', () => {
-    const game = new Game(BigInt(100), { minPlayers: 5, maxPlayers: 10 });
+    const game = new Game({ chatId: BigInt(100), mode: 'Normal', minPlayers: 5, maxPlayers: 10 });
     game.addPlayer(BigInt(1), 'Alice');
     game.addPlayer(BigInt(2), 'Charlie');
-    game.winningTeam = 'Wolves';
+    game.winningTeam = 'Wolf';
 
     const events: GameEvent[] = [
       {

@@ -52,7 +52,7 @@ describe('Tournament Mode System', () => {
 
     const list = await repo.listTournaments();
     expect(list.length).toBe(1);
-    expect(list[0].id).toBe(1);
+    expect(list[0]!.id).toBe(1);
 
     const team = await repo.createTeam('Les Alpha Wolves', 'TAG9999', 12345n);
     expect(team.name).toBe('Les Alpha Wolves');
@@ -60,8 +60,8 @@ describe('Tournament Mode System', () => {
 
     await repo.updateTournamentStatus(1, 'IN_PROGRESS', 1);
     const updatedList = await repo.listTournaments();
-    expect(updatedList[0].status).toBe('IN_PROGRESS');
-    expect(updatedList[0].currentRound).toBe(1);
+    expect(updatedList[0]!.status).toBe('IN_PROGRESS');
+    expect(updatedList[0]!.currentRound).toBe(1);
   });
 
   it('handles Telegram /tournoi command rendering', async () => {

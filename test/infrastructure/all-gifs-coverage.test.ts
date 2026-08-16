@@ -46,7 +46,7 @@ describe('67 GIF Categories & Media Use Cases Audit', () => {
 
     for (const category of GIF_CATEGORIES) {
       try {
-        await gameLoop.sendGifForEvent(123456n, 12345n, category);
+        await (gameLoop as any).sendGifForEvent({ chatTelegramId: 123456n } as any, category);
         testedCategories.push(category);
       } catch (err) {
         // If local file is missing, sendGifForEvent handles fallback without crashing
@@ -68,7 +68,7 @@ describe('67 GIF Categories & Media Use Cases Audit', () => {
       VILLAGER_LYNCH: 'VillagerDie',
     };
 
-    for (const [killMethod, category] of Object.entries(killMethodGifMap)) {
+    for (const category of Object.values(killMethodGifMap)) {
       expect(GIF_CATEGORIES).toContain(category);
     }
   });
@@ -86,7 +86,7 @@ describe('67 GIF Categories & Media Use Cases Audit', () => {
       NO_WINNER: 'NoWinner',
     };
 
-    for (const [winTeam, category] of Object.entries(winCategoryMap)) {
+    for (const category of Object.values(winCategoryMap)) {
       expect(GIF_CATEGORIES).toContain(category);
     }
   });

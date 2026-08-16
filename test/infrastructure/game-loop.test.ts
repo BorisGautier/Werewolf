@@ -69,7 +69,7 @@ function fakeGroup(overrides: Partial<GroupWithConfig> = {}): GroupWithConfig {
     updatedAt: new Date(),
     disabledRoles: [],
     ...overrides,
-  };
+  } as any as GroupWithConfig;
 }
 
 function createHarness(

@@ -8,7 +8,7 @@ describe('modes-guide', () => {
     registerModesGuideCommands(bot);
 
     const commandCall = vi.fn();
-    bot.command = vi.fn((name, handler) => {
+    (bot as any).command = vi.fn((name, handler) => {
       commandCall(name, handler);
       return bot;
     });

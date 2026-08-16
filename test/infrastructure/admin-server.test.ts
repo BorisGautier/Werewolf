@@ -31,7 +31,7 @@ describe('AdminServer REST API & Dashboard', () => {
       body: JSON.stringify({ password: 'wrongpassword' }),
     });
     expect(res.status).toBe(401);
-    const body = await res.json();
+    const body = (await res.json()) as any;
     expect(body.success).toBe(false);
   });
 
@@ -42,7 +42,7 @@ describe('AdminServer REST API & Dashboard', () => {
       body: JSON.stringify({ password: 'test-password' }),
     });
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as any;
     expect(body.success).toBe(true);
     expect(body.token).toBeTruthy();
   });
@@ -58,7 +58,7 @@ describe('AdminServer REST API & Dashboard', () => {
       headers: { Authorization: `Bearer ${token}` },
     });
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as any;
     expect(body.success).toBe(true);
     expect(body.stats.activeGames).toBeDefined();
     expect(body.stats.uptimeSeconds).toBeGreaterThanOrEqual(0);
@@ -70,7 +70,7 @@ describe('AdminServer REST API & Dashboard', () => {
       headers: { Authorization: `Bearer ${token}` },
     });
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as any;
     expect(body.success).toBe(true);
     expect(Array.isArray(body.games)).toBe(true);
   });
@@ -81,7 +81,7 @@ describe('AdminServer REST API & Dashboard', () => {
       headers: { Authorization: `Bearer ${token}` },
     });
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as any;
     expect(body.success).toBe(true);
     expect(Array.isArray(body.backups)).toBe(true);
   });
