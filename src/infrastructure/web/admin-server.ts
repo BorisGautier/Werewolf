@@ -243,12 +243,23 @@ export class AdminServer {
   }
 
   private async handleGetStats(res: ServerResponse): Promise<void> {
-    const activeGamesCount = this.gameManager ? this.gameManager.size : 0;
-    const totalPlayers = this.prisma ? await this.prisma.player.count() : 0;
-    const totalGroups = this.prisma ? await this.prisma.group.count() : 0;
-    const pendingGroups = this.prisma
-      ? await this.prisma.group.count({ where: { isApproved: false } })
-      : 0;
+    let activeGamesCount = 0;
+    let totalPlayers = 0;
+    let totalGroups = 0;
+    let pendingGroups = 0;
+
+    try {
+      activeGamesCount = this.gameManager ? this.gameManager.size : 0;
+      if (this.prisma) {
+        totalPlayers = await this.prisma.player.count().catch(() => 0);
+        totalGroups = await this.prisma.group.count().catch(() => 0);
+        pendingGroups = await this.prisma.group
+          .count({ where: { isApproved: false } })
+          .catch(() => 0);
+      }
+    } catch (err) {
+      this.logger?.warn({ err }, '[AdminServer] Warning fetching stats metrics');
+    }
 
     this.sendJson(res, 200, {
       success: true,
@@ -811,7 +822,7 @@ export class AdminServer {
 
       if (tab === 'overview') {
         const data = await apiFetch('/api/admin/stats');
-        const s = data.stats;
+        const s = (data && data.stats) ? data.stats : { activeGames: 0, totalPlayers: 0, totalGroups: 0, pendingGroups: 0, uptimeSeconds: 0 };
         main.innerHTML = \`
           <div class="page-header"><h1 class="page-title">📊 Vue d'Ensemble du Bot</h1></div>
           <div class="stats-grid">
