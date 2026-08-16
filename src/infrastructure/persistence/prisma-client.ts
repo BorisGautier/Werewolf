@@ -5,7 +5,7 @@ let client: PrismaClient | undefined;
 /** Self-healing schema migration check running raw SQL DDL to guarantee 100% tables & columns in prod */
 export async function ensureSchemaColumns(prisma: PrismaClient): Promise<void> {
   const ddlStatements = [
-    // 1. Players table
+    // 1. Players table (Parent)
     `CREATE TABLE IF NOT EXISTS "players" (
       "id" SERIAL PRIMARY KEY,
       "telegramId" BIGINT UNIQUE NOT NULL,
@@ -32,7 +32,7 @@ export async function ensureSchemaColumns(prisma: PrismaClient): Promise<void> {
       "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
     );`,
 
-    // 2. Groups table
+    // 2. Groups table (Parent)
     `CREATE TABLE IF NOT EXISTS "groups" (
       "id" SERIAL PRIMARY KEY,
       "telegramId" BIGINT UNIQUE NOT NULL,
@@ -84,9 +84,10 @@ export async function ensureSchemaColumns(prisma: PrismaClient): Promise<void> {
       "telegramId" BIGINT NOT NULL,
       "username" TEXT,
       "displayName" TEXT,
-      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      CONSTRAINT "group_members_groupId_telegramId_key" UNIQUE ("groupId", "telegramId")
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
     );`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "group_members_groupId_telegramId_key" ON "group_members"("groupId", "telegramId");`,
+    `CREATE INDEX IF NOT EXISTS "group_members_groupId_idx" ON "group_members"("groupId");`,
 
     // 4. Custom Gif Packs
     `CREATE TABLE IF NOT EXISTS "custom_gif_packs" (
@@ -118,9 +119,9 @@ export async function ensureSchemaColumns(prisma: PrismaClient): Promise<void> {
     `CREATE TABLE IF NOT EXISTS "group_disabled_roles" (
       "id" SERIAL PRIMARY KEY,
       "groupId" INTEGER NOT NULL,
-      "role" TEXT NOT NULL,
-      CONSTRAINT "group_disabled_roles_groupId_role_key" UNIQUE ("groupId", "role")
+      "role" TEXT NOT NULL
     );`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "group_disabled_roles_groupId_role_key" ON "group_disabled_roles"("groupId", "role");`,
 
     // 6. Games table
     `CREATE TABLE IF NOT EXISTS "games" (
@@ -168,16 +169,15 @@ export async function ensureSchemaColumns(prisma: PrismaClient): Promise<void> {
       "id" SERIAL PRIMARY KEY,
       "playerId" INTEGER NOT NULL,
       "achievementCode" TEXT NOT NULL,
-      "unlockedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      CONSTRAINT "player_achievements_playerId_achievementCode_key" UNIQUE ("playerId", "achievementCode")
+      "unlockedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
     );`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "player_achievements_playerId_achievementCode_key" ON "player_achievements"("playerId", "achievementCode");`,
 
     // 11. Admin Users table
     `CREATE TABLE IF NOT EXISTS "admin_users" (
       "id" SERIAL PRIMARY KEY,
       "telegramId" BIGINT NOT NULL,
-      "role" TEXT NOT NULL,
-      CONSTRAINT "admin_users_telegramId_role_key" UNIQUE ("telegramId", "role")
+      "role" TEXT NOT NULL
     );`,
 
     // 12. Global Bans table
@@ -195,9 +195,9 @@ export async function ensureSchemaColumns(prisma: PrismaClient): Promise<void> {
     `CREATE TABLE IF NOT EXISTS "notify_games" (
       "id" SERIAL PRIMARY KEY,
       "userId" BIGINT NOT NULL,
-      "groupId" BIGINT NOT NULL,
-      CONSTRAINT "notify_games_userId_groupId_key" UNIQUE ("userId", "groupId")
+      "groupId" BIGINT NOT NULL
     );`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "notify_games_userId_groupId_key" ON "notify_games"("userId", "groupId");`,
 
     // 14. Daily Stats table
     `CREATE TABLE IF NOT EXISTS "daily_stats" (
@@ -205,8 +205,7 @@ export async function ensureSchemaColumns(prisma: PrismaClient): Promise<void> {
       "date" DATE NOT NULL,
       "groupId" INTEGER,
       "gamesPlayed" INTEGER NOT NULL DEFAULT 0,
-      "playersSeen" INTEGER NOT NULL DEFAULT 0,
-      CONSTRAINT "daily_stats_date_groupId_key" UNIQUE ("date", "groupId")
+      "playersSeen" INTEGER NOT NULL DEFAULT 0
     );`,
 
     // 15. Player Reports table
@@ -253,8 +252,7 @@ export async function ensureSchemaColumns(prisma: PrismaClient): Promise<void> {
       "playerId" BIGINT NOT NULL,
       "isCaptain" BOOLEAN NOT NULL DEFAULT false,
       "pointsContributed" INTEGER NOT NULL DEFAULT 0,
-      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      CONSTRAINT "tournament_team_members_teamId_playerId_key" UNIQUE ("teamId", "playerId")
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
     );`,
 
     // 19. Tournament Rounds table
@@ -286,8 +284,11 @@ export async function ensureSchemaColumns(prisma: PrismaClient): Promise<void> {
   for (const statement of ddlStatements) {
     try {
       await prisma.$executeRawUnsafe(statement);
-    } catch {
-      // Ignore if table or column already exists
+    } catch (err) {
+      console.warn(
+        `[ensureSchemaColumns] Notice on statement (${statement.slice(0, 40)}...):`,
+        err,
+      );
     }
   }
 }
