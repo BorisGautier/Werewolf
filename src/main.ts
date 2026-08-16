@@ -67,8 +67,8 @@ async function main(): Promise<void> {
   await achievementRepository.seed();
   logger.info('Achievement catalog seeded successfully');
 
-  // ── Bot initialization ──────────────────────────────────────────────────────
-  logger.info('Initializing Telegram bot...');
+  // ── Bot creation ────────────────────────────────────────────────────────────
+  logger.info('Creating Telegram bot...');
   const gameManager = new GameManager();
   const maintenance = { on: false };
   const bot = createBot(env, logger, {
@@ -84,19 +84,27 @@ async function main(): Promise<void> {
     prisma,
     maintenance,
   });
-  await bot.init();
-  logger.info(
-    {
-      username: bot.botInfo.username,
-      id: bot.botInfo.id,
-      firstName: bot.botInfo.first_name,
-    },
-    'Bot initialized successfully',
-  );
 
   // ── Admin Web Dashboard Server ──────────────────────────────────────────────
   const adminServer = new AdminServer({ prisma, gameManager, logger, bot, maintenance });
   await adminServer.start();
+
+  // ── Bot initialization ──────────────────────────────────────────────────────
+  logger.info('Initializing Telegram bot...');
+  try {
+    await bot.init();
+    logger.info(
+      {
+        username: bot.botInfo.username,
+        id: bot.botInfo.id,
+        firstName: bot.botInfo.first_name,
+      },
+      'Bot initialized successfully',
+    );
+  } catch (err) {
+    logger.error({ err }, 'Failed to initialize Telegram bot (check BOT_TOKEN or network)');
+    throw err;
+  }
 
   // ── Error monitoring ────────────────────────────────────────────────────────
   const alertService = new AlertService(bot, env, logger);
