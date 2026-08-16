@@ -783,7 +783,16 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
       'startassassins',
     ],
     async (ctx) => {
-      if (!ctx.chat || ctx.chat.type === 'private' || !ctx.from) return;
+      if (!ctx.chat || !ctx.from) return;
+      if (ctx.chat.type === 'private') {
+        const lang = ctx.from.language_code === 'fr' ? 'fr' : 'en';
+        const msg =
+          lang === 'fr'
+            ? "⚠️ <b>Partie en Groupe Nécessaire</b>\n\nLes parties de Loup-Garou se jouent dans un <b>groupe Telegram</b> !\n1. Ajoutez le bot à votre groupe.\n2. Donnez-lui la permission d'envoyer des messages (ou mettez-le administrateur).\n3. Tapez <code>/startgame</code> (ou <code>/botgame</code> pour jouer avec des IA) dans le groupe !"
+            : '⚠️ <b>Group Play Required</b>\n\nWerewolf games must be played inside a <b>Telegram Group</b>!\n1. Add the bot to your Telegram group.\n2. Ensure the bot can send messages.\n3. Type <code>/startgame</code> (or <code>/botgame</code> for AI bots) in the group!';
+        await ctx.reply(msg, { parse_mode: 'HTML' });
+        return;
+      }
       if (maintenance.on) {
         await ctx.reply(
           'Sorry, we are about to start maintenance.  Please check @greywolfdev for more information.',
