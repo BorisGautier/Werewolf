@@ -36,7 +36,7 @@ COPY assets ./assets
 COPY package.json ./
 COPY docker-entrypoint.sh ./
 
-EXPOSE 9090
+EXPOSE 9090 4000
 
 USER werewolf
 

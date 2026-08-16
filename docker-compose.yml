@@ -51,6 +51,8 @@ services:
       DEV_USER_IDS: ${DEV_USER_IDS:-}
       ERROR_CHAT_ID: ${ERROR_CHAT_ID:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      PORT: ${PORT:-4000}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
       SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
       MAILGUN_API_KEY: ${MAILGUN_API_KEY:-}
       MAILGUN_DOMAIN: ${MAILGUN_DOMAIN:-}
@@ -58,6 +60,7 @@ services:
       LOKI_HOST: http://loki:3100
     ports:
       - "9090:9090"
+      - "4000:4000"
     deploy:
       resources:
         limits:

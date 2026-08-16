@@ -73,6 +73,7 @@ async function main(): Promise<void> {
     notifyGameRepository: new NotifyGameRepository(prisma),
     achievementRepository,
     gifPackRepository: new GifPackRepository(prisma),
+    prisma,
   });
   await bot.init();
   logger.info(

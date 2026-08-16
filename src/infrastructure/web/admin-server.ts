@@ -7,6 +7,7 @@ import type { GameManager } from '../../application/game-manager.js';
 import type { Logger } from '../logging/logger.js';
 import { AdminAuthManager } from './admin-auth.js';
 import { DatabaseBackupManager } from '../persistence/db-backup.js';
+import { TournamentRepository } from '../persistence/tournament.repository.js';
 
 export interface AdminServerDependencies {
   port?: number;
@@ -16,6 +17,7 @@ export interface AdminServerDependencies {
   authManager?: AdminAuthManager;
   backupManager?: DatabaseBackupManager;
   bot?: Bot;
+  tournamentRepository?: TournamentRepository;
 }
 
 export class AdminServer {
@@ -27,6 +29,7 @@ export class AdminServer {
   private authManager: AdminAuthManager;
   private backupManager: DatabaseBackupManager;
   private bot?: Bot | undefined;
+  private tournamentRepository?: TournamentRepository | undefined;
 
   constructor(deps: AdminServerDependencies = {}) {
     this.port = deps.port ?? (process.env.ADMIN_PORT ? parseInt(process.env.ADMIN_PORT, 10) : 4000);
@@ -36,6 +39,7 @@ export class AdminServer {
     this.authManager = deps.authManager ?? new AdminAuthManager();
     this.backupManager = deps.backupManager ?? new DatabaseBackupManager(deps.logger ? { logger: deps.logger } : undefined);
     this.bot = deps.bot;
+    this.tournamentRepository = deps.tournamentRepository ?? (deps.prisma ? new TournamentRepository(deps.prisma) : undefined);
   }
 
   /** Starts the Admin HTTP Server */
@@ -156,6 +160,16 @@ export class AdminServer {
         await this.handleBroadcast(res, body);
       } else if (pathname === '/api/admin/logs' && req.method === 'GET') {
         this.handleGetLogs(res);
+      } else if (pathname === '/api/admin/tournaments' && req.method === 'GET') {
+        await this.handleGetTournaments(res);
+      } else if (pathname === '/api/admin/tournaments/create' && req.method === 'POST') {
+        const body = await this.readJsonBody(req);
+        await this.handleCreateTournament(res, body);
+      } else if (pathname.startsWith('/api/admin/tournaments/') && pathname.endsWith('/status') && req.method === 'POST') {
+        const idStr = pathname.split('/')[4] ?? '0';
+        const id = parseInt(idStr, 10);
+        const body = await this.readJsonBody(req);
+        await this.handleUpdateTournamentStatus(res, id, body);
       } else {
         this.sendJson(res, 404, { success: false, error: 'Endpoint not found' });
       }
@@ -342,6 +356,40 @@ export class AdminServer {
     });
 
     this.sendJson(res, 200, { success: true, chatId: chatIdStr, isApproved: approve });
+  }
+
+  private async handleGetTournaments(res: ServerResponse): Promise<void> {
+    if (!this.tournamentRepository) {
+      this.sendJson(res, 200, { success: true, tournaments: [] });
+      return;
+    }
+    const tournaments = await this.tournamentRepository.listTournaments();
+    this.sendJson(res, 200, { success: true, tournaments });
+  }
+
+  private async handleCreateTournament(res: ServerResponse, body: Record<string, unknown>): Promise<void> {
+    if (!this.tournamentRepository) {
+      this.sendJson(res, 400, { success: false, error: 'Tournament repository not available' });
+      return;
+    }
+    const name = typeof body.name === 'string' && body.name.trim() ? body.name.trim() : 'Grand Tournoi Loup-Garou';
+    const maxTeams = typeof body.maxTeams === 'number' ? body.maxTeams : 4;
+    const teamSize = typeof body.teamSize === 'number' ? body.teamSize : 4;
+    const totalRounds = typeof body.totalRounds === 'number' ? body.totalRounds : 5;
+
+    const tournament = await this.tournamentRepository.createTournament(name, maxTeams, teamSize, totalRounds);
+    this.sendJson(res, 200, { success: true, tournament });
+  }
+
+  private async handleUpdateTournamentStatus(res: ServerResponse, id: number, body: Record<string, unknown>): Promise<void> {
+    if (!this.tournamentRepository) {
+      this.sendJson(res, 400, { success: false, error: 'Tournament repository not available' });
+      return;
+    }
+    const status = body.status as any;
+    const currentRound = typeof body.currentRound === 'number' ? body.currentRound : undefined;
+    await this.tournamentRepository.updateTournamentStatus(id, status, currentRound);
+    this.sendJson(res, 200, { success: true, message: `Statut du tournoi #${id} mis à jour` });
   }
 
   private async handleGetBackups(res: ServerResponse): Promise<void> {
@@ -626,6 +674,7 @@ export class AdminServer {
             <button class="nav-btn" id="nav-games" onclick="loadTab('games')"><i class="fa-solid fa-gamepad"></i> Parties en Direct</button>
             <button class="nav-btn" id="nav-players" onclick="loadTab('players')"><i class="fa-solid fa-users"></i> Joueurs & Ban</button>
             <button class="nav-btn" id="nav-groups" onclick="loadTab('groups')"><i class="fa-solid fa-building-user"></i> Groupes Telegram</button>
+            <button class="nav-btn" id="nav-tournaments" onclick="loadTab('tournaments')"><i class="fa-solid fa-trophy"></i> Tournois & Championnats</button>
             <button class="nav-btn" id="nav-backups" onclick="loadTab('backups')"><i class="fa-solid fa-database"></i> Sauvegardes 15J</button>
             <button class="nav-btn" id="nav-broadcast" onclick="loadTab('broadcast')"><i class="fa-solid fa-bullhorn"></i> Annonce Globale</button>
             <button class="nav-btn" id="nav-logs" onclick="loadTab('logs')"><i class="fa-solid fa-terminal"></i> Logs Winston</button>
@@ -825,6 +874,49 @@ export class AdminServer {
           </div>
           <div class="log-box">\${data.logs || 'Aucun log enregistré'}</div>
         \`;
+      } else if (tab === 'tournaments') {
+        const data = await apiFetch('/api/admin/tournaments');
+        let tourneyCards = (data.tournaments || []).map(t => \`
+          <div class="stat-card" style="flex-direction:column; align-items:flex-start; gap:12px;">
+            <div style="display:flex; justify-content:space-between; width:100%; align-items:center;">
+              <h3 style="font-size:1.1rem; font-weight:800;"><i class="fa-solid fa-trophy" style="color:var(--accent-amber);"></i> \${t.name}</h3>
+              <span class="badge \${t.status === 'COMPLETED' ? 'badge-emerald' : t.status === 'IN_PROGRESS' ? 'badge-purple' : 'badge-amber'}">\${t.status}</span>
+            </div>
+            <p style="font-size:0.85rem; color:var(--text-muted);">
+              <strong>Format :</strong> \${t.maxTeams} Équipes | <strong>Taille :</strong> \${t.teamSize} Joueurs/Équipe | <strong>Manches :</strong> \${t.currentRound} / \${t.totalRounds}
+            </p>
+            <div style="display:flex; gap:8px; width:100%; margin-top:8px;">
+              \${t.status === 'REGISTRATION' ? \`<button class="btn btn-primary" onclick="updateTournamentStatus(\${t.id}, 'IN_PROGRESS', 1)"><i class="fa-solid fa-play"></i> Démarrer Manche 1</button>\` : ''}
+              \${t.status === 'IN_PROGRESS' ? \`<button class="btn btn-secondary" onclick="updateTournamentStatus(\${t.id}, 'IN_PROGRESS', \${t.currentRound + 1})"><i class="fa-solid fa-forward"></i> Manche Suivante (\${t.currentRound + 1}/\${t.totalRounds})</button><button class="btn btn-danger" onclick="updateTournamentStatus(\${t.id}, 'COMPLETED', \${t.currentRound})"><i class="fa-solid fa-flag-checkered"></i> Clôturer</button>\` : ''}
+            </div>
+          </div>
+        \`).join('');
+
+        main.innerHTML = \`
+          <div class="page-header">
+            <h1 class="page-title">🏆 Gestionnaire des Tournois & Championnats</h1>
+          </div>
+          <div class="table-container" style="padding:24px; margin-bottom:24px;">
+            <h3 style="margin-bottom:16px;"><i class="fa-solid fa-plus-circle"></i> Créer un Nouveau Tournoi Officiel</h3>
+            <div style="display:flex; gap:16px; flex-wrap:wrap;">
+              <input type="text" id="tourney-name" class="input-field" style="flex:2; margin-bottom:0;" placeholder="Nom du Tournoi (ex: Grand Championnat d'Été 2026)">
+              <select id="tourney-teams" class="input-field" style="flex:1; margin-bottom:0;">
+                <option value="4">4 Équipes (16 Joueurs)</option>
+                <option value="8">8 Équipes (32 Joueurs)</option>
+              </select>
+              <select id="tourney-rounds" class="input-field" style="flex:1; margin-bottom:0;">
+                <option value="3">3 Manches</option>
+                <option value="5" selected>5 Manches</option>
+                <option value="10">10 Manches</option>
+              </select>
+              <button class="btn btn-primary" onclick="createTournamentForm()"><i class="fa-solid fa-check"></i> Créer le Tournoi</button>
+            </div>
+          </div>
+          <h3 style="margin-bottom:16px;"><i class="fa-solid fa-list-ol"></i> Tournois Actifs & Historique</h3>
+          <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap:20px;">
+            \${tourneyCards || '<div class="table-container" style="padding:30px; text-align:center; color:var(--text-muted); grid-column:1/-1;">Aucun tournoi créé pour le moment. Utilisez le formulaire ci-dessus pour lancer votre premier tournoi officiel !</div>'}
+          </div>
+        \`;
       }
     }
 
@@ -925,6 +1017,48 @@ export class AdminServer {
       });
       showToast(approve ? 'Groupe approuvé avec succès !' : 'Approbation du groupe révoquée');
       loadTab('groups');
+    }
+
+    async function createTournamentForm() {
+      const input = document.getElementById('tourney-name');
+      const name = input ? input.value : '';
+      const teamsEl = document.getElementById('tourney-teams');
+      const maxTeams = teamsEl ? parseInt(teamsEl.value, 10) : 4;
+      const roundsEl = document.getElementById('tourney-rounds');
+      const totalRounds = roundsEl ? parseInt(roundsEl.value, 10) : 5;
+      try {
+        const data = await apiFetch('/api/admin/tournaments/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, maxTeams, totalRounds })
+        });
+        if (data.success) {
+          showToast('Tournoi créé avec succès !');
+          loadTab('tournaments');
+        } else {
+          showToast(data.error || 'Erreur lors de la création', 'error');
+        }
+      } catch (e) {
+        showToast('Erreur serveur', 'error');
+      }
+    }
+
+    async function updateTournamentStatus(id, status, round) {
+      try {
+        const data = await apiFetch('/api/admin/tournaments/' + id + '/status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status, currentRound: round })
+        });
+        if (data.success) {
+          showToast(data.message);
+          loadTab('tournaments');
+        } else {
+          showToast(data.error || 'Erreur', 'error');
+        }
+      } catch (e) {
+        showToast('Erreur', 'error');
+      }
     }
 
     async function createBackup() {
