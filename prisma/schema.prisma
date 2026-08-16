@@ -255,7 +255,7 @@ model Group {
   /// `/leavegroup`, re-inviting the bot doesn't undo this.
   banned       Boolean  @default(false)
   /// Platform admin approval: when true, games can be played in this Telegram group.
-  isApproved   Boolean  @default(false)
+  isApproved   Boolean  @default(true)
 
   /// Which approved gif pack (if any) this group broadcasts with. Optional even when the owner
   /// has other approved packs elsewhere - a group only uses one it explicitly opted into.

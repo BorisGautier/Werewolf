@@ -277,7 +277,7 @@ export async function ensureSchemaColumns(prisma: PrismaClient): Promise<void> {
 
     'ALTER TABLE "groups" ADD COLUMN IF NOT EXISTS "pmLynchVote" BOOLEAN NOT NULL DEFAULT true;',
     'ALTER TABLE "groups" ADD COLUMN IF NOT EXISTS "tagAllOnStart" BOOLEAN NOT NULL DEFAULT false;',
-    'ALTER TABLE "groups" ADD COLUMN IF NOT EXISTS "isApproved" BOOLEAN NOT NULL DEFAULT false;',
+    'ALTER TABLE "groups" ADD COLUMN IF NOT EXISTS "isApproved" BOOLEAN NOT NULL DEFAULT true;',
     'ALTER TABLE "groups" ADD COLUMN IF NOT EXISTS "muteDead" BOOLEAN NOT NULL DEFAULT true;',
   ];
 
