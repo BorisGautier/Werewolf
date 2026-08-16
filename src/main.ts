@@ -13,7 +13,11 @@ import { GroupRepository } from './infrastructure/persistence/group.repository.j
 import { NotifyGameRepository } from './infrastructure/persistence/notify-game.repository.js';
 import { PlayerRepository } from './infrastructure/persistence/player.repository.js';
 import { createBot } from './infrastructure/telegram/bot.js';
-import { disconnectPrisma, getPrismaClient } from './infrastructure/persistence/prisma-client.js';
+import {
+  disconnectPrisma,
+  ensureSchemaColumns,
+  getPrismaClient,
+} from './infrastructure/persistence/prisma-client.js';
 import { startCronJobs } from './infrastructure/cron/scheduler.js';
 import { AlertService } from './infrastructure/monitoring/alert-service.js';
 import {
@@ -46,9 +50,10 @@ async function main(): Promise<void> {
   const prisma = getPrismaClient();
   try {
     await prisma.$connect();
+    await ensureSchemaColumns(prisma);
     logger.info(
       { databaseUrl: env.databaseUrl.replace(/:[^:@]+@/, ':***@') },
-      'Connected to database successfully',
+      'Connected to database & ensured schema columns successfully',
     );
   } catch (err) {
     logger.error({ err }, 'Failed to connect to database — aborting startup');
