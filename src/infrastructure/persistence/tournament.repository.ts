@@ -3,8 +3,9 @@ import type {
   Tournament,
   TournamentTeam,
   TournamentTeamMember,
-  TournamentStatus,
 } from '@prisma/client';
+
+export type TournamentStatus = 'REGISTRATION' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
 
 export type TournamentWithTeams = Tournament & {
   teams: (TournamentTeam & {

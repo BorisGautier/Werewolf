@@ -7,7 +7,10 @@ import type { GameManager } from '../../application/game-manager.js';
 import type { Logger } from '../logging/logger.js';
 import { AdminAuthManager } from './admin-auth.js';
 import { DatabaseBackupManager } from '../persistence/db-backup.js';
-import { TournamentRepository } from '../persistence/tournament.repository.js';
+import {
+  TournamentRepository,
+  type TournamentStatus,
+} from '../persistence/tournament.repository.js';
 
 export interface AdminServerDependencies {
   port?: number;
@@ -155,7 +158,9 @@ export class AdminServer {
           try {
             totalPlayers = await this.prisma.player.count();
             totalGroups = await this.prisma.group.count();
-          } catch {}
+          } catch {
+            // ignore database count errors in stats
+          }
         }
         this.sendJson(res, 200, {
           success: true,
@@ -528,7 +533,7 @@ export class AdminServer {
       this.sendJson(res, 400, { success: false, error: 'Tournament repository not available' });
       return;
     }
-    const status = body.status as any;
+    const status = body.status as TournamentStatus;
     const currentRound = typeof body.currentRound === 'number' ? body.currentRound : undefined;
     await this.tournamentRepository.updateTournamentStatus(id, status, currentRound);
     this.sendJson(res, 200, { success: true, message: `Statut du tournoi #${id} mis à jour` });
