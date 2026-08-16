@@ -107,7 +107,12 @@ export class AdminServer {
 
     try {
       // Unauthenticated health & public routes
-      if ((pathname === '/health' || pathname === '/api/health') && req.method === 'GET') {
+      if (
+        (pathname === '/health' ||
+          pathname === '/api/health' ||
+          pathname === '/api/admin/health') &&
+        req.method === 'GET'
+      ) {
         const activeGamesCount = this.gameManager ? this.gameManager.size : 0;
         this.sendJson(res, 200, {
           status: 'ok',
