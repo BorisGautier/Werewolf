@@ -159,6 +159,7 @@ export function resolveGameMode(
   commandMode: GameMode,
 ): GameMode {
   if (group.randomMode) return Math.random() < 0.5 ? 'Normal' : 'Chaos';
+  if (commandMode !== 'Normal') return commandMode;
   if (group.mode === 'NORMAL') return 'Normal';
   if (group.mode === 'CHAOS') return 'Chaos';
   return commandMode;

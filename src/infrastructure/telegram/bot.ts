@@ -228,7 +228,7 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
   // Registered before the generic `callback_query:data` catch-all further down (which doesn't
   // call next()) so its own `stopwaiting:...` callback data actually gets a chance to match.
   registerWaitlistCommands(bot, deps);
-  registerModesGuideCommands(bot);
+  registerModesGuideCommands(bot, lobby);
 
   const alertService = new AlertService(bot, env, logger);
 
@@ -757,30 +757,67 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
   const START_COMMAND_MODE_MAP: Record<string, GameMode> = {
     startgame: 'Normal',
     startnormal: 'Normal',
+    start_normal: 'Normal',
+    startclassic: 'Normal',
+    start_classic: 'Normal',
+
     startchaos: 'Chaos',
+    start_chaos: 'Chaos',
+
     startbloodbath: 'Bloodbath',
+    start_bloodbath: 'Bloodbath',
+
     startdarkmagic: 'DarkMagic',
+    start_darkmagic: 'DarkMagic',
+
     startwolfpack: 'WolfPack',
+    start_wolfpack: 'WolfPack',
+
     startcursed: 'CursedVillage',
+    start_cursed: 'CursedVillage',
+    startcursedvillage: 'CursedVillage',
+    start_cursed_village: 'CursedVillage',
+
     startinfection: 'Infection',
+    start_infection: 'Infection',
+
     startanarchy: 'Anarchy',
+    start_anarchy: 'Anarchy',
+
     startholywar: 'HolyWar',
+    start_holywar: 'HolyWar',
+
     startassassins: 'Assassins',
+    start_assassins: 'Assassins',
   };
 
   bot.command(
     [
       'startgame',
       'startnormal',
+      'start_normal',
+      'startclassic',
+      'start_classic',
       'startchaos',
+      'start_chaos',
       'startbloodbath',
+      'start_bloodbath',
       'startdarkmagic',
+      'start_darkmagic',
       'startwolfpack',
+      'start_wolfpack',
       'startcursed',
+      'start_cursed',
+      'startcursedvillage',
+      'start_cursed_village',
       'startinfection',
+      'start_infection',
       'startanarchy',
+      'start_anarchy',
       'startholywar',
+      'start_holywar',
       'startassassins',
+      'start_assassins',
     ],
     async (ctx) => {
       if (!ctx.chat || !ctx.from) return;

@@ -103,7 +103,9 @@ const MODES_DATA_FR: Record<GameMode, ModeInfo> = {
   },
 };
 
-export function registerModesGuideCommands(bot: Bot): void {
+import type { GameLobbyManager } from './game-lobby.js';
+
+export function registerModesGuideCommands(bot: Bot, lobby?: GameLobbyManager): void {
   bot.command(['modes', 'mode', 'helpmodes', 'gamemodes'], async (ctx: Context) => {
     const keyboard = buildModesKeyboard();
 
@@ -127,12 +129,37 @@ export function registerModesGuideCommands(bot: Bot): void {
       `📖 <b>Description :</b>\n${data.description}\n\n` +
       `🎭 <b>Rôles clés :</b>\n${data.keyRoles}`;
 
-    const keyboard = new InlineKeyboard().text('« Retour aux modes', 'mode_list_back').row();
+    const keyboard = new InlineKeyboard()
+      .text(`▶️ Lancer en Mode ${data.title}`, `mode_start:${modeKey}`)
+      .row()
+      .text('« Retour aux modes', 'mode_list_back');
 
     await ctx.answerCallbackQuery();
     await ctx
       .editMessageText(text, { parse_mode: 'HTML', reply_markup: keyboard })
       .catch(() => null);
+  });
+
+  bot.callbackQuery(/^mode_start:(.+)$/, async (ctx: Context) => {
+    if (!ctx.chat || !ctx.from || !lobby) return ctx.answerCallbackQuery();
+    const modeKey = ctx.match![1] as GameMode;
+    await ctx.answerCallbackQuery({ text: `Lancement du Mode ${modeKey}...` });
+
+    if (ctx.chat.type === 'private') {
+      await ctx.reply(
+        `⚠️ <b>Partie en Groupe Nécessaire</b>\n\nPour jouer en mode <b>${modeKey}</b>, invite le bot dans un groupe Telegram et tape <code>/startgame</code> ou clique sur le bouton de lancement depuis le groupe !`,
+        { parse_mode: 'HTML' },
+      );
+      return;
+    }
+
+    const name = `${ctx.from.first_name} ${ctx.from.last_name ?? ''}`.trim();
+    await lobby.startGame(
+      BigInt(ctx.chat.id),
+      ctx.chat.title ?? null,
+      { id: BigInt(ctx.from.id), name },
+      modeKey,
+    );
   });
 
   bot.callbackQuery('mode_list_back', async (ctx: Context) => {
