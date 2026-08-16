@@ -1426,7 +1426,7 @@ export class AdminServer {
     </ul>
     <div style="display:flex; gap: 12px;">
       <a href="/admin" class="btn btn-secondary"><i class="fa-solid fa-lock"></i> Espace Admin</a>
-      <a href="https://t.me/WerewolfBot" target="_blank" class="btn btn-primary"><i class="fa-brands fa-telegram"></i> Jouer</a>
+      <a href="https://t.me/epicwolfgamebot" target="_blank" class="btn btn-primary"><i class="fa-brands fa-telegram"></i> Jouer</a>
     </div>
   </nav>
 
@@ -1442,7 +1442,7 @@ export class AdminServer {
       Plongez au cœur du village d'EpicWolf. 63+ rôles secrets, parties en solo avec des IA dotées d'une personnalité, tournois d'équipes et 11 modes de jeu impitoyables.
     </p>
     <div class="hero-actions">
-      <a href="https://t.me/WerewolfBot" target="_blank" class="btn btn-primary" style="padding: 16px 36px; font-size: 1.1rem;">
+      <a href="https://t.me/epicwolfgamebot" target="_blank" class="btn btn-primary" style="padding: 16px 36px; font-size: 1.1rem;">
         <i class="fa-brands fa-telegram" style="font-size: 1.3rem;"></i> Lancer sur Telegram
       </a>
       <a href="#roles" class="btn btn-secondary" style="padding: 16px 36px; font-size: 1.1rem;">
@@ -1625,7 +1625,7 @@ export class AdminServer {
     <p style="color:var(--text-muted); font-size:1.1rem; margin-bottom: 30px;">
       Rejoignez l'expérience Loup-Garou la plus aboutie sur Telegram dès aujourd'hui.
     </p>
-    <a href="https://t.me/WerewolfBot" target="_blank" class="btn btn-primary" style="padding:18px 42px; font-size:1.15rem;">
+    <a href="https://t.me/epicwolfgamebot" target="_blank" class="btn btn-primary" style="padding:18px 42px; font-size:1.15rem;">
       <i class="fa-brands fa-telegram" style="font-size:1.4rem;"></i> Lancer le Bot Telegram
     </a>
   </div>
@@ -1635,7 +1635,7 @@ export class AdminServer {
     <p style="margin-bottom:12px;">© 2026 <b>EpicWolf Game</b> — Développé avec passion pour la communauté Telegram.</p>
     <p>
       <a href="/admin">Espace Administration</a> • 
-      <a href="https://t.me/WerewolfBot" target="_blank">Bot Telegram</a> • 
+      <a href="https://t.me/epicwolfgamebot" target="_blank">Bot Telegram</a> • 
       <a href="https://github.com/BorisGautier/Werewolf" target="_blank">Dépôt GitHub</a>
     </p>
   </footer>
