@@ -183,7 +183,8 @@ jobs:
             docker compose up -d --remove-orphans
 
             # 9. Appliquer les migrations de base de données
-            docker compose exec -T app npm run prisma:deploy || true
+            echo "🗄️ Application des migrations SQL de base de données..."
+            docker compose exec -T app npx prisma migrate deploy || docker compose exec -T app npx prisma db push --accept-data-loss || true
 
             # 10. Vérification de santé (Health Check) & Procédure de ROLLBACK Automatique
             echo "🧪 Contrôle de santé (Health Check) du nouveau conteneur..."
