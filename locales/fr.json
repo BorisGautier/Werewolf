@@ -113,7 +113,7 @@
     "OracleNothing": ["Les esprits restent silencieux à propos de {0} cette nuit - tous les autres rôles sont déjà pris en compte."],
     "FoolSees": ["Dans un moment de lucidité, tu perçois que {0} est un(e) {1}."],
     "FoolSeesNothing": ["Tu essaies de percevoir la vraie nature de {0}, mais ta vision reste désespérément vide."],
-    "AugurSees": ["Tes visions révèlent qu'un(e) {0} se trouve quelque part dans cette partie."],
+    "AugurSees": ["Tes visions révèlent qu'un(e) {0} n'est PAS présent(e) dans cette partie."],
     "AugurNothing": ["Tes visions sont silencieuses cette nuit - tu as déjà tout vu."],
     "GraveDugMsg": ["Tu fouilles les tombes récentes et en comptes {0} fraîche(s)."],
     "GraveDugNone": ["Tu creuses, mais ne trouves aucune tombe fraîche cette nuit."],
