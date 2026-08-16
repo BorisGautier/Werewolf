@@ -16,10 +16,9 @@ import winston from 'winston';
 import DailyRotateFile from 'winston-daily-rotate-file';
 import LokiTransport from 'winston-loki';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const LOG_DIR = path.resolve(__dirname, '../../../../logs');
+const LOG_DIR = process.env.LOG_DIR
+  ? path.resolve(process.env.LOG_DIR)
+  : path.resolve(process.cwd(), 'logs');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // BigInt serialisation helper

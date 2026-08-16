@@ -268,3 +268,4 @@ dist/
 coverage/
 .DS_Store
 prisma/generated/
+logs
