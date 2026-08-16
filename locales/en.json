@@ -113,7 +113,7 @@
     "OracleNothing": ["The spirits are silent about {0} tonight - every other role is already accounted for."],
     "FoolSees": ["In a moment of clarity, you glimpse that {0} is a {1}."],
     "FoolSeesNothing": ["You try to glimpse {0}'s true nature, but your vision stays frustratingly blank."],
-    "AugurSees": ["Your visions reveal that a {0} is somewhere in this game."],
+    "AugurSees": ["Your visions reveal that a {0} is NOT in this game."],
     "AugurNothing": ["Your visions are silent tonight - you've already seen everything there is to see."],
     "GraveDugMsg": ["You dig through the graves of the recently deceased and count {0} fresh grave(s)."],
     "GraveDugNone": ["You dig, but find no fresh graves tonight."],
