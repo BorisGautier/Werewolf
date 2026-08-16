@@ -66,6 +66,8 @@ export async function isGroupAdminOrAnonymous(ctx: Context): Promise<boolean> {
 }
 
 import { ReportRepository } from '../persistence/report.repository.js';
+import { TournamentRepository } from '../persistence/tournament.repository.js';
+import { TournamentCommandHandler } from './tournament-commands.js';
 
 export interface BotDependencies {
   translator: Translator;
@@ -78,6 +80,8 @@ export interface BotDependencies {
   achievementRepository: AchievementRepository;
   gifPackRepository: GifPackRepository;
   reportRepository?: ReportRepository;
+  tournamentRepository?: TournamentRepository;
+  prisma?: any;
 }
 
 const INVITE_LINK_PATTERN = /^(https?:\/\/)?t(elegram)?\.me\/(\+|joinchat\/)([a-zA-Z0-9_-]+)$/;
@@ -120,6 +124,12 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     gameLoop,
     deps.notifyGameRepository,
   );
+
+  const tournamentRepo = deps.tournamentRepository ?? (deps.prisma ? new TournamentRepository(deps.prisma) : null);
+  if (tournamentRepo) {
+    const tournamentHandler = new TournamentCommandHandler(tournamentRepo, deps.playerRepository);
+    tournamentHandler.registerCommands(bot);
+  }
   const configMenu = new ConfigMenu(deps.groupRepository, deps.translator);
 
   bot.use(async (ctx, next) => {

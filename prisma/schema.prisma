@@ -483,3 +483,71 @@ model PlayerReport {
   @@index([reportedId])
   @@map("player_reports")
 }
+
+enum TournamentStatus {
+  DRAFT
+  REGISTRATION
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model Tournament {
+  id           Int              @id @default(autoincrement())
+  name         String
+  status       TournamentStatus @default(DRAFT)
+  maxTeams     Int              @default(4)
+  teamSize     Int              @default(4)
+  totalRounds  Int              @default(5)
+  currentRound Int              @default(0)
+  createdById  BigInt?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  teams        TournamentTeam[]
+  rounds       TournamentRound[]
+
+  @@map("tournaments")
+}
+
+model TournamentTeam {
+  id           Int                    @id @default(autoincrement())
+  tournamentId Int?
+  name         String
+  tag          String?
+  code         String                 @unique
+  totalPoints  Int                    @default(0)
+  wins         Int                    @default(0)
+  createdAt    DateTime               @default(now())
+
+  tournament   Tournament?            @relation(fields: [tournamentId], references: [id], onDelete: SetNull)
+  members      TournamentTeamMember[]
+
+  @@map("tournament_teams")
+}
+
+model TournamentTeamMember {
+  id                Int            @id @default(autoincrement())
+  teamId            Int
+  playerId          BigInt
+  isCaptain         Boolean        @default(false)
+  pointsContributed Int            @default(0)
+  createdAt         DateTime       @default(now())
+
+  team              TournamentTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, playerId])
+  @@map("tournament_team_members")
+}
+
+model TournamentRound {
+  id           Int        @id @default(autoincrement())
+  tournamentId Int
+  roundNumber  Int
+  status       String     @default("PENDING")
+  createdAt    DateTime   @default(now())
+
+  tournament   Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  @@map("tournament_rounds")
+}
