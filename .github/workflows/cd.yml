@@ -197,7 +197,9 @@ jobs:
 
             # Si le conteneur n'est PAS Healthy -> ROLLBACK IMMÉDIAT
             if [ "$HEALTHY" = "false" ]; then
-              echo "🚨 ÉCHEC DU HEALTH CHECK ! Exécution de la procédure de ROLLBACK..."
+              echo "🚨 ÉCHEC DU HEALTH CHECK ! Affichage des derniers logs du conteneur :"
+              docker compose logs --tail=100 app || true
+              echo "Exécution de la procédure de ROLLBACK..."
               if [ -n "$PREV_IMAGE" ]; then
                 echo "⏪ Restauration de l'image précédente: $PREV_IMAGE"
                 docker compose stop app

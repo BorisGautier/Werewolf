@@ -34,7 +34,13 @@ export class AdminServer {
   private maintenance?: { on: boolean } | undefined;
 
   constructor(deps: AdminServerDependencies = {}) {
-    this.port = deps.port ?? (process.env.ADMIN_PORT ? parseInt(process.env.ADMIN_PORT, 10) : 4000);
+    this.port =
+      deps.port ??
+      (process.env.ADMIN_PORT
+        ? parseInt(process.env.ADMIN_PORT, 10)
+        : process.env.PORT
+          ? parseInt(process.env.PORT, 10)
+          : 4000);
     this.prisma = deps.prisma;
     this.gameManager = deps.gameManager;
     this.logger = deps.logger;
