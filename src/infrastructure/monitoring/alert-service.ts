@@ -193,13 +193,15 @@ export class AlertService {
       errorCode === 'ENOTFOUND' ||
       errorCode === 'EPIPE' ||
       errorName === 'FetchError' ||
-      errorMessage.includes('ECONNRESET')
+      errorMessage.includes('ECONNRESET') ||
+      errorMessage.includes('terminated by other getUpdates request') ||
+      errorMessage.includes('409: Conflict')
     ) {
-      const code = errorCode ?? errorName ?? 'UNKNOWN_NETWORK';
+      const code = errorCode ?? errorName ?? '409_CONFLICT';
       transientNetworkErrors.labels(code).inc();
       this.logger.warn(
         { source, code, errorName },
-        'Transient network connection reset during getUpdates — grammY runner will auto-retry',
+        'Transient long-polling conflict during deployment/restart — grammY runner will auto-retry',
       );
       return;
     }
