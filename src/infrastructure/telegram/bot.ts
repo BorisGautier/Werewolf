@@ -86,6 +86,7 @@ export interface BotDependencies {
   reportRepository?: ReportRepository;
   tournamentRepository?: TournamentRepository;
   prisma?: any;
+  maintenance?: { on: boolean };
 }
 
 const INVITE_LINK_PATTERN = /^(https?:\/\/)?t(elegram)?\.me\/(\+|joinchat\/)([a-zA-Z0-9_-]+)$/;
@@ -105,7 +106,7 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
   const bot = new Bot(env.botToken);
   const startTime = new Date();
   /** Toggled by the dev-only `/maintenance` command; blocks new games while true. */
-  const maintenance = { on: false };
+  const maintenance = deps.maintenance ?? { on: false };
   const gameLoop = new GameLoop(
     bot,
     deps.gameManager,

@@ -70,6 +70,7 @@ async function main(): Promise<void> {
   // ── Bot initialization ──────────────────────────────────────────────────────
   logger.info('Initializing Telegram bot...');
   const gameManager = new GameManager();
+  const maintenance = { on: false };
   const bot = createBot(env, logger, {
     translator,
     gameManager,
@@ -81,6 +82,7 @@ async function main(): Promise<void> {
     achievementRepository,
     gifPackRepository: new GifPackRepository(prisma),
     prisma,
+    maintenance,
   });
   await bot.init();
   logger.info(
@@ -93,7 +95,7 @@ async function main(): Promise<void> {
   );
 
   // ── Admin Web Dashboard Server ──────────────────────────────────────────────
-  const adminServer = new AdminServer({ prisma, gameManager, logger, bot });
+  const adminServer = new AdminServer({ prisma, gameManager, logger, bot, maintenance });
   await adminServer.start();
 
   // ── Error monitoring ────────────────────────────────────────────────────────

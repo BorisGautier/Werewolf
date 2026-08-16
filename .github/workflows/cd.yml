@@ -70,3 +70,145 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  deploy-to-vps:
+    name: Zero-Downtime Deploy & Rollback Guard (/var/www/werewolf)
+    needs: docker-build-push
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Prepare Remote Project Directory
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            sudo mkdir -p /var/www/werewolf
+            sudo chown -R $USER:$USER /var/www/werewolf
+
+      - name: Copy Compose & Config Files to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          source: "docker-compose.yml,deploy/,monitoring/"
+          target: "/var/www/werewolf"
+
+      - name: Execute Zero-Downtime Deployment & Automatic Rollback
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            set -e
+            cd /var/www/werewolf
+
+            # 1. Écrire le fichier .env depuis les secrets GitHub
+            cat << 'EOF' > .env
+            ${{ secrets.ENV_FILE_CONTENT }}
+            EOF
+
+            # 2. Configurer le VirtualHost Apache2
+            sudo mkdir -p /etc/apache2/sites-available
+            sudo cp /var/www/werewolf/deploy/apache/epicwolf.borisgauty.com.conf /etc/apache2/sites-available/epicwolf.borisgauty.com.conf
+
+            # 3. Activer les modules Apache & le VirtualHost
+            sudo a2enmod proxy proxy_http headers rewrite ssl || true
+            sudo a2ensite epicwolf.borisgauty.com.conf || true
+            sudo systemctl reload apache2 || true
+
+            # 4. Certification SSL Certbot Automatique (si non encore configuré)
+            if [ ! -d "/etc/letsencrypt/live/epicwolf.borisgauty.com" ]; then
+              sudo certbot --apache -d epicwolf.borisgauty.com --non-interactive --agree-tos -m admin@borisgauty.com --redirect || true
+            fi
+
+            # 5. Activer le Mode Maintenance (suspend les nouvelles parties tout en laissant finir les parties actives)
+            echo "🛠️ Activation du Mode Maintenance pour le déploiement..."
+            curl -s -X POST http://localhost:5900/api/maintenance -H "Content-Type: application/json" -d '{"enabled": true}' || true
+
+            # 6. Attente gracieuse : attendre la fin des parties en cours (Max 300s / 5 minutes)
+            echo "🔎 Attente de l'extinction naturelle des parties en cours..."
+            MAX_WAIT=300
+            WAIT_TIME=0
+            GAMES_FINISHED=false
+            while [ $WAIT_TIME -lt $MAX_WAIT ]; do
+              ACTIVE_GAMES=$(curl -s http://localhost:5900/api/health | grep -o '"activeGames":[0-9]*' | cut -d':' -f2 || echo "0")
+              if [ "$ACTIVE_GAMES" = "0" ] || [ -z "$ACTIVE_GAMES" ]; then
+                echo "✅ Toutes les parties sont terminées ! Démarrage de la mise à jour..."
+                GAMES_FINISHED=true
+                break
+              fi
+              echo "⏳ ${ACTIVE_GAMES} partie(s) en cours... Attente de leur fin naturelle (${WAIT_TIME}s/${MAX_WAIT}s)"
+              sleep 15
+              WAIT_TIME=$((WAIT_TIME + 15))
+            done
+
+            # Si des parties sont TOUJOURS en cours après 5 minutes, Désactiver la maintenance et reporter
+            if [ "$GAMES_FINISHED" = "false" ]; then
+              FINAL_GAMES=$(curl -s http://localhost:5900/api/health | grep -o '"activeGames":[0-9]*' | cut -d':' -f2 || echo "0")
+              if [ "$FINAL_GAMES" != "0" ] && [ -n "$FINAL_GAMES" ]; then
+                echo "🛑 DÉPLOIEMENT REPORTÉ : ${FINAL_GAMES} partie(s) sont toujours en cours après 5 minutes."
+                curl -s -X POST http://localhost:5900/api/maintenance -H "Content-Type: application/json" -d '{"enabled": false}' || true
+                echo "🛡️ Mode maintenance désactivé. Aucune partie n'a été interrompue."
+                exit 1
+              fi
+            fi
+
+            # 6. Sauvegarder l'ID de l'image précédente pour le Rollback
+            PREV_IMAGE=$(docker inspect --format='{{.Image}}' werewolf-app-1 2>/dev/null || echo "")
+
+            # 7. Pull de la nouvelle image Docker
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            docker compose pull app
+
+            # 8. Relancer le service app
+            echo "🚀 Redémarrage de l'application..."
+            docker compose up -d --remove-orphans app db
+
+            # 9. Appliquer les migrations de base de données
+            docker compose exec -T app npm run prisma:deploy || true
+
+            # 10. Vérification de santé (Health Check) & Procédure de ROLLBACK Automatique
+            echo "🧪 Contrôle de santé (Health Check) du nouveau conteneur..."
+            HEALTHY=false
+            for i in {1..12}; do
+              HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5900/api/health || echo "000")
+              if [ "$HTTP_STATUS" = "200" ]; then
+                HEALTHY=true
+                echo "✅ Le nouveau conteneur est en parfaite santé (HTTP 200) !"
+                break
+              fi
+              echo "⏳ Attente du démarrage du serveur ($i/12)..."
+              sleep 5
+            done
+
+            # Si le conteneur n'est PAS Healthy -> ROLLBACK IMMÉDIAT
+            if [ "$HEALTHY" = "false" ]; then
+              echo "🚨 ÉCHEC DU HEALTH CHECK ! Exécution de la procédure de ROLLBACK..."
+              if [ -n "$PREV_IMAGE" ]; then
+                echo "⏪ Restauration de l'image précédente: $PREV_IMAGE"
+                docker compose stop app
+                docker tag "$PREV_IMAGE" ghcr.io/${{ github.repository }}:latest
+                docker compose up -d app
+                echo "⚠️ Rollback effectué avec succès. L'ancienne version stable a été restaurée !"
+              else
+                echo "❌ Impossible d'effectuer un rollback: aucune ancienne image enregistrée."
+              fi
+              exit 1
+            fi
+
+            # 11. Nettoyage des anciennes images inutilisées
+            docker image prune -f

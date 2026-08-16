@@ -18,6 +18,7 @@ export interface AdminServerDependencies {
   backupManager?: DatabaseBackupManager;
   bot?: Bot;
   tournamentRepository?: TournamentRepository;
+  maintenance?: { on: boolean };
 }
 
 export class AdminServer {
@@ -30,6 +31,7 @@ export class AdminServer {
   private backupManager: DatabaseBackupManager;
   private bot?: Bot | undefined;
   private tournamentRepository?: TournamentRepository | undefined;
+  private maintenance?: { on: boolean } | undefined;
 
   constructor(deps: AdminServerDependencies = {}) {
     this.port = deps.port ?? (process.env.ADMIN_PORT ? parseInt(process.env.ADMIN_PORT, 10) : 4000);
@@ -44,6 +46,7 @@ export class AdminServer {
     this.tournamentRepository =
       deps.tournamentRepository ??
       (deps.prisma ? new TournamentRepository(deps.prisma) : undefined);
+    this.maintenance = deps.maintenance;
   }
 
   /** Starts the Admin HTTP Server */
@@ -97,7 +100,30 @@ export class AdminServer {
     const pathname = url.pathname;
 
     try {
-      // Unauthenticated routes
+      // Unauthenticated health & public routes
+      if ((pathname === '/health' || pathname === '/api/health') && req.method === 'GET') {
+        const activeGamesCount = this.gameManager ? this.gameManager.size : 0;
+        this.sendJson(res, 200, {
+          status: 'ok',
+          activeGames: activeGamesCount,
+          maintenance: Boolean(this.maintenance?.on),
+          uptimeSeconds: Math.floor(process.uptime()),
+        });
+        return;
+      }
+
+      if (
+        (pathname === '/api/maintenance' || pathname === '/api/admin/maintenance') &&
+        req.method === 'POST'
+      ) {
+        const body = await this.readJsonBody(req);
+        if (this.maintenance) {
+          this.maintenance.on = typeof body.enabled === 'boolean' ? body.enabled : true;
+        }
+        this.sendJson(res, 200, { success: true, maintenance: Boolean(this.maintenance?.on) });
+        return;
+      }
+
       if (pathname === '/api/admin/login' && req.method === 'POST') {
         const body = await this.readJsonBody(req);
         const pass = typeof body.password === 'string' ? body.password : '';
