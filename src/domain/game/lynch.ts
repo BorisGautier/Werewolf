@@ -13,7 +13,11 @@ import { killPlayer } from './kill.js';
 import { declareWinner } from './win-condition.js';
 import type { GameEvent } from './game-event.js';
 import { ABSTAIN, alivePlayers, type Player } from './player.js';
-import { lynchAbstentions, lynchBotVotes, lynchVotesCast } from '../../infrastructure/monitoring/metrics.js';
+import {
+  lynchAbstentions,
+  lynchBotVotes,
+  lynchVotesCast,
+} from '../../infrastructure/monitoring/metrics.js';
 
 /** @deprecated use `ABSTAIN` from `player.ts` - kept as an alias so existing imports keep working. */
 export const SKIP_VOTE = ABSTAIN;
@@ -100,7 +104,13 @@ export function resolveLynchVotes(players: Player[], options: LynchOptions): Lyn
       if (options.lynchAttempt < 2) {
         voter.nonVoteCount++;
         if (voter.nonVoteCount >= 2) {
-          events.push(...killPlayer(players, voter.id, 'Idle', { killerIds: [voter.id], isNight: false, triggerHunterShot: false }));
+          events.push(
+            ...killPlayer(players, voter.id, 'Idle', {
+              killerIds: [voter.id],
+              isNight: false,
+              triggerHunterShot: false,
+            }),
+          );
         }
       }
     }
@@ -127,7 +137,8 @@ export function resolveLynchVotes(players: Player[], options: LynchOptions): Lyn
       resolution = { outcome: 'Lynched', playerId: lynched!.id };
     } else {
       resolution = { outcome: 'Tied', tiedPlayerIds: tied.map((p) => p.id) };
-      for (const p of tied) if (p.role === ROLE_BIT.Tanner || p.role === ROLE_BIT.Jester) p.soClose = true;
+      for (const p of tied)
+        if (p.role === ROLE_BIT.Tanner || p.role === ROLE_BIT.Jester) p.soClose = true;
     }
   } else {
     lynched = tied[0];
@@ -163,18 +174,28 @@ export function resolveLynchVotes(players: Player[], options: LynchOptions): Lyn
         events.push(declareWinner(players, 'Tanner'));
         if (killerIds.length > 0) {
           const randomVoterId = killerIds[Math.floor(random() * killerIds.length)]!;
-          events.push(...killPlayer(players, randomVoterId, 'Lynch', { killerIds: [lynched.id], isNight: false }));
+          events.push(
+            ...killPlayer(players, randomVoterId, 'Lynch', {
+              killerIds: [lynched.id],
+              isNight: false,
+            }),
+          );
         }
       }
 
       // Avenger rival goal check
-      players.filter((p) => !p.isDead && p.role === ROLE_BIT.Avenger).forEach((avenger) => {
-        if (avenger.targetId === lynched!.id) {
-          avenger.won = true;
-        }
-      });
+      players
+        .filter((p) => !p.isDead && p.role === ROLE_BIT.Avenger)
+        .forEach((avenger) => {
+          if (avenger.targetId === lynched!.id) {
+            avenger.won = true;
+          }
+        });
 
-      if (lynched.role === ROLE_BIT.Tanner && alivePlayers(players).every((p) => p.choice === lynched!.id)) {
+      if (
+        lynched.role === ROLE_BIT.Tanner &&
+        alivePlayers(players).every((p) => p.choice === lynched!.id)
+      ) {
         lynched.tannerOverkill = true;
       }
 

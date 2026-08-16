@@ -37,7 +37,11 @@ describe('resolveSnowWolfNight', () => {
     sw.choice = sk.id;
     sk.choice = 99n; // SK must have picked their own target for the visit to be able to succeed
 
-    const events = resolveSnowWolfNight([sw, sk], initialNightState(), baseCtx([sw, sk], () => 0.99));
+    const events = resolveSnowWolfNight(
+      [sw, sk],
+      initialNightState(),
+      baseCtx([sw, sk], () => 0.99),
+    );
 
     expect(sk.frozen).toBe(true);
     expect(sk.isDead).toBe(false);
@@ -45,7 +49,10 @@ describe('resolveSnowWolfNight', () => {
     expect(
       events.some(
         (e) =>
-          e.type === 'PlayerFrozen' && e.playerId === sk.id && e.snowWolfId === sw.id && e.flavor === 'SerialKiller',
+          e.type === 'PlayerFrozen' &&
+          e.playerId === sk.id &&
+          e.snowWolfId === sw.id &&
+          e.flavor === 'SerialKiller',
       ),
     ).toBe(true);
   });
@@ -59,9 +66,11 @@ describe('resolveSnowWolfNight', () => {
 
     expect(sw.isDead).toBe(true);
     expect(sk.frozen).toBe(false);
-    expect(events.some((e) => e.type === 'PlayerDied' && e.playerId === sw.id && e.method === 'VisitKiller')).toBe(
-      true,
-    );
+    expect(
+      events.some(
+        (e) => e.type === 'PlayerDied' && e.playerId === sw.id && e.method === 'VisitKiller',
+      ),
+    ).toBe(true);
   });
 
   it("lets the Guardian Angel block the freeze when protecting the Snow Wolf's target", () => {
@@ -85,7 +94,11 @@ describe('resolveSnowWolfNight', () => {
     const hunter = createPlayer(2n, 'H', ROLE_BIT.Hunter, 'Village');
     sw.choice = hunter.id;
 
-    const frozen = resolveSnowWolfNight([sw, hunter], initialNightState(), baseCtx([sw, hunter], () => 0));
+    const frozen = resolveSnowWolfNight(
+      [sw, hunter],
+      initialNightState(),
+      baseCtx([sw, hunter], () => 0),
+    );
     expect(hunter.frozen).toBe(true);
     expect(sw.isDead).toBe(false);
     expect(frozen.some((e) => e.type === 'PlayerFrozen' && e.playerId === hunter.id)).toBe(true);
@@ -93,12 +106,18 @@ describe('resolveSnowWolfNight', () => {
     const sw2 = createPlayer(3n, 'SW2', ROLE_BIT.SnowWolf, 'Wolf');
     const hunter2 = createPlayer(4n, 'H2', ROLE_BIT.Hunter, 'Village');
     sw2.choice = hunter2.id;
-    const shot = resolveSnowWolfNight([sw2, hunter2], initialNightState(), baseCtx([sw2, hunter2], () => 0.99));
+    const shot = resolveSnowWolfNight(
+      [sw2, hunter2],
+      initialNightState(),
+      baseCtx([sw2, hunter2], () => 0.99),
+    );
     expect(hunter2.frozen).toBe(false);
     expect(sw2.isDead).toBe(true);
-    expect(shot.some((e) => e.type === 'PlayerDied' && e.playerId === sw2.id && e.method === 'HunterShot')).toBe(
-      true,
-    );
+    expect(
+      shot.some(
+        (e) => e.type === 'PlayerDied' && e.playerId === sw2.id && e.method === 'HunterShot',
+      ),
+    ).toBe(true);
   });
 
   it('freezes any other role by default, and nulls out the shared Guardian Angel state if the GA itself is frozen', () => {
@@ -132,7 +151,9 @@ describe('resolveSnowWolfNight', () => {
     expect(gd.frozen).toBe(true);
     expect(gd.dugGravesLastNight).toBe(0);
     expect(state.lastGraveDigAt).toBe(previousDig);
-    expect(events.some((e) => e.type === 'PlayerFrozen' && e.flavor === 'GraveDiggerDug')).toBe(true);
+    expect(events.some((e) => e.type === 'PlayerFrozen' && e.flavor === 'GraveDiggerDug')).toBe(
+      true,
+    );
   });
 
   it("does not touch grave-digging state when freezing a Grave Digger who didn't dig", () => {
@@ -176,7 +197,10 @@ describe('resolveSnowWolfNight', () => {
   });
 
   it('picks the Harlot/Chemist/Cultist/CultistHunter/Seeing/Arsonist flavors by role', () => {
-    const cases: [ReturnType<typeof createPlayer>, 'Harlot' | 'Chemist' | 'Cultist' | 'CultistHunter' | 'Seeing' | 'Arsonist'][] = [
+    const cases: [
+      ReturnType<typeof createPlayer>,
+      'Harlot' | 'Chemist' | 'Cultist' | 'CultistHunter' | 'Seeing' | 'Arsonist',
+    ][] = [
       [createPlayer(1n, 'Ha', ROLE_BIT.Harlot, 'Village'), 'Harlot'],
       [createPlayer(1n, 'Ch', ROLE_BIT.Chemist, 'Village'), 'Chemist'],
       [createPlayer(1n, 'Cu', ROLE_BIT.Cultist, 'Cult'), 'Cultist'],
@@ -188,7 +212,9 @@ describe('resolveSnowWolfNight', () => {
       const sw = createPlayer(99n, 'SW', ROLE_BIT.SnowWolf, 'Wolf');
       sw.choice = target.id;
       const events = resolveSnowWolfNight([sw, target], initialNightState(), baseCtx([sw, target]));
-      expect(events.some((e) => e.type === 'PlayerFrozen' && e.flavor === expectedFlavor)).toBe(true);
+      expect(events.some((e) => e.type === 'PlayerFrozen' && e.flavor === expectedFlavor)).toBe(
+        true,
+      );
     }
   });
 
@@ -202,7 +228,9 @@ describe('resolveSnowWolfNight', () => {
     state.guardianAngel = ga;
     const events = resolveSnowWolfNight([sw, ga], state, baseCtx([sw, ga]));
 
-    expect(events.some((e) => e.type === 'PlayerFrozen' && e.flavor === 'GuardianAngel')).toBe(true);
+    expect(events.some((e) => e.type === 'PlayerFrozen' && e.flavor === 'GuardianAngel')).toBe(
+      true,
+    );
     expect(state.guardianAngel).toBeNull();
   });
 });

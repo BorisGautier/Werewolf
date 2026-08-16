@@ -31,7 +31,13 @@ export type FreezeFlavor =
  * achievement unlocks, `GameKill` rows, etc.
  */
 export type GameEvent =
-  | { type: 'PlayerDied'; playerId: bigint; method: KillMethod; killerIds: bigint[]; isNight: boolean }
+  | {
+      type: 'PlayerDied';
+      playerId: bigint;
+      method: KillMethod;
+      killerIds: bigint[];
+      isNight: boolean;
+    }
   | { type: 'LoverDiedOfGrief'; playerId: bigint; originalVictimId: bigint; isNight: boolean }
   | { type: 'HunterMustShoot'; hunterId: bigint; method: KillMethod; delayed: boolean }
   | { type: 'WolfCubKilled'; playerId: bigint }
@@ -43,7 +49,13 @@ export type GameEvent =
   | { type: 'WolfKilledHunterInStandoff'; wolfId: bigint; hunterId: bigint }
   | { type: 'GunnerPreventsWolfWin' }
   | { type: 'GameEnded'; winningTeam: Team }
-  | { type: 'PlayerFrozen'; playerId: bigint; cause: 'SnowWolf'; snowWolfId: bigint; flavor: FreezeFlavor }
+  | {
+      type: 'PlayerFrozen';
+      playerId: bigint;
+      cause: 'SnowWolf';
+      snowWolfId: bigint;
+      flavor: FreezeFlavor;
+    }
   | { type: 'GuardianAngelBlockedFreeze'; targetId: bigint; snowWolfId: bigint }
   | { type: 'PlayerDoused'; playerId: bigint; arsonistId: bigint }
   | { type: 'GuardianAngelSavedFromBurning'; playerId: bigint }

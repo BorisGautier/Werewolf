@@ -12,7 +12,8 @@ export class AdminAuthManager {
   private adminPasswordHash: string;
 
   constructor(secretKey?: string, adminPassword?: string) {
-    this.secretKey = secretKey ?? process.env.ADMIN_JWT_SECRET ?? 'werewolf-default-super-secret-key-2026';
+    this.secretKey =
+      secretKey ?? process.env.ADMIN_JWT_SECRET ?? 'werewolf-default-super-secret-key-2026';
     const password = adminPassword ?? process.env.ADMIN_PASSWORD ?? 'admin123';
     this.adminPasswordHash = this.hashPassword(password);
   }

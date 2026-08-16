@@ -22,7 +22,7 @@ describe('resolveThiefNight (non-ThiefFull)', () => {
     expect(thief.role).toBe(ROLE_BIT.Thief);
   });
 
-  it("swaps roles with the chosen target on night 1, becoming a Villager themselves", () => {
+  it('swaps roles with the chosen target on night 1, becoming a Villager themselves', () => {
     const thief = createPlayer(1n, 'T', ROLE_BIT.Thief, 'Thief');
     const seer = createPlayer(2n, 'S', ROLE_BIT.Seer, 'Village');
     thief.choice = seer.id;
@@ -32,7 +32,9 @@ describe('resolveThiefNight (non-ThiefFull)', () => {
     expect(thief.role).toBe(ROLE_BIT.Seer);
     expect(thief.team).toBe('Village');
     expect(seer.role).toBe(ROLE_BIT.Villager);
-    expect(events.some((e) => e.type === 'RoleStolen' && e.stolenRole === ROLE_BIT.Seer)).toBe(true);
+    expect(events.some((e) => e.type === 'RoleStolen' && e.stolenRole === ROLE_BIT.Seer)).toBe(
+      true,
+    );
   });
 
   it('carries over bullet count and hasUsedAbility from the stolen role', () => {
@@ -56,7 +58,12 @@ describe('resolveThiefNight (non-ThiefFull)', () => {
     const alive = createPlayer(3n, 'A', ROLE_BIT.Detective, 'Village');
     thief.choice = dead.id;
 
-    resolveThiefNight([thief, dead, alive], 1, false, baseCtx([thief, dead, alive], 1, () => 0));
+    resolveThiefNight(
+      [thief, dead, alive],
+      1,
+      false,
+      baseCtx([thief, dead, alive], 1, () => 0),
+    );
 
     expect(thief.role).toBe(ROLE_BIT.Detective);
     expect(alive.role).toBe(ROLE_BIT.Villager);
@@ -76,14 +83,21 @@ describe('resolveThiefNight (non-ThiefFull)', () => {
     dead.isDead = true;
     // thief.choice stays null - never picked a target.
 
-    const events = resolveThiefNight([thief, seer, dead], 1, false, baseCtx([thief, seer, dead], 1, () => 0));
+    const events = resolveThiefNight(
+      [thief, seer, dead],
+      1,
+      false,
+      baseCtx([thief, seer, dead], 1, () => 0),
+    );
 
     expect(thief.role).toBe(ROLE_BIT.Seer);
     expect(seer.role).toBe(ROLE_BIT.Villager);
     expect(dead.role).toBe(ROLE_BIT.Villager); // the dead player was never a valid redirect target
-    expect(events.some((e) => e.type === 'ThiefStealForced' && e.thiefId === thief.id && e.targetId === seer.id)).toBe(
-      true,
-    );
+    expect(
+      events.some(
+        (e) => e.type === 'ThiefStealForced' && e.thiefId === thief.id && e.targetId === seer.id,
+      ),
+    ).toBe(true);
   });
 });
 
@@ -93,7 +107,12 @@ describe('resolveThiefNight (ThiefFull)', () => {
     const villager = createPlayer(2n, 'V', ROLE_BIT.Villager, 'Village');
     thief.choice = villager.id;
 
-    resolveThiefNight([thief, villager], 3, true, baseCtx([thief, villager], 3, () => 0));
+    resolveThiefNight(
+      [thief, villager],
+      3,
+      true,
+      baseCtx([thief, villager], 3, () => 0),
+    );
     expect(thief.role).toBe(ROLE_BIT.Villager);
     expect(villager.role).toBe(ROLE_BIT.Thief); // ThiefFull: the target becomes a Thief, not a plain Villager
   });
@@ -103,7 +122,12 @@ describe('resolveThiefNight (ThiefFull)', () => {
     const villager = createPlayer(2n, 'V', ROLE_BIT.Villager, 'Village');
     thief.choice = villager.id;
 
-    resolveThiefNight([thief, villager], 3, true, baseCtx([thief, villager], 3, () => 0.99));
+    resolveThiefNight(
+      [thief, villager],
+      3,
+      true,
+      baseCtx([thief, villager], 3, () => 0.99),
+    );
     expect(thief.role).toBe(ROLE_BIT.Thief);
   });
 
@@ -112,7 +136,12 @@ describe('resolveThiefNight (ThiefFull)', () => {
     const wolf = createPlayer(2n, 'W', ROLE_BIT.Wolf, 'Wolf');
     thief.choice = wolf.id;
 
-    resolveThiefNight([thief, wolf], 3, true, baseCtx([thief, wolf], 3, () => 0));
+    resolveThiefNight(
+      [thief, wolf],
+      3,
+      true,
+      baseCtx([thief, wolf], 3, () => 0),
+    );
     expect(thief.role).toBe(ROLE_BIT.Thief);
   });
 
@@ -122,7 +151,12 @@ describe('resolveThiefNight (ThiefFull)', () => {
     const villager = createPlayer(2n, 'V', ROLE_BIT.Villager, 'Village');
     thief.choice = villager.id;
 
-    resolveThiefNight([thief, villager], 3, true, baseCtx([thief, villager], 3, () => 0));
+    resolveThiefNight(
+      [thief, villager],
+      3,
+      true,
+      baseCtx([thief, villager], 3, () => 0),
+    );
     expect(thief.role).toBe(ROLE_BIT.Thief);
   });
 });

@@ -13,9 +13,11 @@ describe('Tournament Mode System', () => {
           return t;
         }),
         findMany: vi.fn(async () => mockTournaments),
-        findUnique: vi.fn(async ({ where }: any) => mockTournaments.find(t => t.id === where.id) || null),
+        findUnique: vi.fn(
+          async ({ where }: any) => mockTournaments.find((t) => t.id === where.id) || null,
+        ),
         update: vi.fn(async ({ where, data }: any) => {
-          const t = mockTournaments.find(x => x.id === where.id);
+          const t = mockTournaments.find((x) => x.id === where.id);
           if (t) Object.assign(t, data);
           return t;
         }),
@@ -43,8 +45,8 @@ describe('Tournament Mode System', () => {
 
     const repo = new TournamentRepository(prismaMock);
 
-    const created = await repo.createTournament('Championnat d\'Été 2026', 4, 4, 5);
-    expect(created.name).toBe('Championnat d\'Été 2026');
+    const created = await repo.createTournament("Championnat d'Été 2026", 4, 4, 5);
+    expect(created.name).toBe("Championnat d'Été 2026");
     expect(created.maxTeams).toBe(4);
     expect(created.totalRounds).toBe(5);
 

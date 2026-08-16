@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { DONATION_TIERS, donationLevelForTotal, donorBadge } from '../../src/infrastructure/persistence/player.repository.js';
+import {
+  DONATION_TIERS,
+  donationLevelForTotal,
+  donorBadge,
+} from '../../src/infrastructure/persistence/player.repository.js';
 
 describe('donationLevelForTotal', () => {
   it('is level 0 below the first tier', () => {

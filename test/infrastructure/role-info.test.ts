@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { ROLE_NAMES } from '../../src/domain/roles/role.js';
-import { ABOUT_ROLE_BY_TRIGGER, aboutLocaleKey } from '../../src/infrastructure/telegram/role-info.js';
+import {
+  ABOUT_ROLE_BY_TRIGGER,
+  aboutLocaleKey,
+} from '../../src/infrastructure/telegram/role-info.js';
 import { getDefaultLocale, loadLocales } from '../../src/infrastructure/i18n/locale-loader.js';
 import { Translator } from '../../src/infrastructure/i18n/translator.js';
 
@@ -30,14 +33,16 @@ describe('ABOUT_ROLE_BY_TRIGGER', () => {
 
 describe('resolveRoleFromTrigger', () => {
   it('resolves triggers like ww, seer, ga', async () => {
-    const { resolveRoleFromTrigger } = await import('../../src/infrastructure/telegram/role-info.js');
+    const { resolveRoleFromTrigger } =
+      await import('../../src/infrastructure/telegram/role-info.js');
     expect(resolveRoleFromTrigger('ww')).toBe('Wolf');
     expect(resolveRoleFromTrigger('seer')).toBe('Seer');
     expect(resolveRoleFromTrigger('ga')).toBe('GuardianAngel');
   });
 
   it('resolves /about triggers like /aboutww, /aboutseer, /aboutarsonist', async () => {
-    const { resolveRoleFromTrigger } = await import('../../src/infrastructure/telegram/role-info.js');
+    const { resolveRoleFromTrigger } =
+      await import('../../src/infrastructure/telegram/role-info.js');
     expect(resolveRoleFromTrigger('/aboutww')).toBe('Wolf');
     expect(resolveRoleFromTrigger('/aboutseer')).toBe('Seer');
     expect(resolveRoleFromTrigger('/aboutarsonist')).toBe('Arsonist');
@@ -45,8 +50,8 @@ describe('resolveRoleFromTrigger', () => {
   });
 
   it('returns null for unknown triggers', async () => {
-    const { resolveRoleFromTrigger } = await import('../../src/infrastructure/telegram/role-info.js');
+    const { resolveRoleFromTrigger } =
+      await import('../../src/infrastructure/telegram/role-info.js');
     expect(resolveRoleFromTrigger('xyzunknown')).toBeNull();
   });
 });
-

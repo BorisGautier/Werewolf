@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConfigMenu } from '../../src/infrastructure/telegram/config-menu.js';
 import { getDefaultLocale, loadLocales } from '../../src/infrastructure/i18n/locale-loader.js';
 import { Translator } from '../../src/infrastructure/i18n/translator.js';
-import type { GroupRepository, GroupWithConfig } from '../../src/infrastructure/persistence/group.repository.js';
+import type {
+  GroupRepository,
+  GroupWithConfig,
+} from '../../src/infrastructure/persistence/group.repository.js';
 
 let translator: Translator;
 
@@ -64,7 +67,10 @@ function createHarness() {
       group = {
         ...group,
         disabledRoles: disabled
-          ? [...group.disabledRoles, { id: group.disabledRoles.length + 1, groupId: group.id, role: role as never }]
+          ? [
+              ...group.disabledRoles,
+              { id: group.disabledRoles.length + 1, groupId: group.id, role: role as never },
+            ]
           : group.disabledRoles.filter((r) => r.role !== role),
       };
     }),
@@ -158,7 +164,7 @@ describe('ConfigMenu', () => {
     expect(data.some((t) => t.includes('Français'))).toBe(true);
   });
 
-  it("offers only Default for a base language with no shipped packs, and marks it selected", async () => {
+  it('offers only Default for a base language with no shipped packs, and marks it selected', async () => {
     const { menu } = createHarness();
     const screen = await menu.handleAction(-100n, 'langpacks', ['en']);
     const data = screen!.keyboard.inline_keyboard.flat().map((b) => b.text);

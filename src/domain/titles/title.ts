@@ -22,7 +22,8 @@ export const TITLE_CATALOG: readonly PlayerTitle[] = [
     titleKey: 'Title_MadChemist',
     defaultTitle: 'Le Chimiste Fou',
     descriptionKey: 'TitleDesc_MadChemist',
-    defaultDescription: 'Éliminer 3 Loups-Garous avec la Potion Mortelle de la Sorcière ou du Chimiste.',
+    defaultDescription:
+      'Éliminer 3 Loups-Garous avec la Potion Mortelle de la Sorcière ou du Chimiste.',
   },
   {
     id: 'broken_heart',
@@ -62,7 +63,8 @@ export const TITLE_CATALOG: readonly PlayerTitle[] = [
     titleKey: 'Title_IronShield',
     defaultTitle: "L'Ange Inflexible",
     descriptionKey: 'TitleDesc_IronShield',
-    defaultDescription: 'Protéger avec succès 3 victimes contre les attaques des Loups en tant qu’Ange Gardien.',
+    defaultDescription:
+      'Protéger avec succès 3 victimes contre les attaques des Loups en tant qu’Ange Gardien.',
   },
   {
     id: 'sharpshooter',

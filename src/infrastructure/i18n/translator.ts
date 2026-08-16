@@ -3,7 +3,9 @@ import { translationMisses } from '../monitoring/metrics.js';
 
 export class MissingLocaleStringError extends Error {
   constructor(key: string) {
-    super(`No locale string found for key "${key}" in the requested locale, its base, or the default locale.`);
+    super(
+      `No locale string found for key "${key}" in the requested locale, its base, or the default locale.`,
+    );
     this.name = 'MissingLocaleStringError';
   }
 }
@@ -30,14 +32,18 @@ export class Translator {
    * set - see `LocaleFile`'s doc comment) - e.g. `en`, `fr`. Powers the language-selection
    * screen's first step. */
   listBaseLocales(): { code: string; name: string }[] {
-    return [...this.locales.values()].filter((l) => !l.isPack).map((l) => ({ code: l.code, name: l.name }));
+    return [...this.locales.values()]
+      .filter((l) => !l.isPack)
+      .map((l) => ({ code: l.code, name: l.name }));
   }
 
   /** Every loaded pack registered against `baseCode` (`isPack` set and `base === baseCode`) -
    * empty until someone actually ships a `locales/<baseCode>-<pack>.json`. Powers the
    * pack-selection step. */
   listPacksForBase(baseCode: string): { code: string; name: string }[] {
-    return [...this.locales.values()].filter((l) => l.isPack && l.base === baseCode).map((l) => ({ code: l.code, name: l.name }));
+    return [...this.locales.values()]
+      .filter((l) => l.isPack && l.base === baseCode)
+      .map((l) => ({ code: l.code, name: l.name }));
   }
 
   /** `localeCode`'s base language - itself if it isn't a pack, or is unknown. Lets a screen

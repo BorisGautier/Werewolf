@@ -96,7 +96,10 @@ export class AdminRepository {
   async unban(telegramId: bigint): Promise<boolean> {
     const result = await this.prisma.globalBan.deleteMany({ where: { telegramId } });
     if (result.count === 0) return false;
-    await this.prisma.player.updateMany({ where: { telegramId }, data: { isBanned: false, banReason: null } });
+    await this.prisma.player.updateMany({
+      where: { telegramId },
+      data: { isBanned: false, banReason: null },
+    });
     return true;
   }
 

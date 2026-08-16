@@ -19,7 +19,11 @@ import type { GameMode } from '../../domain/game/game-mode.js';
 import { ROLE_BIT, ROLE_META, roleName } from '../../domain/roles/role.js';
 import { WOLF_ROLES } from '../../domain/game/game-balancing.js';
 import { GameRepository } from '../persistence/game.repository.js';
-import { groupToGameOptions, GroupRepository, resolveGameMode } from '../persistence/group.repository.js';
+import {
+  groupToGameOptions,
+  GroupRepository,
+  resolveGameMode,
+} from '../persistence/group.repository.js';
 import { NotifyGameRepository } from '../persistence/notify-game.repository.js';
 import { donorBadge, PlayerRepository } from '../persistence/player.repository.js';
 import type { Translator } from '../i18n/translator.js';
@@ -98,9 +102,10 @@ export class GameLobbyManager {
     }
 
     if (!group.isApproved) {
-      const msg = language === 'fr'
-        ? "⚠️ <b>Groupe Non Approuvé</b>\n\nCe groupe n'a pas encore été autorisé par les administrateurs. Un administrateur doit approuver votre groupe dans le Control Center Admin avant de pouvoir lancer une partie."
-        : "⚠️ <b>Group Not Approved</b>\n\nThis group has not been authorized by platform administrators yet. An admin must approve your group in the Admin Control Center before games can be started.";
+      const msg =
+        language === 'fr'
+          ? "⚠️ <b>Groupe Non Approuvé</b>\n\nCe groupe n'a pas encore été autorisé par les administrateurs. Un administrateur doit approuver votre groupe dans le Control Center Admin avant de pouvoir lancer une partie."
+          : '⚠️ <b>Group Not Approved</b>\n\nThis group has not been authorized by platform administrators yet. An admin must approve your group in the Admin Control Center before games can be started.';
       await this.bot.api.sendMessage(chatNumber(chatId), msg, { parse_mode: 'HTML' });
       return;
     }
@@ -155,11 +160,18 @@ export class GameLobbyManager {
       }
     }
 
-    const keyboard = new InlineKeyboard().text(this.t.translate(language, 'JoinButton'), JOIN_BUTTON_CALLBACK);
+    const keyboard = new InlineKeyboard().text(
+      this.t.translate(language, 'JoinButton'),
+      JOIN_BUTTON_CALLBACK,
+    );
     const messageKey = mode === 'Chaos' ? 'PlayerStartedChaosGame' : 'PlayerStartedGame';
-    await this.bot.api.sendMessage(chatNumber(chatId), this.t.translate(language, messageKey, starter.name), {
-      reply_markup: keyboard,
-    });
+    await this.bot.api.sendMessage(
+      chatNumber(chatId),
+      this.t.translate(language, messageKey, starter.name),
+      {
+        reply_markup: keyboard,
+      },
+    );
 
     await this.notifyWaitingPlayers(chatId, groupName, language, starter.id);
 
@@ -181,7 +193,12 @@ export class GameLobbyManager {
     activeLobbies.inc();
 
     this.logger.info(
-      { chatId: chatId.toString(), starterId: starter.id.toString(), mode, joinTimeSeconds: this.joinTimeSeconds },
+      {
+        chatId: chatId.toString(),
+        starterId: starter.id.toString(),
+        mode,
+        joinTimeSeconds: this.joinTimeSeconds,
+      },
       'Lobby opened successfully',
     );
   }
@@ -192,7 +209,12 @@ export class GameLobbyManager {
    * offline and miss the join window) - it's only cleared once a lobby actually locks in and
    * deals roles, in `finishJoining()`, matching the original's `Werewolf.cs` cleanup point.
    */
-  private async notifyWaitingPlayers(chatId: bigint, groupTitle: string, language: string, starterId: bigint): Promise<void> {
+  private async notifyWaitingPlayers(
+    chatId: bigint,
+    groupTitle: string,
+    language: string,
+    starterId: bigint,
+  ): Promise<void> {
     const waiting = await this.notifyGames.listWaiting(chatId);
     for (const userId of waiting) {
       if (userId === starterId) continue;
@@ -245,7 +267,10 @@ export class GameLobbyManager {
     }
   }
 
-  async join(chatId: bigint, telegramUser: { id: bigint; firstName: string; lastName?: string; username?: string }): Promise<void> {
+  async join(
+    chatId: bigint,
+    telegramUser: { id: bigint; firstName: string; lastName?: string; username?: string },
+  ): Promise<void> {
     const session = this.sessions.get(chatId);
     const group = await this.groups.getOrCreate(chatId, null, null);
     const language = session?.language ?? group.language;
@@ -255,7 +280,9 @@ export class GameLobbyManager {
       return;
     }
 
-    const name = `${telegramUser.firstName} ${telegramUser.lastName ?? ''}`.replace(/\n/g, '').trim();
+    const name = `${telegramUser.firstName} ${telegramUser.lastName ?? ''}`
+      .replace(/\n/g, '')
+      .trim();
 
     if (session.game.players.some((p) => p.id === telegramUser.id)) {
       return; // Already in lobby
@@ -288,13 +315,21 @@ export class GameLobbyManager {
       session.game.addPlayer(telegramUser.id, uniqueName);
       playersJoined.inc();
       this.logger.info(
-        { chatId: chatId.toString(), playerId: telegramUser.id.toString(), uniqueName, lobbyPlayers: session.game.players.length },
+        {
+          chatId: chatId.toString(),
+          playerId: telegramUser.id.toString(),
+          uniqueName,
+          lobbyPlayers: session.game.players.length,
+        },
         'Player joined game lobby',
       );
     } catch (err) {
       if (err instanceof GameError && err.code === 'ALREADY_JOINED') return;
       if (err instanceof GameError && err.code === 'GROUP_FULL') {
-        this.logger.warn({ chatId: chatId.toString(), playerId: telegramUser.id.toString() }, 'Player join failed — group full');
+        this.logger.warn(
+          { chatId: chatId.toString(), playerId: telegramUser.id.toString() },
+          'Player join failed — group full',
+        );
         await this.send(chatId, language, 'PlayerLimitReached');
         return;
       }
@@ -306,18 +341,28 @@ export class GameLobbyManager {
     }
 
     session.playersJoinedSinceAnnounce.push(uniqueName);
-    const sentPm = await this.sendToUser(telegramUser.id, language, 'YouJoined', formatGroupTitle(group.title, language, session.game.mode));
+    const sentPm = await this.sendToUser(
+      telegramUser.id,
+      language,
+      'YouJoined',
+      formatGroupTitle(group.title, language, session.game.mode),
+    );
     if (!sentPm) {
       pmFailures.inc();
       const botUsername = this.bot.botInfo?.username ?? '';
       const keyboard = botUsername
-        ? new InlineKeyboard().url(this.t.translate(language, 'StartPmButton'), `https://t.me/${botUsername}`)
+        ? new InlineKeyboard().url(
+            this.t.translate(language, 'StartPmButton'),
+            `https://t.me/${botUsername}`,
+          )
         : undefined;
-      await this.bot.api.sendMessage(
-        chatNumber(chatId),
-        this.t.translate(language, 'MustStartPmFirstGroup', name),
-        keyboard ? { reply_markup: keyboard } : {},
-      ).catch(() => null);
+      await this.bot.api
+        .sendMessage(
+          chatNumber(chatId),
+          this.t.translate(language, 'MustStartPmFirstGroup', name),
+          keyboard ? { reply_markup: keyboard } : {},
+        )
+        .catch(() => null);
     }
   }
 
@@ -337,7 +382,10 @@ export class GameLobbyManager {
 
     session.forceStarted = true;
     forceStarts.inc();
-    this.logger.info({ chatId: chatId.toString(), playersCount: session.game.players.length }, 'Game lobby force-started by admin');
+    this.logger.info(
+      { chatId: chatId.toString(), playersCount: session.game.players.length },
+      'Game lobby force-started by admin',
+    );
     await this.send(chatId, language, 'ForceStarted');
   }
 
@@ -349,7 +397,12 @@ export class GameLobbyManager {
    * `MaxExtend` in either direction - `seconds` may be negative to shorten the countdown, which
    * `bot.ts` only allows admins to request in the first place.
    */
-  async extend(chatId: bigint, playerId: bigint, isAdmin: boolean, requestedSeconds: number): Promise<void> {
+  async extend(
+    chatId: bigint,
+    playerId: bigint,
+    isAdmin: boolean,
+    requestedSeconds: number,
+  ): Promise<void> {
     const session = this.sessions.get(chatId);
     const group = await this.groups.getOrCreate(chatId, null, null);
     const language = session?.language ?? group.language;
@@ -372,14 +425,23 @@ export class GameLobbyManager {
     }
 
     const maxExtend = group.maxExtendSeconds > 0 ? group.maxExtendSeconds : 60;
-    const seconds = Math.abs(requestedSeconds) > maxExtend ? maxExtend * Math.sign(requestedSeconds) : requestedSeconds;
+    const seconds =
+      Math.abs(requestedSeconds) > maxExtend
+        ? maxExtend * Math.sign(requestedSeconds)
+        : requestedSeconds;
 
     session.secondsLeft = Math.max(session.secondsLeft + seconds, 0);
     session.haveExtended.add(playerId);
     lobbyExtensions.inc();
 
     this.logger.info(
-      { chatId: chatId.toString(), playerId: playerId.toString(), isAdmin, secondsAdded: seconds, newSecondsLeft: session.secondsLeft },
+      {
+        chatId: chatId.toString(),
+        playerId: playerId.toString(),
+        isAdmin,
+        secondsAdded: seconds,
+        newSecondsLeft: session.secondsLeft,
+      },
       'Lobby countdown extended',
     );
 
@@ -441,7 +503,15 @@ export class GameLobbyManager {
       return;
     }
     playersFled.inc();
-    this.logger.info({ chatId: chatId.toString(), playerId: player.id.toString(), playerName: player.name, phase: game.phase }, 'Player fled game');
+    this.logger.info(
+      {
+        chatId: chatId.toString(),
+        playerId: player.id.toString(),
+        playerName: player.name,
+        phase: game.phase,
+      },
+      'Player fled game',
+    );
     await this.send(chatId, language, 'FledGame', player.name);
   }
 
@@ -459,7 +529,10 @@ export class GameLobbyManager {
     const removed = game.removePlayer(target.id);
     if (removed) {
       smiteActions.inc();
-      this.logger.warn({ chatId: chatId.toString(), targetId: target.id.toString(), targetName: target.name }, 'Player smitten by admin');
+      this.logger.warn(
+        { chatId: chatId.toString(), targetId: target.id.toString(), targetName: target.name },
+        'Player smitten by admin',
+      );
       await this.send(chatId, group.language, 'PlayerSmitten', target.name);
     }
     return removed;
@@ -477,8 +550,16 @@ export class GameLobbyManager {
       return;
     }
 
-    if (session.secondsLeft % ANNOUNCE_JOINED_EVERY_SECONDS === 0 && session.playersJoinedSinceAnnounce.length > 0) {
-      await this.send(chatId, session.language, 'HaveJoined', session.playersJoinedSinceAnnounce.join(', '));
+    if (
+      session.secondsLeft % ANNOUNCE_JOINED_EVERY_SECONDS === 0 &&
+      session.playersJoinedSinceAnnounce.length > 0
+    ) {
+      await this.send(
+        chatId,
+        session.language,
+        'HaveJoined',
+        session.playersJoinedSinceAnnounce.join(', '),
+      );
       session.playersJoinedSinceAnnounce = [];
     }
 
@@ -521,34 +602,56 @@ export class GameLobbyManager {
     await this.gameRepo.recordPlayers(gameId, session.game.players, playerDbIdByTelegramId);
 
     const delivered = await Promise.all(
-      session.game.players.map((p) => (p.isBot ? Promise.resolve(true) : this.notifyRole(p, session.game, session.language))),
+      session.game.players.map((p) =>
+        p.isBot ? Promise.resolve(true) : this.notifyRole(p, session.game, session.language),
+      ),
     );
-    const undelivered = session.game.players.filter((p, index) => !p.isBot && !delivered[index]).map((p) => p.name);
+    const undelivered = session.game.players
+      .filter((p, index) => !p.isBot && !delivered[index])
+      .map((p) => p.name);
     if (undelivered.length > 0) {
       pmFailures.inc(undelivered.length);
       const botUsername = this.bot.botInfo?.username ?? '';
       const keyboard = botUsername
-        ? new InlineKeyboard().url(this.t.translate(session.language, 'StartPmButton'), `https://t.me/${botUsername}`)
+        ? new InlineKeyboard().url(
+            this.t.translate(session.language, 'StartPmButton'),
+            `https://t.me/${botUsername}`,
+          )
         : undefined;
-      await this.bot.api.sendMessage(
-        chatNumber(session.chatId),
-        this.t.translate(session.language, 'PMFailed', undelivered.join(', ')),
-        keyboard ? { reply_markup: keyboard } : {},
-      ).catch(() => null);
+      await this.bot.api
+        .sendMessage(
+          chatNumber(session.chatId),
+          this.t.translate(session.language, 'PMFailed', undelivered.join(', ')),
+          keyboard ? { reply_markup: keyboard } : {},
+        )
+        .catch(() => null);
     }
 
     // The night/day loop sends its own richer "Night N falls, you have X seconds" message right
     // as it takes over - no need to also announce a bare NightFalls here.
     this.logger.info(
-      { chatId: session.chatId.toString(), gameId, mode: session.game.mode, players: session.game.players.length },
+      {
+        chatId: session.chatId.toString(),
+        gameId,
+        mode: session.game.mode,
+        players: session.game.players.length,
+      },
       'Game started, handing off to the night/day loop',
     );
     const grp = await this.groups.getOrCreate(session.chatId, null, null);
-    void this.gameLoop.sendGifCategory?.(session.chatId, grp, session.game.mode === 'Chaos' ? 'StartChaosGame' : 'StartGame');
+    void this.gameLoop.sendGifCategory?.(
+      session.chatId,
+      grp,
+      session.game.mode === 'Chaos' ? 'StartChaosGame' : 'StartGame',
+    );
     this.gameLoop.start(session.game, gameId);
   }
 
-  private async notifyRole(player: { id: bigint; role: bigint; name: string }, game: Game, language: string): Promise<boolean> {
+  private async notifyRole(
+    player: { id: bigint; role: bigint; name: string },
+    game: Game,
+    language: string,
+  ): Promise<boolean> {
     const telegramId = player.id;
     const role = player.role;
     const name = roleName(role);
@@ -571,46 +674,60 @@ export class GameLobbyManager {
       const coMasons = game.players.filter((p) => p.id !== player.id && p.role === ROLE_BIT.Mason);
       if (coMasons.length > 0) {
         const names = coMasons.map((p) => p.name).join(', ');
-        teamInfo = language === 'fr'
-          ? `\n\n👷 <b>Vos confrères Maçons sont :</b> ${names}`
-          : `\n\n👷 <b>Your fellow Masons are:</b> ${names}`;
+        teamInfo =
+          language === 'fr'
+            ? `\n\n👷 <b>Vos confrères Maçons sont :</b> ${names}`
+            : `\n\n👷 <b>Your fellow Masons are:</b> ${names}`;
       } else {
-        teamInfo = language === 'fr'
-          ? `\n\n👷 <b>Vous êtes le seul Maçon de cette partie.</b>`
-          : `\n\n👷 <b>You are the only Mason in this game.</b>`;
+        teamInfo =
+          language === 'fr'
+            ? `\n\n👷 <b>Vous êtes le seul Maçon de cette partie.</b>`
+            : `\n\n👷 <b>You are the only Mason in this game.</b>`;
       }
     } else if (WOLF_ROLES.includes(role) || role === ROLE_BIT.SnowWolf) {
-      const pack = game.players.filter((p) => p.id !== player.id && (WOLF_ROLES.includes(p.role) || p.role === ROLE_BIT.SnowWolf));
+      const pack = game.players.filter(
+        (p) => p.id !== player.id && (WOLF_ROLES.includes(p.role) || p.role === ROLE_BIT.SnowWolf),
+      );
       if (pack.length > 0) {
-        const names = pack.map((p) => `${p.name} (${ROLE_META[roleName(p.role)].emoji} ${this.t.translate(language, `Role_${roleName(p.role)}`)})`).join('\n• ');
-        teamInfo = language === 'fr'
-          ? `\n\n🐺 <b>Vos camarades Loups-Garous sont :</b>\n• ${names}`
-          : `\n\n🐺 <b>Your fellow Werewolves are:</b>\n• ${names}`;
+        const names = pack
+          .map(
+            (p) =>
+              `${p.name} (${ROLE_META[roleName(p.role)].emoji} ${this.t.translate(language, `Role_${roleName(p.role)}`)})`,
+          )
+          .join('\n• ');
+        teamInfo =
+          language === 'fr'
+            ? `\n\n🐺 <b>Vos camarades Loups-Garous sont :</b>\n• ${names}`
+            : `\n\n🐺 <b>Your fellow Werewolves are:</b>\n• ${names}`;
       } else {
-        teamInfo = language === 'fr'
-          ? `\n\n🐺 <b>Vous êtes le seul Loup-Garou au départ.</b>`
-          : `\n\n🐺 <b>You are the only Werewolf at the start.</b>`;
+        teamInfo =
+          language === 'fr'
+            ? `\n\n🐺 <b>Vous êtes le seul Loup-Garou au départ.</b>`
+            : `\n\n🐺 <b>You are the only Werewolf at the start.</b>`;
       }
     } else if (role === ROLE_BIT.Cultist) {
       const cult = game.players.filter((p) => p.id !== player.id && p.role === ROLE_BIT.Cultist);
       if (cult.length > 0) {
         const names = cult.map((p) => p.name).join(', ');
-        teamInfo = language === 'fr'
-          ? `\n\n🔮 <b>Vos Frères du Culte sont :</b> ${names}`
-          : `\n\n🔮 <b>Your fellow Cultists are:</b> ${names}`;
+        teamInfo =
+          language === 'fr'
+            ? `\n\n🔮 <b>Vos Frères du Culte sont :</b> ${names}`
+            : `\n\n🔮 <b>Your fellow Cultists are:</b> ${names}`;
       }
     } else if (role === ROLE_BIT.Hitman && game.hitmanTargetMap.has(player.id)) {
       const targetId = game.hitmanTargetMap.get(player.id)!;
       const targetName = game.players.find((p) => p.id === targetId)?.name ?? '???';
-      teamInfo = language === 'fr'
-        ? `\n\n🎯 <b>Votre cible d'assassinat est :</b> ${targetName}`
-        : `\n\n🎯 <b>Your assassination target is:</b> ${targetName}`;
+      teamInfo =
+        language === 'fr'
+          ? `\n\n🎯 <b>Votre cible d'assassinat est :</b> ${targetName}`
+          : `\n\n🎯 <b>Your assassination target is:</b> ${targetName}`;
     } else if (role === ROLE_BIT.Avenger && game.avengerTargetMap.has(player.id)) {
       const targetId = game.avengerTargetMap.get(player.id)!;
       const targetName = game.players.find((p) => p.id === targetId)?.name ?? '???';
-      teamInfo = language === 'fr'
-        ? `\n\n💀 <b>Votre rival juré est :</b> ${targetName}`
-        : `\n\n💀 <b>Your sworn rival is:</b> ${targetName}`;
+      teamInfo =
+        language === 'fr'
+          ? `\n\n💀 <b>Votre rival juré est :</b> ${targetName}`
+          : `\n\n💀 <b>Your sworn rival is:</b> ${targetName}`;
     }
 
     const roleMsg = `${this.t.translate(language, 'YourRoleIs', `${emoji} ${displayName}`)}${description}${teamInfo}`;
@@ -619,7 +736,10 @@ export class GameLobbyManager {
       await this.bot.api.sendMessage(chatNumber(telegramId), roleMsg, { parse_mode: 'HTML' });
       return true;
     } catch (err) {
-      this.logger.warn({ telegramId: telegramId.toString(), err: (err as Error).message }, 'Could not PM role to player');
+      this.logger.warn(
+        { telegramId: telegramId.toString(), err: (err as Error).message },
+        'Could not PM role to player',
+      );
       return false;
     }
   }
@@ -659,32 +779,65 @@ export class GameLobbyManager {
     if (addedCount > 0) {
       botPlayersAdded.labels(session.game.mode).inc(addedCount);
       playersJoined.inc(addedCount);
-      this.logger.info({ chatId: chatId.toString(), addedCount, totalInLobby: session.game.players.length }, 'Bot players added to lobby');
+      this.logger.info(
+        { chatId: chatId.toString(), addedCount, totalInLobby: session.game.players.length },
+        'Bot players added to lobby',
+      );
     }
     return addedCount;
   }
 
-  private async send(chatId: bigint, language: string, key: string, ...args: unknown[]): Promise<void> {
+  private async send(
+    chatId: bigint,
+    language: string,
+    key: string,
+    ...args: unknown[]
+  ): Promise<void> {
     try {
       await this.bot.api.sendMessage(chatNumber(chatId), this.t.translate(language, key, ...args));
     } catch (err) {
-      this.logger.error({ chatId: chatId.toString(), err: (err as Error).message }, 'Failed to send group message');
+      this.logger.error(
+        { chatId: chatId.toString(), err: (err as Error).message },
+        'Failed to send group message',
+      );
     }
   }
 
-  private async sendToUser(telegramId: bigint, language: string, key: string, ...args: unknown[]): Promise<boolean> {
+  private async sendToUser(
+    telegramId: bigint,
+    language: string,
+    key: string,
+    ...args: unknown[]
+  ): Promise<boolean> {
     try {
-      await this.bot.api.sendMessage(chatNumber(telegramId), this.t.translate(language, key, ...args));
+      await this.bot.api.sendMessage(
+        chatNumber(telegramId),
+        this.t.translate(language, key, ...args),
+      );
       return true;
     } catch (err) {
-      this.logger.warn({ telegramId: telegramId.toString(), err: (err as Error).message }, 'Could not PM user');
+      this.logger.warn(
+        { telegramId: telegramId.toString(), err: (err as Error).message },
+        'Could not PM user',
+      );
       return false;
     }
   }
 }
 
-function formatGroupTitle(title: string | null | undefined, language: string, mode?: string): string {
-  const modeLabel = mode === 'Chaos' ? 'CHAOS' : mode === 'Bloodbath' ? 'Bain de Sang' : (language === 'fr' ? 'Loup-Garou' : 'Werewolf');
+function formatGroupTitle(
+  title: string | null | undefined,
+  language: string,
+  mode?: string,
+): string {
+  const modeLabel =
+    mode === 'Chaos'
+      ? 'CHAOS'
+      : mode === 'Bloodbath'
+        ? 'Bain de Sang'
+        : language === 'fr'
+          ? 'Loup-Garou'
+          : 'Werewolf';
   const trimmed = title?.trim();
   if (trimmed) return `${modeLabel} (${trimmed})`;
   return modeLabel;

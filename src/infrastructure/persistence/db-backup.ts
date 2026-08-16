@@ -19,7 +19,11 @@ export class DatabaseBackupManager {
   private logger?: Logger | undefined;
   private retentionDays: number;
 
-  constructor(options?: { backupDir?: string; logger?: Logger | undefined; retentionDays?: number }) {
+  constructor(options?: {
+    backupDir?: string;
+    logger?: Logger | undefined;
+    retentionDays?: number;
+  }) {
     this.backupDir = options?.backupDir ?? path.join(process.cwd(), 'backups');
     this.logger = options?.logger;
     this.retentionDays = options?.retentionDays ?? 15;
@@ -49,7 +53,9 @@ export class DatabaseBackupManager {
 
       const stats = fs.statSync(filepath);
       dbBackupsTotal.inc();
-      this.logger?.info(`[DatabaseBackupManager] Created database backup ${filename} (${stats.size} bytes)`);
+      this.logger?.info(
+        `[DatabaseBackupManager] Created database backup ${filename} (${stats.size} bytes)`,
+      );
 
       // Automatically purge backups older than retention period
       await this.cleanupOldBackups();
@@ -62,7 +68,9 @@ export class DatabaseBackupManager {
       };
     } catch (error) {
       // Fallback: If pg_dump CLI is not present in container/system, create JSON dump of key tables
-      this.logger?.warn(`[DatabaseBackupManager] pg_dump command unavailable/failed: ${(error as Error).message}. Creating fallback JSON snapshot.`);
+      this.logger?.warn(
+        `[DatabaseBackupManager] pg_dump command unavailable/failed: ${(error as Error).message}. Creating fallback JSON snapshot.`,
+      );
       return this.createFallbackJsonBackup(timestamp);
     }
   }
@@ -148,7 +156,9 @@ export class DatabaseBackupManager {
       this.logger?.info(`[DatabaseBackupManager] Successfully restored database from ${filename}`);
       return true;
     } catch (err) {
-      this.logger?.error(`[DatabaseBackupManager] Failed to restore database: ${(err as Error).message}`);
+      this.logger?.error(
+        `[DatabaseBackupManager] Failed to restore database: ${(err as Error).message}`,
+      );
       throw err;
     }
   }
@@ -168,9 +178,13 @@ export class DatabaseBackupManager {
         try {
           fs.unlinkSync(backup.filepath);
           deletedCount++;
-          this.logger?.info(`[DatabaseBackupManager] Purged old backup ${backup.filename} (age: ${Math.round(ageMs / 86400000)} days)`);
+          this.logger?.info(
+            `[DatabaseBackupManager] Purged old backup ${backup.filename} (age: ${Math.round(ageMs / 86400000)} days)`,
+          );
         } catch (err) {
-          this.logger?.warn(`[DatabaseBackupManager] Failed to purge backup ${backup.filename}: ${(err as Error).message}`);
+          this.logger?.warn(
+            `[DatabaseBackupManager] Failed to purge backup ${backup.filename}: ${(err as Error).message}`,
+          );
         }
       }
     }

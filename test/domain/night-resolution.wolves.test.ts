@@ -32,13 +32,17 @@ describe('resolveWolfNight', () => {
     w1.choice = victim.id;
     w2.choice = victim.id;
 
-    const events = resolveWolfNight([w1, w2, victim], initialNightState(), baseCtx([w1, w2, victim]));
+    const events = resolveWolfNight(
+      [w1, w2, victim],
+      initialNightState(),
+      baseCtx([w1, w2, victim]),
+    );
 
     expect(victim.isDead).toBe(true);
     expect(victim.killedByRole).toBe(ROLE_BIT.Wolf);
-    expect(events.some((e) => e.type === 'PlayerDied' && e.method === 'Eat' && e.playerId === victim.id)).toBe(
-      true,
-    );
+    expect(
+      events.some((e) => e.type === 'PlayerDied' && e.method === 'Eat' && e.playerId === victim.id),
+    ).toBe(true);
   });
 
   it('lets the Guardian Angel block a wolf attack', () => {
@@ -67,7 +71,9 @@ describe('resolveWolfNight', () => {
     expect(cursed.role).toBe(ROLE_BIT.Wolf);
     expect(cursed.team).toBe('Wolf');
     expect(cursed.isDead).toBe(false);
-    expect(events.some((e) => e.type === 'CursedTurnedWolf' && e.playerId === cursed.id)).toBe(true);
+    expect(events.some((e) => e.type === 'CursedTurnedWolf' && e.playerId === cursed.id)).toBe(
+      true,
+    );
   });
 
   it('bites (does not kill) the target when an Alpha Wolf rolls a successful conversion', () => {
@@ -75,7 +81,11 @@ describe('resolveWolfNight', () => {
     const villager = createPlayer(2n, 'V', ROLE_BIT.Villager, 'Village');
     alpha.choice = villager.id;
 
-    const events = resolveWolfNight([alpha, villager], initialNightState(), baseCtx([alpha, villager], () => 0)); // roll 0 < 20 -> bitten
+    const events = resolveWolfNight(
+      [alpha, villager],
+      initialNightState(),
+      baseCtx([alpha, villager], () => 0),
+    ); // roll 0 < 20 -> bitten
 
     expect(villager.isDead).toBe(false);
     expect(villager.bitten).toBe(true);
@@ -87,7 +97,11 @@ describe('resolveWolfNight', () => {
     const villager = createPlayer(2n, 'V', ROLE_BIT.Villager, 'Village');
     alpha.choice = villager.id;
 
-    resolveWolfNight([alpha, villager], initialNightState(), baseCtx([alpha, villager], () => 0.99)); // roll 99, not < 20
+    resolveWolfNight(
+      [alpha, villager],
+      initialNightState(),
+      baseCtx([alpha, villager], () => 0.99),
+    ); // roll 99, not < 20
 
     expect(villager.isDead).toBe(true);
     expect(villager.bitten).toBe(false);
@@ -123,7 +137,11 @@ describe('resolveWolfNight', () => {
     const elder = createPlayer(2n, 'E', ROLE_BIT.WiseElder, 'Village');
     wolf.choice = elder.id;
 
-    const firstEvents = resolveWolfNight([wolf, elder], initialNightState(), baseCtx([wolf, elder]));
+    const firstEvents = resolveWolfNight(
+      [wolf, elder],
+      initialNightState(),
+      baseCtx([wolf, elder]),
+    );
     expect(elder.isDead).toBe(false);
     expect(elder.hasUsedAbility).toBe(true);
     expect(firstEvents.some((e) => e.type === 'WiseElderSurvivedFirstAttack')).toBe(true);
@@ -139,7 +157,11 @@ describe('resolveWolfNight', () => {
     wolf.choice = hunter.id;
 
     // chance = 30 + (1 wolf - 1) * 20 = 30. roll 0 < 30 -> hunter fights back.
-    const events = resolveWolfNight([wolf, hunter], initialNightState(), baseCtx([wolf, hunter], () => 0));
+    const events = resolveWolfNight(
+      [wolf, hunter],
+      initialNightState(),
+      baseCtx([wolf, hunter], () => 0),
+    );
 
     expect(wolf.isDead).toBe(true);
     expect(hunter.isDead).toBe(false);
@@ -154,7 +176,11 @@ describe('resolveWolfNight', () => {
     w2.choice = hunter.id;
 
     // chance = 30 + (2 - 1) * 20 = 50. roll 0 < 50 -> counter-attack succeeds.
-    const events = resolveWolfNight([w1, w2, hunter], initialNightState(), baseCtx([w1, w2, hunter], () => 0));
+    const events = resolveWolfNight(
+      [w1, w2, hunter],
+      initialNightState(),
+      baseCtx([w1, w2, hunter], () => 0),
+    );
 
     expect(hunter.isDead).toBe(true);
     expect(w1.isDead || w2.isDead).toBe(true);
@@ -167,7 +193,11 @@ describe('resolveWolfNight', () => {
     wolf.choice = hunter.id;
 
     // chance = 30. roll 99 -> fails -> falls back to a normal wolf-eat.
-    const events = resolveWolfNight([wolf, hunter], initialNightState(), baseCtx([wolf, hunter], () => 0.99));
+    const events = resolveWolfNight(
+      [wolf, hunter],
+      initialNightState(),
+      baseCtx([wolf, hunter], () => 0.99),
+    );
 
     expect(hunter.isDead).toBe(true);
     // The generic "final shot" mechanic is deliberately suppressed here (hunterFinalShot: false in the
@@ -192,9 +222,9 @@ describe('resolveWolfNight', () => {
 
     expect(villager.isDead).toBe(true); // main target still resolved normally
     expect(gd.isDead).toBe(true);
-    expect(events.some((e) => e.type === 'PlayerDied' && e.method === 'Spotted' && e.playerId === gd.id)).toBe(
-      true,
-    );
+    expect(
+      events.some((e) => e.type === 'PlayerDied' && e.method === 'Spotted' && e.playerId === gd.id),
+    ).toBe(true);
   });
 
   it("does not risk a Grave Digger who didn't dig", () => {
@@ -204,7 +234,11 @@ describe('resolveWolfNight', () => {
     gd.dugGravesLastNight = 0;
     wolf.choice = villager.id;
 
-    resolveWolfNight([wolf, villager, gd], initialNightState(), baseCtx([wolf, villager, gd], () => 0));
+    resolveWolfNight(
+      [wolf, villager, gd],
+      initialNightState(),
+      baseCtx([wolf, villager, gd], () => 0),
+    );
 
     expect(gd.isDead).toBe(false);
   });
@@ -230,7 +264,11 @@ describe('resolveWolfNight', () => {
     const villager = createPlayer(2n, 'V', ROLE_BIT.Villager, 'Village');
     alpha.choice = villager.id;
 
-    const events = resolveWolfNight([alpha, villager], initialNightState(), baseCtx([alpha, villager], () => 0));
+    const events = resolveWolfNight(
+      [alpha, villager],
+      initialNightState(),
+      baseCtx([alpha, villager], () => 0),
+    );
 
     expect(events.some((e) => e.type === 'PlayerBitten' && e.alphaId === alpha.id)).toBe(true);
   });
@@ -276,7 +314,11 @@ describe('resolveWolfNight', () => {
     const drunk = createPlayer(2n, 'D', ROLE_BIT.Drunk, 'Village');
     alpha.choice = drunk.id;
 
-    const events = resolveWolfNight([alpha, drunk], initialNightState(), baseCtx([alpha, drunk], () => 0));
+    const events = resolveWolfNight(
+      [alpha, drunk],
+      initialNightState(),
+      baseCtx([alpha, drunk], () => 0),
+    );
 
     expect(drunk.bitten).toBe(true);
     expect(alpha.drunk).toBe(false); // the pack only falls asleep on the Eat path, not the bite path
@@ -293,7 +335,11 @@ describe('resolveWolfNight', () => {
     w1.choice2 = v2.id;
     w2.choice2 = v2.id;
 
-    const events = resolveWolfNight([w1, w2, v1, v2], initialNightState(), baseCtx([w1, w2, v1, v2]));
+    const events = resolveWolfNight(
+      [w1, w2, v1, v2],
+      initialNightState(),
+      baseCtx([w1, w2, v1, v2]),
+    );
 
     expect(events.some((e) => e.type === 'WolfPackAteTwice')).toBe(true);
   });
@@ -303,7 +349,11 @@ describe('resolveWolfNight', () => {
     const villager = createPlayer(2n, 'V', ROLE_BIT.Villager, 'Village');
     wolf.choice = villager.id;
 
-    const events = resolveWolfNight([wolf, villager], initialNightState(), baseCtx([wolf, villager]));
+    const events = resolveWolfNight(
+      [wolf, villager],
+      initialNightState(),
+      baseCtx([wolf, villager]),
+    );
 
     expect(events.some((e) => e.type === 'WolfPackAteTwice')).toBe(false);
   });

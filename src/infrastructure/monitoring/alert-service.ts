@@ -1,11 +1,7 @@
 import type { Bot } from 'grammy';
 import type { Env } from '../config/env.js';
 import type { Logger } from '../logging/logger.js';
-import {
-  adminAlertsSent,
-  botErrors,
-  transientNetworkErrors,
-} from './metrics.js';
+import { adminAlertsSent, botErrors, transientNetworkErrors } from './metrics.js';
 
 export class AlertService {
   private lastAlertTime = new Map<string, number>();
@@ -21,7 +17,8 @@ export class AlertService {
    * Features a 60-second cooldown per error signature to prevent notification flooding during network hiccups.
    */
   async notifyAdmin(errorTitle: string, details: string, errorKey = 'generic'): Promise<void> {
-    const adminId = this.env.errorChatId ?? (this.env.devUserIds.length > 0 ? this.env.devUserIds[0] : undefined);
+    const adminId =
+      this.env.errorChatId ?? (this.env.devUserIds.length > 0 ? this.env.devUserIds[0] : undefined);
     if (!adminId) {
       this.logger.warn(
         { errorTitle, errorKey },
@@ -64,7 +61,10 @@ export class AlertService {
       adminAlertsSent.inc();
       this.logger.info({ errorTitle, errorKey }, 'Admin monitoring alert sent via Telegram');
     } catch (err) {
-      this.logger.error({ err, errorTitle, errorKey }, 'Failed to send monitoring alert via Telegram');
+      this.logger.error(
+        { err, errorTitle, errorKey },
+        'Failed to send monitoring alert via Telegram',
+      );
       botErrors.labels('alertService', 'sendMessageFailed').inc();
     }
 
@@ -82,7 +82,11 @@ export class AlertService {
   /**
    * Dispatches an alert to Slack via Webhook.
    */
-  private async sendSlackAlert(errorTitle: string, cleanDetails: string, timeStr: string): Promise<void> {
+  private async sendSlackAlert(
+    errorTitle: string,
+    cleanDetails: string,
+    timeStr: string,
+  ): Promise<void> {
     try {
       const payload = {
         blocks: [
@@ -111,7 +115,10 @@ export class AlertService {
       });
 
       if (!res.ok) {
-        this.logger.warn({ status: res.status, errorTitle }, 'Slack webhook returned non-OK status');
+        this.logger.warn(
+          { status: res.status, errorTitle },
+          'Slack webhook returned non-OK status',
+        );
       } else {
         this.logger.info({ errorTitle }, 'Slack alert sent successfully');
       }
@@ -123,7 +130,11 @@ export class AlertService {
   /**
    * Dispatches an alert email via Mailgun REST API.
    */
-  private async sendMailgunAlert(errorTitle: string, cleanDetails: string, timeStr: string): Promise<void> {
+  private async sendMailgunAlert(
+    errorTitle: string,
+    cleanDetails: string,
+    timeStr: string,
+  ): Promise<void> {
     try {
       const domain = this.env.mailgunDomain!;
       const apiKey = this.env.mailgunApiKey!;
@@ -172,7 +183,8 @@ export class AlertService {
     const innerError = errorObj?.error ?? errorObj;
     const errorCode = innerError?.code ?? innerError?.errno ?? errorObj?.code;
     const errorName = innerError?.name as string | undefined;
-    const errorMessage = typeof innerError?.message === 'string' ? (innerError.message as string) : '';
+    const errorMessage =
+      typeof innerError?.message === 'string' ? (innerError.message as string) : '';
 
     // Transient socket / long-polling drops that grammY runner automatically retries
     if (

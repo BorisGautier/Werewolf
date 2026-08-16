@@ -79,7 +79,9 @@ export class PlayerRepository {
 
   /** Resolves an `@mention` entity (which only gives a username, not an id) to a known player. */
   async findByUsername(username: string) {
-    return this.prisma.player.findFirst({ where: { username: { equals: username, mode: 'insensitive' } } });
+    return this.prisma.player.findFirst({
+      where: { username: { equals: username, mode: 'insensitive' } },
+    });
   }
 
   async markHasStartedPm(telegramId: bigint): Promise<void> {
@@ -91,7 +93,10 @@ export class PlayerRepository {
   }
 
   async isBanned(telegramId: bigint): Promise<boolean> {
-    const player = await this.prisma.player.findUnique({ where: { telegramId }, select: { isBanned: true } });
+    const player = await this.prisma.player.findUnique({
+      where: { telegramId },
+      select: { isBanned: true },
+    });
     return player?.isBanned ?? false;
   }
 
@@ -100,7 +105,10 @@ export class PlayerRepository {
     donationEvents.inc();
     donationStarsTotal.inc(stars);
 
-    const before = await this.prisma.player.findUnique({ where: { telegramId }, select: { donationLevel: true } });
+    const before = await this.prisma.player.findUnique({
+      where: { telegramId },
+      select: { donationLevel: true },
+    });
     const updated = await this.prisma.player.update({
       where: { telegramId },
       data: { totalDonatedStars: { increment: stars } },
@@ -109,13 +117,20 @@ export class PlayerRepository {
     if (level !== updated.donationLevel) {
       await this.prisma.player.update({ where: { telegramId }, data: { donationLevel: level } });
     }
-    return { totalStars: updated.totalDonatedStars, level, leveledUp: level > (before?.donationLevel ?? 0) };
+    return {
+      totalStars: updated.totalDonatedStars,
+      level,
+      leveledUp: level > (before?.donationLevel ?? 0),
+    };
   }
 
   /** `/adddonation` dev override: sets a player's lifetime total (and recomputed level) directly. */
   async setDonatedTotal(telegramId: bigint, totalStars: number): Promise<RecordDonationResult> {
     const level = donationLevelForTotal(totalStars);
-    await this.prisma.player.update({ where: { telegramId }, data: { totalDonatedStars: totalStars, donationLevel: level } });
+    await this.prisma.player.update({
+      where: { telegramId },
+      data: { totalDonatedStars: totalStars, donationLevel: level },
+    });
     return { totalStars, level, leveledUp: false };
   }
 
@@ -123,7 +138,9 @@ export class PlayerRepository {
    * Records an AFK strike for a player. On the 3rd strike, resets strike count and suspends
    * the player for 24 hours.
    */
-  async recordAfkStrike(telegramId: bigint): Promise<{ afkCount: number; isSuspended: boolean; suspendedUntil: Date | null }> {
+  async recordAfkStrike(
+    telegramId: bigint,
+  ): Promise<{ afkCount: number; isSuspended: boolean; suspendedUntil: Date | null }> {
     const player = await this.upsert(telegramId);
     const newCount = player.afkCount + 1;
     if (newCount >= 3) {
@@ -143,7 +160,9 @@ export class PlayerRepository {
   }
 
   /** Checks whether the player is currently suspended from joining games (24h AFK ban). */
-  async checkSuspension(telegramId: bigint): Promise<{ isSuspended: boolean; suspendedUntil: Date | null }> {
+  async checkSuspension(
+    telegramId: bigint,
+  ): Promise<{ isSuspended: boolean; suspendedUntil: Date | null }> {
     const player = await this.prisma.player.findUnique({
       where: { telegramId },
       select: { suspendedUntil: true },
@@ -163,7 +182,13 @@ export class PlayerRepository {
     telegramId: bigint,
     deltaPoints: number,
     won: boolean,
-  ): Promise<{ oldPoints: number; newPoints: number; oldRank: RankTier; newRank: RankTier; promoted: boolean }> {
+  ): Promise<{
+    oldPoints: number;
+    newPoints: number;
+    oldRank: RankTier;
+    newRank: RankTier;
+    promoted: boolean;
+  }> {
     await this.upsert(telegramId);
     const existing = await this.findByTelegramId(telegramId);
     const oldPoints = existing?.points ?? 0;
@@ -214,7 +239,9 @@ export class PlayerRepository {
   }
 
   /** Finds a player's global leaderboard rank. */
-  async getPlayerRank(telegramId: bigint): Promise<{ rank: number; points: number; gamesPlayed: number; gamesWon: number } | null> {
+  async getPlayerRank(
+    telegramId: bigint,
+  ): Promise<{ rank: number; points: number; gamesPlayed: number; gamesWon: number } | null> {
     const target = await this.prisma.player.findUnique({
       where: { telegramId },
       select: { points: true, gamesPlayed: true, gamesWon: true },
@@ -256,4 +283,3 @@ export class PlayerRepository {
     });
   }
 }
-

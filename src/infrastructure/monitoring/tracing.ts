@@ -33,7 +33,11 @@ function generateSpanId(): string {
  * Runs a function within an OpenTelemetry trace context.
  */
 export function runWithTraceContext<T>(
-  ctxInfo: { updateId?: number; userId?: bigint | string | number; chatId?: bigint | string | number },
+  ctxInfo: {
+    updateId?: number;
+    userId?: bigint | string | number;
+    chatId?: bigint | string | number;
+  },
   fn: () => Promise<T> | T,
 ): Promise<T> | T {
   const context: TraceContext = {

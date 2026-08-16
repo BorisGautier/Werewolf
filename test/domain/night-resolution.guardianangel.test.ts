@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { ROLE_BIT } from '../../src/domain/roles/role.js';
 import { SPARK, createPlayer } from '../../src/domain/game/player.js';
-import { initialNightState, resolveGuardianAngelNight } from '../../src/domain/game/night-resolution.js';
+import {
+  initialNightState,
+  resolveGuardianAngelNight,
+} from '../../src/domain/game/night-resolution.js';
 
 function baseCtx(players: ReturnType<typeof createPlayer>[], random?: () => number) {
   return { players, dayNumber: 1, thiefFull: false, ...(random !== undefined ? { random } : {}) };
@@ -23,7 +26,9 @@ describe('resolveGuardianAngelNight', () => {
     const events = resolveGuardianAngelNight([ga, target], state, baseCtx([ga, target]));
 
     expect(target.doused).toBe(false);
-    expect(events.some((e) => e.type === 'GuardianAngelCleanedDouse' && e.playerId === target.id)).toBe(true);
+    expect(
+      events.some((e) => e.type === 'GuardianAngelCleanedDouse' && e.playerId === target.id),
+    ).toBe(true);
   });
 
   it('clears a douse when the save was specifically from an Arsonist spark', () => {
@@ -37,11 +42,20 @@ describe('resolveGuardianAngelNight', () => {
 
     const state = initialNightState();
     state.guardianAngel = ga;
-    const events = resolveGuardianAngelNight([ga, target, arsonist], state, baseCtx([ga, target, arsonist]));
+    const events = resolveGuardianAngelNight(
+      [ga, target, arsonist],
+      state,
+      baseCtx([ga, target, arsonist]),
+    );
 
     expect(target.doused).toBe(false);
     expect(
-      events.some((e) => e.type === 'GuardianAngelSavedTargetFromFire' && e.gaId === ga.id && e.targetId === target.id),
+      events.some(
+        (e) =>
+          e.type === 'GuardianAngelSavedTargetFromFire' &&
+          e.gaId === ga.id &&
+          e.targetId === target.id,
+      ),
     ).toBe(true);
     // Only the "preventive cleaning" branch (nobody attacked, just doused) counts towards
     // Firefighter - being saved from an actual fire is a different narrative branch entirely.
@@ -101,7 +115,11 @@ describe('resolveGuardianAngelNight', () => {
     const state = initialNightState();
     state.guardianAngel = ga;
     // Visiting an unattacked wolf is a 50/50 death roll for the GA - force survival (roll >= 50).
-    resolveGuardianAngelNight([ga, wolf], state, baseCtx([ga, wolf], () => 0.9));
+    resolveGuardianAngelNight(
+      [ga, wolf],
+      state,
+      baseCtx([ga, wolf], () => 0.9),
+    );
 
     expect(ga.isDead).toBe(false);
     expect(ga.gaGuardWolfCount).toBe(1);
@@ -130,9 +148,11 @@ describe('resolveGuardianAngelNight', () => {
     state.guardianAngel = ga;
     const events = resolveGuardianAngelNight([ga, target], state, baseCtx([ga, target]));
 
-    expect(events.some((e) => e.type === 'GuardianAngelSaved' && e.gaId === ga.id && e.targetId === target.id)).toBe(
-      true,
-    );
+    expect(
+      events.some(
+        (e) => e.type === 'GuardianAngelSaved' && e.gaId === ga.id && e.targetId === target.id,
+      ),
+    ).toBe(true);
   });
 
   it("emits GuardianAngelNoAttack when the target wasn't attacked, doused, or dead", () => {
@@ -145,7 +165,9 @@ describe('resolveGuardianAngelNight', () => {
     const events = resolveGuardianAngelNight([ga, target], state, baseCtx([ga, target]));
 
     expect(
-      events.some((e) => e.type === 'GuardianAngelNoAttack' && e.gaId === ga.id && e.targetId === target.id),
+      events.some(
+        (e) => e.type === 'GuardianAngelNoAttack' && e.gaId === ga.id && e.targetId === target.id,
+      ),
     ).toBe(true);
   });
 
@@ -160,7 +182,10 @@ describe('resolveGuardianAngelNight', () => {
     const events = resolveGuardianAngelNight([ga, harlot], state, baseCtx([ga, harlot]));
 
     expect(
-      events.some((e) => e.type === 'GuardianAngelTargetEmpty' && e.gaId === ga.id && e.targetId === harlot.id),
+      events.some(
+        (e) =>
+          e.type === 'GuardianAngelTargetEmpty' && e.gaId === ga.id && e.targetId === harlot.id,
+      ),
     ).toBe(true);
   });
 
@@ -172,11 +197,18 @@ describe('resolveGuardianAngelNight', () => {
     const state = initialNightState();
     state.guardianAngel = ga;
     // Force the 50/50 death roll against the GA (roll < 50).
-    const events = resolveGuardianAngelNight([ga, wolf], state, baseCtx([ga, wolf], () => 0));
+    const events = resolveGuardianAngelNight(
+      [ga, wolf],
+      state,
+      baseCtx([ga, wolf], () => 0),
+    );
 
     expect(ga.isDead).toBe(true);
     expect(
-      events.some((e) => e.type === 'GuardianAngelDiedProtecting' && e.gaId === ga.id && e.targetId === wolf.id),
+      events.some(
+        (e) =>
+          e.type === 'GuardianAngelDiedProtecting' && e.gaId === ga.id && e.targetId === wolf.id,
+      ),
     ).toBe(true);
   });
 

@@ -1,6 +1,11 @@
 /** Conversions between the pure domain types and Prisma's generated enums. */
 
-import { Team as PrismaTeam, KillMethod as PrismaKillMethod, RoleName as PrismaRoleName, GamePhase as PrismaGamePhase } from '@prisma/client';
+import {
+  Team as PrismaTeam,
+  KillMethod as PrismaKillMethod,
+  RoleName as PrismaRoleName,
+  GamePhase as PrismaGamePhase,
+} from '@prisma/client';
 import { roleName, type Role } from '../../domain/roles/role.js';
 import type { Team } from '../../domain/game/team.js';
 import type { KillMethod } from '../../domain/game/kill-method.js';

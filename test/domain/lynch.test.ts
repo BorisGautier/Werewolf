@@ -4,7 +4,9 @@ import { createPlayer } from '../../src/domain/game/player.js';
 import { SKIP_VOTE, resetLynchState, resolveLynchVotes } from '../../src/domain/game/lynch.js';
 
 function villagers(n: number, startId = 1) {
-  return Array.from({ length: n }, (_, i) => createPlayer(BigInt(startId + i), `V${i}`, ROLE_BIT.Villager, 'Village'));
+  return Array.from({ length: n }, (_, i) =>
+    createPlayer(BigInt(startId + i), `V${i}`, ROLE_BIT.Villager, 'Village'),
+  );
 }
 
 describe('resolveLynchVotes', () => {
@@ -103,7 +105,9 @@ describe('resolveLynchVotes', () => {
 
     expect(idler.isDead).toBe(true);
     expect(idler.diedByFleeOrIdle).toBe(true);
-    expect(events.some((e) => e.type === 'PlayerDied' && e.playerId === idler.id && e.method === 'Idle')).toBe(true);
+    expect(
+      events.some((e) => e.type === 'PlayerDied' && e.playerId === idler.id && e.method === 'Idle'),
+    ).toBe(true);
   });
 
   it('does not idle-kill on the second lynch attempt (double-lynch round)', () => {

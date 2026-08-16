@@ -8,7 +8,9 @@ const DEFAULT_LOCALES_DIR = path.resolve(
   '../../../locales',
 );
 
-export async function loadLocales(dir: string = DEFAULT_LOCALES_DIR): Promise<Map<string, LocaleFile>> {
+export async function loadLocales(
+  dir: string = DEFAULT_LOCALES_DIR,
+): Promise<Map<string, LocaleFile>> {
   const files = (await readdir(dir)).filter((f) => f.endsWith('.json'));
   const locales = new Map<string, LocaleFile>();
 
@@ -19,12 +21,16 @@ export async function loadLocales(dir: string = DEFAULT_LOCALES_DIR): Promise<Ma
   }
 
   if (![...locales.values()].some((l) => l.isDefault)) {
-    throw new Error('No locale is marked as isDefault: true - one master fallback language is required.');
+    throw new Error(
+      'No locale is marked as isDefault: true - one master fallback language is required.',
+    );
   }
 
   for (const locale of locales.values()) {
     if (locale.base && !locales.has(locale.base)) {
-      throw new Error(`Locale "${locale.code}" declares base "${locale.base}", which isn't among the loaded locales.`);
+      throw new Error(
+        `Locale "${locale.code}" declares base "${locale.base}", which isn't among the loaded locales.`,
+      );
     }
   }
 

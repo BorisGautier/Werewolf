@@ -47,11 +47,17 @@ jobs:
       - name: Generate Prisma client
         run: npm run prisma:generate
 
+      - name: Prettier code formatting check
+        run: npm run format:check
+
       - name: Type-check (src + test)
         run: npx tsc --noEmit -p tsconfig.eslint.json
 
       - name: Lint
         run: npm run lint
+
+      - name: Security Dependency Audit
+        run: npm run audit || true
 
       - name: Test
         run: npm test

@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { ROLE_BIT, addFlag } from '../../src/domain/roles/role.js';
-import { WOLF_ROLES, NON_VILLAGE_ROLES, balance, getStrength, tryBalance } from '../../src/domain/game/game-balancing.js';
+import {
+  WOLF_ROLES,
+  NON_VILLAGE_ROLES,
+  balance,
+  getStrength,
+  tryBalance,
+} from '../../src/domain/game/game-balancing.js';
 
 describe('game balancing', () => {
   it('always assigns exactly one role per player', () => {

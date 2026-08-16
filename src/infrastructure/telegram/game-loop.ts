@@ -26,7 +26,10 @@ import type { GameEvent } from '../../domain/game/game-event.js';
 import type { Team } from '../../domain/game/team.js';
 import { WEATHER_DETAILS } from '../../domain/game/village-weather.js';
 import { generateGazette, LAST_GAZETTES_BY_CHAT } from '../../domain/gazette/gazette-generator.js';
-import { evaluateGameAchievements, firstLynchVictimId } from '../../domain/achievements/evaluate.js';
+import {
+  evaluateGameAchievements,
+  firstLynchVictimId,
+} from '../../domain/achievements/evaluate.js';
 import { ACHIEVEMENTS, type AchievementCode } from '../../domain/achievements/catalog.js';
 import type { GroupWithConfig } from '../persistence/group.repository.js';
 import { AchievementRepository } from '../persistence/achievement.repository.js';
@@ -38,7 +41,13 @@ import { Translator, MissingLocaleStringError } from '../i18n/translator.js';
 import type { Logger } from '../logging/logger.js';
 import { describeEvent } from './messages.js';
 import { LocalGifPack } from './local-gif-pack.js';
-import { dayOneTargets, DAY_ABILITY_ROLES, DAY_TARGET_ROLES, NIGHT_TARGET_ROLES, nightTargets } from './role-menus.js';
+import {
+  dayOneTargets,
+  DAY_ABILITY_ROLES,
+  DAY_TARGET_ROLES,
+  NIGHT_TARGET_ROLES,
+  nightTargets,
+} from './role-menus.js';
 import { buildEndGameSummary } from './end-game-summary.js';
 import { calculateGamePoints } from '../../domain/scoring.js';
 import {
@@ -188,7 +197,10 @@ export class GameLoop {
     }
 
     nightsStarted.inc();
-    this.logger.info({ chatId: game.chatId.toString(), dayNumber: game.dayNumber, mode: game.mode }, 'Night phase started');
+    this.logger.info(
+      { chatId: game.chatId.toString(), dayNumber: game.dayNumber, mode: game.mode },
+      'Night phase started',
+    );
 
     if (!game.nightSkipped) {
       const seconds = this.nightSeconds(game, group);
@@ -211,7 +223,10 @@ export class GameLoop {
 
     const events = game.resolveNightActions();
     nightsResolved.inc();
-    this.logger.info({ chatId: game.chatId.toString(), dayNumber: game.dayNumber, eventsCount: events.length }, 'Night phase resolved');
+    this.logger.info(
+      { chatId: game.chatId.toString(), dayNumber: game.dayNumber, eventsCount: events.length },
+      'Night phase resolved',
+    );
     await this.broadcast(game, group, events, 'Night');
     if (await this.handleHunterShots(game, group, events, 'Night')) return;
     if (game.phase === 'Ended') return this.finish(game);
@@ -242,7 +257,10 @@ export class GameLoop {
         await this.sendArchivistReport(actor, game.players, game.dayNumber, language);
         continue;
       }
-      if (game.dayNumber === 1 && (actor.role === ROLE_BIT.WildChild || actor.role === ROLE_BIT.Doppelganger)) {
+      if (
+        game.dayNumber === 1 &&
+        (actor.role === ROLE_BIT.WildChild || actor.role === ROLE_BIT.Doppelganger)
+      ) {
         await this.sendRoleModelMenu(actor, game.players, language);
         continue;
       }
@@ -254,16 +272,30 @@ export class GameLoop {
 
       // The Blacksmith spread silver today: the wolf pack (and the Snow Wolf) get no menu at
       // all tonight, mirroring the original never building their `AskEat`/`AskFreeze` prompt.
-      if (game.silverSpread && (actor.role === ROLE_BIT.SnowWolf || WOLF_ROLES.includes(actor.role))) continue;
+      if (
+        game.silverSpread &&
+        (actor.role === ROLE_BIT.SnowWolf || WOLF_ROLES.includes(actor.role))
+      )
+        continue;
 
       const targets = nightTargets(game.players, actor);
       if (targets.length === 0) continue;
 
       const promptKey = NIGHT_PROMPT_KEY[roleName(actor.role)] ?? 'AskTarget';
-      await this.sendPm(actor.id, language, promptKey, targetKeyboard(targets, 'nt', language, this.t));
+      await this.sendPm(
+        actor.id,
+        language,
+        promptKey,
+        targetKeyboard(targets, 'nt', language, this.t),
+      );
 
       if (WOLF_ROLES.includes(actor.role) && game.wolfCubKilled) {
-        await this.sendPm(actor.id, language, 'AskWolfPack', targetKeyboard(targets, 'nt2', language, this.t));
+        await this.sendPm(
+          actor.id,
+          language,
+          'AskWolfPack',
+          targetKeyboard(targets, 'nt2', language, this.t),
+        );
       }
     }
 
@@ -278,7 +310,11 @@ export class GameLoop {
     }
   }
 
-  private async sendArsonistMenu(actor: Player, players: readonly Player[], language: string): Promise<void> {
+  private async sendArsonistMenu(
+    actor: Player,
+    players: readonly Player[],
+    language: string,
+  ): Promise<void> {
     const targets = nightTargets(players, actor);
     const keyboard = targetKeyboard(targets, 'nt', language, this.t);
     const dousedCount = alivePlayers(players).filter((p) => p.doused).length;
@@ -286,15 +322,21 @@ export class GameLoop {
     await this.sendPm(actor.id, language, 'AskArsonist', keyboard);
   }
 
-  private async sendArchivistReport(actor: Player, players: readonly Player[], dayNumber: number, language: string): Promise<void> {
+  private async sendArchivistReport(
+    actor: Player,
+    players: readonly Player[],
+    dayNumber: number,
+    language: string,
+  ): Promise<void> {
     const alive = alivePlayers(players);
     const villageCount = alive.filter((p) => p.team === 'Village').length;
     const wolfCount = alive.filter((p) => p.team === 'Wolf').length;
     const neutralCount = alive.filter((p) => p.team !== 'Village' && p.team !== 'Wolf').length;
 
-    const reportMsg = language === 'fr'
-      ? `📜 <b>Registres de l'Archiviste (Nuit ${dayNumber}) :</b>\n\n• 👱 <b>Villageois vivants :</b> ${villageCount}\n• 🐺 <b>Loups-Garous vivants :</b> ${wolfCount}\n• 🔮 <b>Rôles Neutres / Solos vivants :</b> ${neutralCount}`
-      : `📜 <b>Archivist Records (Night ${dayNumber}):</b>\n\n• 👱 <b>Living Villagers:</b> ${villageCount}\n• 🐺 <b>Living Werewolves:</b> ${wolfCount}\n• 🔮 <b>Living Neutrals / Solos:</b> ${neutralCount}`;
+    const reportMsg =
+      language === 'fr'
+        ? `📜 <b>Registres de l'Archiviste (Nuit ${dayNumber}) :</b>\n\n• 👱 <b>Villageois vivants :</b> ${villageCount}\n• 🐺 <b>Loups-Garous vivants :</b> ${wolfCount}\n• 🔮 <b>Rôles Neutres / Solos vivants :</b> ${neutralCount}`
+        : `📜 <b>Archivist Records (Night ${dayNumber}):</b>\n\n• 👱 <b>Living Villagers:</b> ${villageCount}\n• 🐺 <b>Living Werewolves:</b> ${wolfCount}\n• 🔮 <b>Living Neutrals / Solos:</b> ${neutralCount}`;
 
     await this.sendPmRaw(actor.id, reportMsg);
   }
@@ -308,7 +350,11 @@ export class GameLoop {
     }
   }
 
-  private async sendRoleModelMenu(actor: Player, players: readonly Player[], language: string): Promise<void> {
+  private async sendRoleModelMenu(
+    actor: Player,
+    players: readonly Player[],
+    language: string,
+  ): Promise<void> {
     const targets = dayOneTargets(players, actor);
     if (targets.length === 0) return;
     const keyboard = targetKeyboard(targets, 'nrm', language, this.t, false);
@@ -316,10 +362,19 @@ export class GameLoop {
     await this.sendPm(actor.id, language, key, keyboard);
   }
 
-  private async sendCupidFirstMenu(actor: Player, players: readonly Player[], language: string): Promise<void> {
+  private async sendCupidFirstMenu(
+    actor: Player,
+    players: readonly Player[],
+    language: string,
+  ): Promise<void> {
     const targets = dayOneTargets(players, actor);
     if (targets.length === 0) return;
-    await this.sendPm(actor.id, language, 'AskCupidFirst', targetKeyboard(targets, 'cupid1', language, this.t, false));
+    await this.sendPm(
+      actor.id,
+      language,
+      'AskCupidFirst',
+      targetKeyboard(targets, 'cupid1', language, this.t, false),
+    );
   }
 
   // ------------------------------------------------------------------ Day
@@ -329,11 +384,20 @@ export class GameLoop {
     game.startDay();
     daysStarted.inc();
     gameRoundsTotal.labels(game.mode).inc();
-    this.logger.info({ chatId: game.chatId.toString(), dayNumber: game.dayNumber, mode: game.mode }, 'Day phase started');
+    this.logger.info(
+      { chatId: game.chatId.toString(), dayNumber: game.dayNumber, mode: game.mode },
+      'Day phase started',
+    );
 
     const seconds = group.dayTimerSeconds;
     dayPhaseDuration.observe(seconds);
-    await this.send(game.chatId, group.language, 'DayTime', game.dayNumber, formatDuration(seconds));
+    await this.send(
+      game.chatId,
+      group.language,
+      'DayTime',
+      game.dayNumber,
+      formatDuration(seconds),
+    );
     await this.sendGifCategory(game.chatId, group, 'DayStart');
     await this.sendDayMenus(game, group.language);
 
@@ -342,7 +406,10 @@ export class GameLoop {
 
     const events = game.resolveDayActions();
     daysResolved.inc();
-    this.logger.info({ chatId: game.chatId.toString(), dayNumber: game.dayNumber, eventsCount: events.length }, 'Day phase resolved');
+    this.logger.info(
+      { chatId: game.chatId.toString(), dayNumber: game.dayNumber, eventsCount: events.length },
+      'Day phase resolved',
+    );
     await this.broadcast(game, group, events, 'Day');
     if (await this.handleHunterShots(game, group, events, 'Day')) return;
     if (game.phase === 'Ended') return this.finish(game);
@@ -362,7 +429,12 @@ export class GameLoop {
       const targets = alivePlayers(game.players).filter((p) => p.id !== actor.id);
       if (targets.length === 0) continue;
       const promptKey = DAY_PROMPT_KEY[roleName(actor.role)] ?? 'AskTarget';
-      await this.sendPm(actor.id, language, promptKey, targetKeyboard(targets, 'dt', language, this.t));
+      await this.sendPm(
+        actor.id,
+        language,
+        promptKey,
+        targetKeyboard(targets, 'dt', language, this.t),
+      );
     }
   }
 
@@ -372,7 +444,10 @@ export class GameLoop {
     const group = await this.groups.getOrCreate(game.chatId, null, null);
     game.startLynch();
     lynchesStarted.inc();
-    this.logger.info({ chatId: game.chatId.toString(), dayNumber: game.dayNumber, mode: game.mode }, 'Lynch phase started');
+    this.logger.info(
+      { chatId: game.chatId.toString(), dayNumber: game.dayNumber, mode: game.mode },
+      'Lynch phase started',
+    );
 
     await this.sendGifCategory(game.chatId, group, 'LynchStart');
     const attempts = game.lynchAttemptsPlanned;
@@ -392,7 +467,9 @@ export class GameLoop {
 
       let judgePardon = false;
       let judgeId: bigint | undefined;
-      const judge = game.players.find((p) => !p.isDead && p.role === ROLE_BIT.Judge && !p.hasUsedAbility);
+      const judge = game.players.find(
+        (p) => !p.isDead && p.role === ROLE_BIT.Judge && !p.hasUsedAbility,
+      );
 
       if (judge) {
         const maxVotes = Math.max(0, ...game.players.map((p) => p.votes));
@@ -401,18 +478,24 @@ export class GameLoop {
           const condemned = tied[0]!;
           judge.choice = null;
           const pardonKeyboard = new InlineKeyboard()
-            .text(group.language === 'fr' ? '⚖️ Accorder la Grâce' : '⚖️ Grant Pardon', 'judge_pardon')
+            .text(
+              group.language === 'fr' ? '⚖️ Accorder la Grâce' : '⚖️ Grant Pardon',
+              'judge_pardon',
+            )
             .row()
             .text(group.language === 'fr' ? '❌ Laisser exécuter' : '❌ Let Execute', 'judge_skip');
 
-          const promptMsg = group.language === 'fr'
-            ? `⚖️ <b>DROIT DE GRÂCE DU JUGE !</b>\n\nLe village vient de condamner <b>${condemned.name}</b> au gibet avec ${condemned.votes} vote(s) !\n\nVoulez-vous exercer votre Droit de Grâce (unique) pour annuler cette exécution ?`
-            : `⚖️ <b>JUDGE'S PARDON!</b>\n\nThe village has condemned <b>${condemned.name}</b> to the gallows with ${condemned.votes} vote(s)!\n\nDo you want to use your unique Right of Pardon to save them?`;
+          const promptMsg =
+            group.language === 'fr'
+              ? `⚖️ <b>DROIT DE GRÂCE DU JUGE !</b>\n\nLe village vient de condamner <b>${condemned.name}</b> au gibet avec ${condemned.votes} vote(s) !\n\nVoulez-vous exercer votre Droit de Grâce (unique) pour annuler cette exécution ?`
+              : `⚖️ <b>JUDGE'S PARDON!</b>\n\nThe village has condemned <b>${condemned.name}</b> to the gallows with ${condemned.votes} vote(s)!\n\nDo you want to use your unique Right of Pardon to save them?`;
 
-          await this.bot.api.sendMessage(chatNumber(judge.id), promptMsg, {
-            parse_mode: 'HTML',
-            reply_markup: pardonKeyboard,
-          }).catch(() => null);
+          await this.bot.api
+            .sendMessage(chatNumber(judge.id), promptMsg, {
+              parse_mode: 'HTML',
+              reply_markup: pardonKeyboard,
+            })
+            .catch(() => null);
 
           if (judge.isBot) {
             if (Math.random() < 0.35) judge.choice = 1n;
@@ -427,7 +510,9 @@ export class GameLoop {
         }
       }
 
-      const result = game.resolveLynch(judgePardon && judgeId !== undefined ? { judgePardon: true, judgeId } : undefined);
+      const result = game.resolveLynch(
+        judgePardon && judgeId !== undefined ? { judgePardon: true, judgeId } : undefined,
+      );
       await this.sendSecretLynchSummary(game, group);
       await this.broadcastLynchOutcome(game, group.language, result.resolution);
       await this.broadcast(game, group, result.events, 'Lynch');
@@ -438,7 +523,11 @@ export class GameLoop {
     await this.runNight(game);
   }
 
-  private async sendLynchVoteMenu(game: Game, group: GroupWithConfig, seconds: number): Promise<void> {
+  private async sendLynchVoteMenu(
+    game: Game,
+    group: GroupWithConfig,
+    seconds: number,
+  ): Promise<void> {
     const alive = alivePlayers(game.players);
     const keyboard = targetKeyboard(alive, 'vote', group.language, this.t);
     await this.send(game.chatId, group.language, 'LynchTime', formatDuration(seconds));
@@ -451,9 +540,13 @@ export class GameLoop {
         await this.sendPm(actor.id, group.language, 'AskTarget', actorKeyboard);
       }
     } else {
-      await this.bot.api.sendMessage(chatNumber(game.chatId), this.t.translate(group.language, 'AskTarget'), {
-        reply_markup: keyboard,
-      });
+      await this.bot.api.sendMessage(
+        chatNumber(game.chatId),
+        this.t.translate(group.language, 'AskTarget'),
+        {
+          reply_markup: keyboard,
+        },
+      );
     }
   }
 
@@ -485,10 +578,13 @@ export class GameLoop {
         const victim = resolution.playerId ? findName(game.players, resolution.playerId) : '';
         const judgeId = (resolution as any).judgeId;
         const judgeName = judgeId ? findName(game.players, judgeId) : '';
-        const msg = language === 'fr'
-          ? `⚖️ <b>DROIT DE GRÂCE DU JUGE !</b>\n\n<i>Le Juge <b>${judgeName}</b> a frappé le tribunal de son marteau ! Il exerce son Droit de Grâce et annule l'exécution de <b>${victim}</b> ! Personne ne sera pendu aujourd'hui.</i>`
-          : `⚖️ <b>JUDGE'S PARDON!</b>\n\n<i>Judge <b>${judgeName}</b> strikes the gavel! Exercising the Right of Pardon, the execution of <b>${victim}</b> is cancelled! No one will be lynched today.</i>`;
-        await this.bot.api.sendMessage(chatNumber(game.chatId), msg, { parse_mode: 'HTML' }).catch(() => null);
+        const msg =
+          language === 'fr'
+            ? `⚖️ <b>DROIT DE GRÂCE DU JUGE !</b>\n\n<i>Le Juge <b>${judgeName}</b> a frappé le tribunal de son marteau ! Il exerce son Droit de Grâce et annule l'exécution de <b>${victim}</b> ! Personne ne sera pendu aujourd'hui.</i>`
+            : `⚖️ <b>JUDGE'S PARDON!</b>\n\n<i>Judge <b>${judgeName}</b> strikes the gavel! Exercising the Right of Pardon, the execution of <b>${victim}</b> is cancelled! No one will be lynched today.</i>`;
+        await this.bot.api
+          .sendMessage(chatNumber(game.chatId), msg, { parse_mode: 'HTML' })
+          .catch(() => null);
         const grp = await this.groups.getOrCreate(game.chatId, null, null);
         void this.sendGifCategory?.(game.chatId, grp, 'JudgePardon');
         return;
@@ -529,7 +625,12 @@ export class GameLoop {
       if (targets.length === 0) continue;
 
       hunter.choice = null;
-      await this.sendPm(hunter.id, group.language, 'AskHunterShot', targetKeyboard(targets, 'shoot', group.language, this.t, false));
+      await this.sendPm(
+        hunter.id,
+        group.language,
+        'AskHunterShot',
+        targetKeyboard(targets, 'shoot', group.language, this.t, false),
+      );
       await sleep(group.dayTimerSeconds * 1000);
       hunter.pendingHunterShot = null; // the window's closed - a late "shoot:" callback shouldn't land
 
@@ -588,17 +689,27 @@ export class GameLoop {
           'Game finished and recorded in DB',
         );
       } catch (err) {
-        this.logger.error({ err, chatId: game.chatId.toString(), gameId }, 'Failed to persist finished game');
+        this.logger.error(
+          { err, chatId: game.chatId.toString(), gameId },
+          'Failed to persist finished game',
+        );
       }
       try {
         await this.awardAchievements(game, batches, startedAt);
       } catch (err) {
-        this.logger.error({ err, chatId: game.chatId.toString(), gameId }, 'Failed to award achievements');
+        this.logger.error(
+          { err, chatId: game.chatId.toString(), gameId },
+          'Failed to award achievements',
+        );
       }
 
       if (this.players) {
         try {
-          const scores = calculateGamePoints(game.players, game.winningTeam ?? null, firstLynchVictimId(batches));
+          const scores = calculateGamePoints(
+            game.players,
+            game.winningTeam ?? null,
+            firstLynchVictimId(batches),
+          );
           const grp = await this.groups.getOrCreate(game.chatId, null, null);
           const lang = grp.language;
           for (const score of scores) {
@@ -607,16 +718,27 @@ export class GameLoop {
             if (res.promoted) {
               const title = this.t.translate(lang, res.newRank.titleKey);
               const displayTitle = title.startsWith('Rank_') ? res.newRank.defaultTitle : title;
-              const promoMsg = this.t.translate(lang, 'RankPromotionNotice', res.newRank.emoji, displayTitle, res.newPoints);
+              const promoMsg = this.t.translate(
+                lang,
+                'RankPromotionNotice',
+                res.newRank.emoji,
+                displayTitle,
+                res.newPoints,
+              );
               try {
-                await this.bot.api.sendMessage(Number(score.playerId), promoMsg, { parse_mode: 'HTML' });
+                await this.bot.api.sendMessage(Number(score.playerId), promoMsg, {
+                  parse_mode: 'HTML',
+                });
               } catch {
                 // Ignore if player hasn't started PM
               }
             }
           }
         } catch (err) {
-          this.logger.error({ err, chatId: game.chatId.toString(), gameId }, 'Failed to award leaderboard points');
+          this.logger.error(
+            { err, chatId: game.chatId.toString(), gameId },
+            'Failed to award leaderboard points',
+          );
         }
       }
     }
@@ -625,7 +747,15 @@ export class GameLoop {
       const group = await this.groups.getOrCreate(game.chatId, null, null);
       const durationMs = startedAt ? Date.now() - startedAt.getTime() : null;
       const donorBadges = await this.donorBadges(game.players.map((p) => p.id));
-      const summary = buildEndGameSummary(game.players, group.showRolesEnd, group.language, this.t, durationMs, donorBadges, scoresMap);
+      const summary = buildEndGameSummary(
+        game.players,
+        group.showRolesEnd,
+        group.language,
+        this.t,
+        durationMs,
+        donorBadges,
+        scoresMap,
+      );
       await this.sendRaw(game.chatId, summary);
 
       try {
@@ -635,10 +765,16 @@ export class GameLoop {
         await this.sendRaw(game.chatId, gazetteMsg);
         gazetteGenerations.inc();
       } catch (err) {
-        this.logger.error({ err, chatId: game.chatId.toString() }, 'Failed to generate village gazette');
+        this.logger.error(
+          { err, chatId: game.chatId.toString() },
+          'Failed to generate village gazette',
+        );
       }
     } catch (err) {
-      this.logger.error({ err, chatId: game.chatId.toString() }, 'Failed to send end-of-game summary');
+      this.logger.error(
+        { err, chatId: game.chatId.toString() },
+        'Failed to send end-of-game summary',
+      );
     }
 
     await this.unmuteAllDead(game.chatId);
@@ -691,7 +827,9 @@ export class GameLoop {
     const crossGameUnlocks = await this.achievements.recordGameResult(
       game.players.map((p) => p.id),
       firstLynchVictimId(batches),
-      guardianAngel && gaSaves > 0 ? { telegramId: guardianAngel.id, savesThisGame: gaSaves } : null,
+      guardianAngel && gaSaves > 0
+        ? { telegramId: guardianAngel.id, savesThisGame: gaSaves }
+        : null,
       longHaul,
     );
     for (const [playerId, codes] of crossGameUnlocks) {
@@ -705,7 +843,11 @@ export class GameLoop {
     }
   }
 
-  private async announceAchievement(telegramId: bigint, language: string, code: AchievementCode): Promise<void> {
+  private async announceAchievement(
+    telegramId: bigint,
+    language: string,
+    code: AchievementCode,
+  ): Promise<void> {
     const meta = ACHIEVEMENTS[code];
     try {
       await this.bot.api.sendMessage(
@@ -729,7 +871,11 @@ export class GameLoop {
   async handleCallback(playerId: bigint, chatId: bigint, data: string): Promise<string | null> {
     const [action, ...rest] = data.split(':');
     const expectedPhase: GamePhase | undefined =
-      action === 'vote' ? 'Lynch' : action?.startsWith('nt') || action?.startsWith('dt') ? 'Night' : undefined;
+      action === 'vote'
+        ? 'Lynch'
+        : action?.startsWith('nt') || action?.startsWith('dt')
+          ? 'Night'
+          : undefined;
     const game = this.games.findByPlayer(playerId, expectedPhase) ?? this.games.get(chatId);
     if (!game) return null;
 
@@ -761,7 +907,9 @@ export class GameLoop {
       case 'shoot': {
         // The Hunter is already dead by the time this menu is offered (it's their final act), so
         // this can't go through applyChoice() - that rejects dead actors for every other menu.
-        const hunter = game.players.find((p) => p.id === playerId && p.isDead && p.pendingHunterShot !== null);
+        const hunter = game.players.find(
+          (p) => p.id === playerId && p.isDead && p.pendingHunterShot !== null,
+        );
         if (!hunter) return null;
         hunter.choice = rest[0] === 'abstain' ? ABSTAIN : BigInt(rest[0]!);
         return 'ChoiceRecorded';
@@ -776,7 +924,8 @@ export class GameLoop {
       case 'nrm': {
         if (game.phase !== 'Night') return null;
         const actor = game.players.find((p) => p.id === playerId);
-        if (!actor || (actor.role !== ROLE_BIT.WildChild && actor.role !== ROLE_BIT.Doppelganger)) return null;
+        if (!actor || (actor.role !== ROLE_BIT.WildChild && actor.role !== ROLE_BIT.Doppelganger))
+          return null;
         actor.roleModel = BigInt(rest[0]!);
         return 'ChoiceRecorded';
       }
@@ -818,7 +967,12 @@ export class GameLoop {
     }
   }
 
-  private applyChoice(game: Game, playerId: bigint, field: 'choice' | 'choice2', rawTarget: string): string | null {
+  private applyChoice(
+    game: Game,
+    playerId: bigint,
+    field: 'choice' | 'choice2',
+    rawTarget: string,
+  ): string | null {
     const actor = game.players.find((p) => p.id === playerId);
     if (!actor || actor.isDead) return null;
     actor[field] = rawTarget === 'abstain' ? ABSTAIN : BigInt(rawTarget);
@@ -832,7 +986,11 @@ export class GameLoop {
    * Abstains don't announce anything, matching the fact the original's announcement code only
    * ever names a concrete target.
    */
-  private async applyLynchVote(game: Game, playerId: bigint, rawTarget: string): Promise<string | null> {
+  private async applyLynchVote(
+    game: Game,
+    playerId: bigint,
+    rawTarget: string,
+  ): Promise<string | null> {
     const voter = game.players.find((p) => p.id === playerId);
     if (!voter || voter.isDead) return null;
     const result = this.applyChoice(game, playerId, 'choice', rawTarget);
@@ -842,16 +1000,27 @@ export class GameLoop {
     const group = await this.groups.getOrCreate(game.chatId, null, null);
     if (group.secretLynch) {
       const voted = alivePlayers(game.players).filter((p) => p.choice !== null).length;
-      await this.send(game.chatId, group.language, 'PlayerVoteCounts', voted, alivePlayers(game.players).length);
+      await this.send(
+        game.chatId,
+        group.language,
+        'PlayerVoteCounts',
+        voted,
+        alivePlayers(game.players).length,
+      );
     } else if (rawTarget === 'abstain') {
       await this.send(game.chatId, group.language, 'PlayerVotedLynchAbstain', voter.name);
     } else {
       const target = game.players.find((p) => p.id === BigInt(rawTarget));
-      if (target) await this.send(game.chatId, group.language, 'PlayerVotedLynch', voter.name, target.name);
+      if (target)
+        await this.send(game.chatId, group.language, 'PlayerVotedLynch', voter.name, target.name);
     }
 
     const alive = alivePlayers(game.players);
-    if (alive.length > 0 && alive.every((p) => p.choice !== null) && game.players.some((p) => p.isBot)) {
+    if (
+      alive.length > 0 &&
+      alive.every((p) => p.choice !== null) &&
+      game.players.some((p) => p.isBot)
+    ) {
       this.skipVote(game.chatId);
     }
 
@@ -938,7 +1107,13 @@ export class GameLoop {
     this.logEvents(game.chatId, events);
 
     for (const event of events) {
-      for (const msg of describeEvent(event, game.players, group.showRolesOnDeath, this.t, group.language)) {
+      for (const msg of describeEvent(
+        event,
+        game.players,
+        group.showRolesOnDeath,
+        this.t,
+        group.language,
+      )) {
         if (msg.audience === 'group') {
           await this.send(game.chatId, group.language, msg.key, ...msg.args);
         } else {
@@ -1018,7 +1193,9 @@ export class GameLoop {
   }
 
   private async processBotNightActions(game: Game): Promise<void> {
-    const aliveBots = alivePlayers(game.players).filter((p) => p.isBot && !p.isDead && p.choice === null);
+    const aliveBots = alivePlayers(game.players).filter(
+      (p) => p.isBot && !p.isDead && p.choice === null,
+    );
     if (aliveBots.length === 0) return;
 
     for (const botPlayer of aliveBots) {
@@ -1026,7 +1203,11 @@ export class GameLoop {
       const otherAlive = alivePlayers(game.players).filter((p) => p.id !== botPlayer.id);
       if (otherAlive.length === 0) continue;
 
-      if (game.dayNumber === 1 && (botPlayer.role === ROLE_BIT.WildChild || botPlayer.role === ROLE_BIT.Doppelganger) && botPlayer.roleModel === null) {
+      if (
+        game.dayNumber === 1 &&
+        (botPlayer.role === ROLE_BIT.WildChild || botPlayer.role === ROLE_BIT.Doppelganger) &&
+        botPlayer.roleModel === null
+      ) {
         const target = otherAlive[Math.floor(Math.random() * otherAlive.length)]!;
         botPlayer.roleModel = target.id;
         continue;
@@ -1062,7 +1243,9 @@ export class GameLoop {
   }
 
   private async processBotLynchVotes(game: Game): Promise<void> {
-    const aliveBots = alivePlayers(game.players).filter((p) => p.isBot && !p.isDead && p.choice === null);
+    const aliveBots = alivePlayers(game.players).filter(
+      (p) => p.isBot && !p.isDead && p.choice === null,
+    );
     if (aliveBots.length === 0) return;
 
     await Promise.all(
@@ -1086,20 +1269,29 @@ export class GameLoop {
     );
   }
 
-  async sendGifCategory(chatId: bigint, group: GroupWithConfig, category: GifCategory): Promise<void> {
+  async sendGifCategory(
+    chatId: bigint,
+    group: GroupWithConfig,
+    category: GifCategory,
+  ): Promise<void> {
     try {
       gifSends.labels(category).inc();
     } catch {
       // ignore
     }
-    const fileId = this.gifPacks ? await this.gifPacks.getApprovedFileId(category, group.defaultGifPackId) : null;
+    const fileId = this.gifPacks
+      ? await this.gifPacks.getApprovedFileId(category, group.defaultGifPackId)
+      : null;
     const media = fileId ?? this.localGifPack.resolve(category);
     if (!media) return;
 
     try {
       await this.bot.api.sendAnimation(chatNumber(chatId), media);
     } catch (err) {
-      this.logger.warn({ err, chatId: chatId.toString(), category }, 'Failed to send gif animation');
+      this.logger.warn(
+        { err, chatId: chatId.toString(), category },
+        'Failed to send gif animation',
+      );
     }
   }
 
@@ -1110,27 +1302,41 @@ export class GameLoop {
    * `assets/gifs/` (see `LocalGifPack`) when no approved custom pack covers this category - a
    * no-op (today's text-only behavior, unchanged) until either one is actually supplied.
    */
-  private async sendGifForEvent(game: Game, group: GroupWithConfig, event: GameEvent): Promise<void> {
+  private async sendGifForEvent(
+    game: Game,
+    group: GroupWithConfig,
+    event: GameEvent,
+  ): Promise<void> {
     this.recordRoleAbilityMetrics(event);
     let category: GifCategory | null = null;
     let playerId: bigint | undefined;
 
     if (event.type === 'PlayerDied') {
-      category = event.method === 'Burn' ? 'BurnToDeath' : event.method === 'SerialKilled' ? 'SKKilled' : 'VillagerDie';
+      category =
+        event.method === 'Burn'
+          ? 'BurnToDeath'
+          : event.method === 'SerialKilled'
+            ? 'SKKilled'
+            : 'VillagerDie';
       playerId = event.playerId;
     } else if (event.type === 'GameEnded') {
       category = WIN_TEAM_GIF_CATEGORY[event.winningTeam] ?? null;
     }
     if (!category) return;
 
-    const fileId = this.gifPacks ? await this.gifPacks.getApprovedFileId(category, group.defaultGifPackId, playerId) : null;
+    const fileId = this.gifPacks
+      ? await this.gifPacks.getApprovedFileId(category, group.defaultGifPackId, playerId)
+      : null;
     const media = fileId ?? this.localGifPack.resolve(category);
     if (!media) return;
 
     try {
       await this.bot.api.sendAnimation(chatNumber(game.chatId), media);
     } catch (err) {
-      this.logger.warn({ err, chatId: game.chatId.toString(), category }, 'Failed to send gif pack animation');
+      this.logger.warn(
+        { err, chatId: game.chatId.toString(), category },
+        'Failed to send gif pack animation',
+      );
     }
   }
 
@@ -1150,18 +1356,41 @@ export class GameLoop {
   }
 
   /** Persists `PlayerDied`/`LoverDiedOfGrief` events as `GameKill` rows - see `GameRepository.recordKill`. */
-  private async recordKillEvent(game: Game, phase: 'Night' | 'Day' | 'Lynch', event: GameEvent): Promise<void> {
+  private async recordKillEvent(
+    game: Game,
+    phase: 'Night' | 'Day' | 'Lynch',
+    event: GameEvent,
+  ): Promise<void> {
     const gameId = this.gameIds.get(game.chatId);
     if (gameId === undefined) return;
 
     if (event.type === 'PlayerDied') {
-      await this.gameRepo.recordKill(gameId, event.playerId, event.killerIds, event.method, phase, game.dayNumber);
+      await this.gameRepo.recordKill(
+        gameId,
+        event.playerId,
+        event.killerIds,
+        event.method,
+        phase,
+        game.dayNumber,
+      );
     } else if (event.type === 'LoverDiedOfGrief') {
-      await this.gameRepo.recordKill(gameId, event.playerId, [], 'LoverDied', phase, game.dayNumber);
+      await this.gameRepo.recordKill(
+        gameId,
+        event.playerId,
+        [],
+        'LoverDied',
+        phase,
+        game.dayNumber,
+      );
     }
   }
 
-  private async send(chatId: bigint, language: string, key: string, ...args: unknown[]): Promise<void> {
+  private async send(
+    chatId: bigint,
+    language: string,
+    key: string,
+    ...args: unknown[]
+  ): Promise<void> {
     try {
       await this.bot.api.sendMessage(chatNumber(chatId), this.t.translate(language, key, ...args));
     } catch (err) {
@@ -1197,7 +1426,12 @@ export class GameLoop {
     }
   }
 
-  private async sendPm(telegramId: bigint, language: string, key: string, keyboard: InlineKeyboard): Promise<void> {
+  private async sendPm(
+    telegramId: bigint,
+    language: string,
+    key: string,
+    keyboard: InlineKeyboard,
+  ): Promise<void> {
     try {
       let text: string;
       try {

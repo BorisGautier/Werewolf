@@ -63,11 +63,16 @@ export function resolveGunnerShot(players: Player[]): GameEvent[] {
     events.push({ type: 'GunnerLostPowerToWiseElder', playerId: gunner.id });
   }
 
-  events.push(...killPlayer(players, target.id, 'Shoot', { killerIds: [gunner.id], isNight: false }));
+  events.push(
+    ...killPlayer(players, target.id, 'Shoot', { killerIds: [gunner.id], isNight: false }),
+  );
   return events;
 }
 
-export function resolveSpumpkinDetonate(players: Player[], random: () => number = Math.random): GameEvent[] {
+export function resolveSpumpkinDetonate(
+  players: Player[],
+  random: () => number = Math.random,
+): GameEvent[] {
   const events: GameEvent[] = [];
 
   const spumpkin = players.find(
@@ -89,11 +94,16 @@ export function resolveSpumpkinDetonate(players: Player[], random: () => number 
   }
 
   events.push(...killPlayer(players, spumpkin.id, 'None', { killerIds: [], isNight: false }));
-  events.push(...killPlayer(players, target.id, 'Shoot', { killerIds: [spumpkin.id], isNight: false }));
+  events.push(
+    ...killPlayer(players, target.id, 'Shoot', { killerIds: [spumpkin.id], isNight: false }),
+  );
   return events;
 }
 
-export function resolveDetectiveSnoop(players: Player[], random: () => number = Math.random): GameEvent[] {
+export function resolveDetectiveSnoop(
+  players: Player[],
+  random: () => number = Math.random,
+): GameEvent[] {
   const events: GameEvent[] = [];
 
   const detective = players.find(
@@ -109,7 +119,12 @@ export function resolveDetectiveSnoop(players: Player[], random: () => number = 
   const target = players.find((p) => p.id === detective.choice);
   if (!target) return events;
 
-  events.push({ type: 'DetectiveSnoop', playerId: detective.id, targetId: target.id, targetRole: target.role });
+  events.push({
+    type: 'DetectiveSnoop',
+    playerId: detective.id,
+    targetId: target.id,
+    targetRole: target.role,
+  });
 
   if (!THREAT_ROLES.includes(target.role)) {
     detective.correctSnoopedIds = [];

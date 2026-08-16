@@ -36,7 +36,13 @@ export interface AchievementEvalContext {
   showRolesOnDeath: boolean;
 }
 
-const BAD_TEAMS: ReadonlySet<Team> = new Set(['Wolf', 'Cult', 'SerialKiller', 'Arsonist', 'Tanner']);
+const BAD_TEAMS: ReadonlySet<Team> = new Set([
+  'Wolf',
+  'Cult',
+  'SerialKiller',
+  'Arsonist',
+  'Tanner',
+]);
 
 function isWolf(role: Role): boolean {
   return WOLF_ROLES.includes(role);
@@ -76,11 +82,15 @@ class UnlockCollector {
   }
 }
 
-export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigint, AchievementCode[]> {
+export function evaluateGameAchievements(
+  ctx: AchievementEvalContext,
+): Map<bigint, AchievementCode[]> {
   const { players } = ctx;
   const out = new UnlockCollector();
   const allEvents = ctx.eventBatches.flat();
-  const deaths = allEvents.filter((e): e is Extract<GameEvent, { type: 'PlayerDied' }> => e.type === 'PlayerDied');
+  const deaths = allEvents.filter(
+    (e): e is Extract<GameEvent, { type: 'PlayerDied' }> => e.type === 'PlayerDied',
+  );
   const findPlayer = (id: bigint) => players.find((p) => p.id === id);
 
   // #1 WelcomeToHell - play a game.
@@ -89,22 +99,39 @@ export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigin
     'WelcomeToHell',
   );
   // #2 WelcomeToAsylum - play a chaos game.
-  if (ctx.mode === 'Chaos') out.grantAll(players.map((p) => p.id), 'WelcomeToAsylum');
+  if (ctx.mode === 'Chaos')
+    out.grantAll(
+      players.map((p) => p.id),
+      'WelcomeToAsylum',
+    );
   // #3 AlzheimerPatient, #4 OHAIDER, #7 Linguist, #8 NoIdeaWhat, #11 Naughty - language-pack /
   // dev-account features, out of scope for this migration.
   // #5 SpyVsSpy - secret mode (no role reveal).
-  if (!ctx.showRolesOnDeath) out.grantAll(players.map((p) => p.id), 'SpyVsSpy');
+  if (!ctx.showRolesOnDeath)
+    out.grantAll(
+      players.map((p) => p.id),
+      'SpyVsSpy',
+    );
   // #6 Explorer - cross-game group diversity, computed in AchievementRepository.
   // #9 Enochlophobia - 35 player game.
-  if (players.length >= 35) out.grantAll(players.map((p) => p.id), 'Enochlophobia');
+  if (players.length >= 35)
+    out.grantAll(
+      players.map((p) => p.id),
+      'Enochlophobia',
+    );
   // #10 Introvert - 5 player game (the minimum).
-  if (players.length === 5) out.grantAll(players.map((p) => p.id), 'Introvert');
+  if (players.length === 5)
+    out.grantAll(
+      players.map((p) => p.id),
+      'Introvert',
+    );
   // #12 Dedicated, #13 Obsessed, #14 HereJohnny, #15 GotYourBack, #19 Survivalist, #51 Veteran -
   // cumulative cross-game counters, computed in AchievementRepository.
   // #16 Masochist - win a game as the Tanner.
   for (const p of players) if (p.role === ROLE_BIT.Tanner && p.won) out.grant(p.id, 'Masochist');
   // #17 Wobble - survive a game as the drunk (10+ players).
-  for (const p of players) if (p.role === ROLE_BIT.Drunk && !p.isDead && players.length >= 10) out.grant(p.id, 'Wobble');
+  for (const p of players)
+    if (p.role === ROLE_BIT.Drunk && !p.isDead && players.length >= 10) out.grant(p.id, 'Wobble');
   // #18 Inconspicuous - never received a single lynch vote all game, and survived (20+ player
   // games only, mirroring the original's `Players.Count < 20` exemption).
   if (players.length >= 20) {
@@ -114,12 +141,17 @@ export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigin
   // the single-game "was this the game's first lynch victim" signal below).
   // #21 Promiscuous - as the Harlot, 5+ distinct visits, never staying home or repeating one.
   for (const p of players) {
-    if (!p.hasStayedHome && !p.hasRepeatedVisit && p.playersVisited.size >= 5) out.grant(p.id, 'Promiscuous');
+    if (!p.hasStayedHome && !p.hasRepeatedVisit && p.playersVisited.size >= 5)
+      out.grant(p.id, 'Promiscuous');
   }
   // #22 MasonBrother - two or more surviving masons.
   {
     const masons = players.filter((p) => p.role === ROLE_BIT.Mason && !p.isDead);
-    if (masons.length >= 2) out.grantAll(masons.map((p) => p.id), 'MasonBrother');
+    if (masons.length >= 2)
+      out.grantAll(
+        masons.map((p) => p.id),
+        'MasonBrother',
+      );
   }
   // #23 DoubleShifter - changed roles twice in the game (cult conversion doesn't bump this
   // counter - see role-changes.ts).
@@ -134,7 +166,8 @@ export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigin
     const shooterAlreadyDied = deaths.some((d) => d.playerId === shooterId);
     if (!shooterAlreadyDied) continue;
     const victim = findPlayer(death.playerId);
-    if (victim && (isWolf(victim.role) || victim.role === ROLE_BIT.SerialKiller)) out.grant(shooterId, 'HeyManNiceShot');
+    if (victim && (isWolf(victim.role) || victim.role === ROLE_BIT.SerialKiller))
+      out.grant(shooterId, 'HeyManNiceShot');
   }
   // #25 DontStayHome - a wolf kills a Harlot who stayed home (an 'Eat' death, as opposed to
   // 'VisitWolf'/'VisitVictim' - those mean she was out visiting someone).
@@ -147,15 +180,22 @@ export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigin
   // without the original losing it).
   {
     const seers = players.filter((p) => p.role === ROLE_BIT.Seer);
-    if (seers.length > 1) out.grantAll(seers.map((p) => p.id), 'DoubleVision');
+    if (seers.length > 1)
+      out.grantAll(
+        seers.map((p) => p.id),
+        'DoubleVision',
+      );
   }
   // #28 ShouldHaveKnown - the Seer's vision lands on the Beholder.
   for (const event of allEvents) {
-    if (event.type === 'SeerVision' && event.shownRole === ROLE_BIT.Beholder) out.grant(event.playerId, 'ShouldHaveKnown');
+    if (event.type === 'SeerVision' && event.shownRole === ROLE_BIT.Beholder)
+      out.grant(event.playerId, 'ShouldHaveKnown');
   }
   // #27 DoubleKill - be part of the Serial Killer/Hunter standoff-win ending.
   if (ctx.winningTeam === 'SKHunter') {
-    for (const p of players) if (p.role === ROLE_BIT.SerialKiller || p.role === ROLE_BIT.Hunter) out.grant(p.id, 'DoubleKill');
+    for (const p of players)
+      if (p.role === ROLE_BIT.SerialKiller || p.role === ROLE_BIT.Hunter)
+        out.grant(p.id, 'DoubleKill');
   }
   // #29 LackOfTrust - the Seer is the game's first lynch victim.
   {
@@ -165,8 +205,14 @@ export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigin
   }
   // #30 BloodyNight - 4+ people die in the same night (i.e. within one resolution batch).
   for (const batch of ctx.eventBatches) {
-    const nightDeaths = batch.filter((e): e is Extract<GameEvent, { type: 'PlayerDied' }> => e.type === 'PlayerDied' && e.isNight);
-    if (nightDeaths.length >= 4) out.grantAll(nightDeaths.map((d) => d.playerId), 'BloodyNight');
+    const nightDeaths = batch.filter(
+      (e): e is Extract<GameEvent, { type: 'PlayerDied' }> => e.type === 'PlayerDied' && e.isNight,
+    );
+    if (nightDeaths.length >= 4)
+      out.grantAll(
+        nightDeaths.map((d) => d.playerId),
+        'BloodyNight',
+      );
   }
   // #31 ChangingSides - changed roles in the game, and won.
   for (const p of players) if (p.changedRolesCount >= 1 && p.won) out.grant(p.id, 'ChangingSides');
@@ -186,7 +232,8 @@ export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigin
   // #34 FirstStone - first to cast a live lynch vote, 5 times in one game.
   for (const p of players) if (p.firstToVoteCount >= 5) out.grant(p.id, 'FirstStone');
   // #35 SmartGunner - both of the Gunner's bullets hit a wolf/Serial Killer/cultist.
-  for (const p of players) if (p.role === ROLE_BIT.Gunner && p.bulletHitBaddies >= 2) out.grant(p.id, 'SmartGunner');
+  for (const p of players)
+    if (p.role === ROLE_BIT.Gunner && p.bulletHitBaddies >= 2) out.grant(p.id, 'SmartGunner');
   // #36 Streetwise - snooped a different threat 4 nights running as the Detective.
   for (const p of players) if (p.streetwise) out.grant(p.id, 'Streetwise');
   // #37 OnlineDating - auto-picked as a lover because Cupid didn't choose in time.
@@ -206,7 +253,11 @@ export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigin
   // #40 CultCon - 10+ cultists alive at game end.
   {
     const cultists = players.filter((p) => p.team === 'Cult' && !p.isDead);
-    if (cultists.length >= 10) out.grantAll(cultists.map((p) => p.id), 'CultCon');
+    if (cultists.length >= 10)
+      out.grantAll(
+        cultists.map((p) => p.id),
+        'CultCon',
+      );
   }
   // #41 SelfLoving - Cupid picks themselves as one of the lovers.
   for (const event of allEvents) {
@@ -238,7 +289,8 @@ export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigin
       if (death.method !== 'SerialKilled') continue;
       const victim = findPlayer(death.playerId);
       if (!victim || !isWolf(victim.role)) continue;
-      for (const killerId of death.killerIds) skWolfKills.set(killerId, (skWolfKills.get(killerId) ?? 0) + 1);
+      for (const killerId of death.killerIds)
+        skWolfKills.set(killerId, (skWolfKills.get(killerId) ?? 0) + 1);
     }
     for (const [id, count] of skWolfKills) if (count >= 3) out.grant(id, 'SerialSamaritan');
   }
@@ -253,7 +305,11 @@ export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigin
   // if wolves died later in the game after peaking higher).
   {
     const livingWolves = players.filter((p) => isWolf(p.role) && !p.isDead);
-    if (livingWolves.length >= 7) out.grantAll(livingWolves.map((p) => p.id), 'PackHunter');
+    if (livingWolves.length >= 7)
+      out.grantAll(
+        livingWolves.map((p) => p.id),
+        'PackHunter',
+      );
   }
   // #48 GunnerSaves - mirrors the original's `CheckForGameEnd` branch: wolves have just caught up
   // to (or are one short of, with two wolves in love) the rest, but a living Gunner's remaining
@@ -276,7 +332,8 @@ export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigin
     for (const event of ctx.eventBatches[0]) {
       if (event.type !== 'PlayerDied') continue;
       const victim = findPlayer(event.playerId);
-      if (victim?.loverId != null && event.killerIds.includes(victim.loverId)) out.grant(victim.loverId, 'OhShi');
+      if (victim?.loverId != null && event.killerIds.includes(victim.loverId))
+        out.grant(victim.loverId, 'OhShi');
     }
   }
   // #52 NoSorcery - a wolf pack eats their own Sorcerer.
@@ -295,9 +352,13 @@ export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigin
     for (const [id, count] of counts) if (count >= 3) out.grant(id, 'CultistTracker');
   }
   // #54 ImNotDrunk - the Clumsy Guy's vote landed where they meant it to, 3+ times.
-  for (const p of players) if (p.role === ROLE_BIT.ClumsyGuy && p.clumsyCorrectLynchCount >= 3) out.grant(p.id, 'ImNotDrunk');
+  for (const p of players)
+    if (p.role === ROLE_BIT.ClumsyGuy && p.clumsyCorrectLynchCount >= 3)
+      out.grant(p.id, 'ImNotDrunk');
   // #56 DidYouGuardYourself - guarded a wolf who wasn't actually under attack, 3+ times.
-  for (const p of players) if (p.role === ROLE_BIT.GuardianAngel && p.gaGuardWolfCount >= 3) out.grant(p.id, 'DidYouGuardYourself');
+  for (const p of players)
+    if (p.role === ROLE_BIT.GuardianAngel && p.gaGuardWolfCount >= 3)
+      out.grant(p.id, 'DidYouGuardYourself');
   // #55 WuffieCult - the Alpha Wolf successfully bites 3+ victims into wolves. `BittenPlayerTurnedWolf`
   // doesn't carry the biter's id, so this assumes the game's single AlphaWolf did the biting.
   {
@@ -318,7 +379,9 @@ export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigin
     if (sorcerer && livingWolves.length >= 3) out.grant(sorcerer.id, 'ThreeLittleWolves');
   }
   // #59 President - the Mayor cast 3+ lynch votes after revealing (each worth double).
-  for (const p of players) if (p.role === ROLE_BIT.Mayor && p.mayorLynchAfterRevealCount >= 3) out.grant(p.id, 'President');
+  for (const p of players)
+    if (p.role === ROLE_BIT.Mayor && p.mayorLynchAfterRevealCount >= 3)
+      out.grant(p.id, 'President');
   // #60 IHelped - the wolf pack scored two successful attacks in one night; grant to whichever
   // Wolf Cub most recently died before that (mirrors `OrderByDescending(TimeDied)`).
   // #93 IncreaseThePack - same night, and both attacks turned their targets into wolves (bites,
@@ -362,10 +425,16 @@ export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigin
     }
   }
   // #66 Trustworthy - as the Wolf Man, survived and won after the real Seer checked them.
-  for (const p of players) if (p.role === ROLE_BIT.WolfMan && p.trustworthy && !p.isDead && p.won) out.grant(p.id, 'Trustworthy');
+  for (const p of players)
+    if (p.role === ROLE_BIT.WolfMan && p.trustworthy && !p.isDead && p.won)
+      out.grant(p.id, 'Trustworthy');
   // #67 DeepLove - as the Doppelganger, chose their own lover as role model.
   for (const p of players) {
-    if (p.originalRole === ROLE_BIT.Doppelganger && p.roleModel !== null && p.roleModel === p.loverId) {
+    if (
+      p.originalRole === ROLE_BIT.Doppelganger &&
+      p.roleModel !== null &&
+      p.roleModel === p.loverId
+    ) {
       out.grant(p.id, 'DeepLove');
     }
   }
@@ -388,7 +457,8 @@ export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigin
   // #70 JustABeardyGuy - the Wolf Man got bitten by the Alpha Wolf and turned into a real werewolf.
   for (const event of allEvents) {
     if (event.type !== 'BittenPlayerTurnedWolf') continue;
-    if (findPlayer(event.playerId)?.originalRole === ROLE_BIT.WolfMan) out.grant(event.playerId, 'JustABeardyGuy');
+    if (findPlayer(event.playerId)?.originalRole === ROLE_BIT.WolfMan)
+      out.grant(event.playerId, 'JustABeardyGuy');
   }
   // #71 ThatCameUnexpected - the Tanner is lynched, wins, and 3 or fewer players remained
   // (approximated from the post-lynch survivor count).
@@ -402,7 +472,8 @@ export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigin
   // #72 NowImBlind - the Oracle failed to get a vision because every other role is already
   // accounted for.
   for (const event of allEvents) {
-    if (event.type === 'OracleVision' && event.shownRole === null) out.grant(event.playerId, 'NowImBlind');
+    if (event.type === 'OracleVision' && event.shownRole === null)
+      out.grant(event.playerId, 'NowImBlind');
   }
   // #73 EveryManForHimself, #74 MySweetieSoStrong - the Pacifist's peace declaration cancelled a
   // lynch that already had a majority of votes against them (or their lover).
@@ -410,7 +481,9 @@ export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigin
   for (const p of players) if (p.mySweetieSoStrong) out.grant(p.id, 'MySweetieSoStrong');
   // #75 CultLeader - a founding cultist (converted on day 0, i.e. never converted at all) who
   // survives and wins.
-  for (const p of players) if (p.role === ROLE_BIT.Cultist && p.dayCult === 0 && !p.isDead && p.won) out.grant(p.id, 'CultLeader');
+  for (const p of players)
+    if (p.role === ROLE_BIT.Cultist && p.dayCult === 0 && !p.isDead && p.won)
+      out.grant(p.id, 'CultLeader');
   // #76 ThanksJunior - a still-sober wolf can act while the rest of the pack sleeps off eating
   // the Drunk.
   for (const event of allEvents) {
@@ -424,7 +497,9 @@ export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigin
     );
   // #78 ILostMyWisdom - the Wise Elder changed role (turned wolf via a bite - the only way a Wise
   // Elder's role changes in this port).
-  for (const p of players) if (p.originalRole === ROLE_BIT.WiseElder && p.changedRolesCount >= 1) out.grant(p.id, 'ILostMyWisdom');
+  for (const p of players)
+    if (p.originalRole === ROLE_BIT.WiseElder && p.changedRolesCount >= 1)
+      out.grant(p.id, 'ILostMyWisdom');
   // #79 Affectionate - the Harlot visits their own lover.
   for (const event of allEvents) {
     if (event.type !== 'HarlotVisited') continue;
@@ -447,10 +522,13 @@ export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigin
   }
   // #82 Indestructible - chose themselves as their own role model.
   for (const event of allEvents) {
-    if (event.type === 'RoleModelChosen' && event.roleModelId === event.playerId) out.grant(event.playerId, 'Indestructible');
+    if (event.type === 'RoleModelChosen' && event.roleModelId === event.playerId)
+      out.grant(event.playerId, 'Indestructible');
   }
   // #83 PsychopathKiller - the Serial Killer wins a 35-player game.
-  for (const p of players) if (p.role === ROLE_BIT.SerialKiller && p.won && players.length >= 35) out.grant(p.id, 'PsychopathKiller');
+  for (const p of players)
+    if (p.role === ROLE_BIT.SerialKiller && p.won && players.length >= 35)
+      out.grant(p.id, 'PsychopathKiller');
   // #84 TodaysSpecial - calendar/event-day achievement, out of scope.
   // #85 RomeoAndJuliet - in love with the Tanner, and won by lynching them.
   for (const death of deaths) {
@@ -469,9 +547,15 @@ export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigin
     const sk = players.find((p) => p.role === ROLE_BIT.SerialKiller);
     if (sk) {
       const gotReallyBadLuck = ctx.eventBatches.some((batch) => {
-        const randomKill = batch.find((e): e is Extract<GameEvent, { type: 'SerialKillerRandomKill' }> => e.type === 'SerialKillerRandomKill');
+        const randomKill = batch.find(
+          (e): e is Extract<GameEvent, { type: 'SerialKillerRandomKill' }> =>
+            e.type === 'SerialKillerRandomKill',
+        );
         if (!randomKill) return false;
-        return batch.some((e) => e.type === 'GuardianAngelBlockedSerialKiller' && e.targetId === randomKill.newTargetId);
+        return batch.some(
+          (e) =>
+            e.type === 'GuardianAngelBlockedSerialKiller' && e.targetId === randomKill.newTargetId,
+        );
       });
       if (gotReallyBadLuck) out.grant(sk.id, 'ReallyBadLuck');
     }
@@ -493,11 +577,15 @@ export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigin
     const shooterId = death.killerIds[0];
     if (!victim || shooterId === undefined || !victim.loverId) continue;
     const lover = findPlayer(victim.loverId);
-    if (lover && BAD_TEAMS.has(victim.team) && BAD_TEAMS.has(lover.team)) out.grant(shooterId, 'DoubleShot');
+    if (lover && BAD_TEAMS.has(victim.team) && BAD_TEAMS.has(lover.team))
+      out.grant(shooterId, 'DoubleShot');
   }
   // #89/#90 PlayingWithTheFire / Firework - the Arsonist burns 5+ / 10+ houses in one night.
   for (const batch of ctx.eventBatches) {
-    const burns = batch.filter((e): e is Extract<GameEvent, { type: 'PlayerDied' }> => e.type === 'PlayerDied' && e.method === 'Burn');
+    const burns = batch.filter(
+      (e): e is Extract<GameEvent, { type: 'PlayerDied' }> =>
+        e.type === 'PlayerDied' && e.method === 'Burn',
+    );
     if (burns.length === 0) continue;
     const arsonistId = burns[0]!.killerIds[0];
     if (arsonistId === undefined) continue;
@@ -572,7 +660,8 @@ export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigin
     for (const [id, count] of counts) {
       if (count < 3) continue;
       const killer = findPlayer(id);
-      if (killer && (isWolf(killer.role) || killer.role === ROLE_BIT.SerialKiller)) out.grant(id, 'TripleKill');
+      if (killer && (isWolf(killer.role) || killer.role === ROLE_BIT.SerialKiller))
+        out.grant(id, 'TripleKill');
     }
   }
   // #98 ResistTheBeast - the Wild Child, Traitor and Cursed trio all stay human and win with the
@@ -603,7 +692,8 @@ export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigin
     const ga = players.find((p) => p.role === ROLE_BIT.GuardianAngel);
     if (ga) {
       const poisonedAfterSave = deaths.some(
-        (d) => d.method === 'Chemistry' && saved.has(d.playerId) && !d.killerIds.includes(d.playerId),
+        (d) =>
+          d.method === 'Chemistry' && saved.has(d.playerId) && !d.killerIds.includes(d.playerId),
       );
       if (poisonedAfterSave) out.grant(ga.id, 'AtLeastYouTried');
     }
@@ -612,7 +702,12 @@ export function evaluateGameAchievements(ctx: AchievementEvalContext): Map<bigin
   // visit on the same night.
   for (const batch of ctx.eventBatches) {
     const backfiredTargets = new Set(
-      batch.filter((e): e is Extract<GameEvent, { type: 'ChemistBackfired' }> => e.type === 'ChemistBackfired').map((e) => e.targetId),
+      batch
+        .filter(
+          (e): e is Extract<GameEvent, { type: 'ChemistBackfired' }> =>
+            e.type === 'ChemistBackfired',
+        )
+        .map((e) => e.targetId),
     );
     if (backfiredTargets.size === 0) continue;
     for (const event of batch) {

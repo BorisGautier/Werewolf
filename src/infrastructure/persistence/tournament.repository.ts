@@ -1,4 +1,10 @@
-import type { PrismaClient, Tournament, TournamentTeam, TournamentTeamMember, TournamentStatus } from '@prisma/client';
+import type {
+  PrismaClient,
+  Tournament,
+  TournamentTeam,
+  TournamentTeamMember,
+  TournamentStatus,
+} from '@prisma/client';
 
 export type TournamentWithTeams = Tournament & {
   teams: (TournamentTeam & {
@@ -49,7 +55,12 @@ export class TournamentRepository {
     });
   }
 
-  async createTeam(name: string, code: string, captainPlayerId: bigint, tag?: string): Promise<TournamentTeam> {
+  async createTeam(
+    name: string,
+    code: string,
+    captainPlayerId: bigint,
+    tag?: string,
+  ): Promise<TournamentTeam> {
     return this.prisma.tournamentTeam.create({
       data: {
         name,
@@ -99,7 +110,11 @@ export class TournamentRepository {
     });
   }
 
-  async updateTournamentStatus(id: number, status: TournamentStatus, currentRound?: number): Promise<void> {
+  async updateTournamentStatus(
+    id: number,
+    status: TournamentStatus,
+    currentRound?: number,
+  ): Promise<void> {
     await this.prisma.tournament.update({
       where: { id },
       data: {

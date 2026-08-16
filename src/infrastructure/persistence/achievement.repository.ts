@@ -52,7 +52,9 @@ export class AchievementRepository {
     });
     if (existing) return false;
 
-    await this.prisma.playerAchievement.create({ data: { playerId: player.id, achievementCode: code } });
+    await this.prisma.playerAchievement.create({
+      data: { playerId: player.id, achievementCode: code },
+    });
     achievementUnlocks.labels(code).inc();
     return true;
   }
@@ -135,16 +137,24 @@ export class AchievementRepository {
       if (!player) continue;
 
       const [played, survived, skKills] = await Promise.all([
-        this.prisma.gamePlayer.count({ where: { playerId: player.id, game: { endedAt: { not: null } } } }),
-        this.prisma.gamePlayer.count({ where: { playerId: player.id, survived: true, game: { endedAt: { not: null } } } }),
-        this.prisma.gameKill.count({ where: { killer: { playerId: player.id, role: 'SerialKiller' } } }),
+        this.prisma.gamePlayer.count({
+          where: { playerId: player.id, game: { endedAt: { not: null } } },
+        }),
+        this.prisma.gamePlayer.count({
+          where: { playerId: player.id, survived: true, game: { endedAt: { not: null } } },
+        }),
+        this.prisma.gameKill.count({
+          where: { killer: { playerId: player.id, role: 'SerialKiller' } },
+        }),
       ]);
 
       for (const { code, threshold } of CUMULATIVE_THRESHOLDS) {
         if (played >= threshold && (await this.unlock(telegramId, code))) add(telegramId, code);
       }
-      if (survived >= 100 && (await this.unlock(telegramId, 'Survivalist'))) add(telegramId, 'Survivalist');
-      if (skKills >= 50 && (await this.unlock(telegramId, 'HereJohnny'))) add(telegramId, 'HereJohnny');
+      if (survived >= 100 && (await this.unlock(telegramId, 'Survivalist')))
+        add(telegramId, 'Survivalist');
+      if (skKills >= 50 && (await this.unlock(telegramId, 'HereJohnny')))
+        add(telegramId, 'HereJohnny');
 
       if (await this.checkExplorer(player.id)) {
         if (await this.unlock(telegramId, 'Explorer')) add(telegramId, 'Explorer');
@@ -152,8 +162,12 @@ export class AchievementRepository {
 
       const wasFirstLynched = firstLynchVictimTelegramId === telegramId;
       const newStreak = wasFirstLynched ? player.firstLynchStreak + 1 : 0;
-      await this.prisma.player.update({ where: { telegramId }, data: { firstLynchStreak: newStreak } });
-      if (newStreak >= 3 && (await this.unlock(telegramId, 'BlackSheep'))) add(telegramId, 'BlackSheep');
+      await this.prisma.player.update({
+        where: { telegramId },
+        data: { firstLynchStreak: newStreak },
+      });
+      if (newStreak >= 3 && (await this.unlock(telegramId, 'BlackSheep')))
+        add(telegramId, 'BlackSheep');
     }
 
     if (guardianAngel && guardianAngel.savesThisGame > 0) {
@@ -161,7 +175,10 @@ export class AchievementRepository {
         where: { telegramId: guardianAngel.telegramId },
         data: { guardianAngelSaves: { increment: guardianAngel.savesThisGame } },
       });
-      if (updated.guardianAngelSaves >= 50 && (await this.unlock(guardianAngel.telegramId, 'GotYourBack'))) {
+      if (
+        updated.guardianAngelSaves >= 50 &&
+        (await this.unlock(guardianAngel.telegramId, 'GotYourBack'))
+      ) {
         add(guardianAngel.telegramId, 'GotYourBack');
       }
     }
@@ -176,7 +193,8 @@ export class AchievementRepository {
       select: { game: { select: { groupId: true } } },
     });
     const perGroup = new Map<number, number>();
-    for (const row of rows) perGroup.set(row.game.groupId, (perGroup.get(row.game.groupId) ?? 0) + 1);
+    for (const row of rows)
+      perGroup.set(row.game.groupId, (perGroup.get(row.game.groupId) ?? 0) + 1);
     const qualifyingGroups = [...perGroup.values()].filter((count) => count >= 2).length;
     return qualifyingGroups >= 10;
   }

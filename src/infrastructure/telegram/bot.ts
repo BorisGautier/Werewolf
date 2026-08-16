@@ -46,7 +46,11 @@ import {
 
 /** Mirrors `AdminRepository.banForSpam`'s tier order: index 0 is the 1st spam ban, etc. - anything
  * past the array (4th ban onward) is permanent. */
-const SPAM_BAN_DURATION_KEYS = ['SpamBanDuration12h', 'SpamBanDuration24h', 'SpamBanDuration3d'] as const;
+const SPAM_BAN_DURATION_KEYS = [
+  'SpamBanDuration12h',
+  'SpamBanDuration24h',
+  'SpamBanDuration3d',
+] as const;
 function spamBanDurationKey(tempBanCount: number): string {
   return SPAM_BAN_DURATION_KEYS[tempBanCount - 1] ?? 'SpamBanPermanent';
 }
@@ -125,7 +129,8 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     deps.notifyGameRepository,
   );
 
-  const tournamentRepo = deps.tournamentRepository ?? (deps.prisma ? new TournamentRepository(deps.prisma) : null);
+  const tournamentRepo =
+    deps.tournamentRepository ?? (deps.prisma ? new TournamentRepository(deps.prisma) : null);
   if (tournamentRepo) {
     const tournamentHandler = new TournamentCommandHandler(tournamentRepo, deps.playerRepository);
     tournamentHandler.registerCommands(bot);
@@ -175,7 +180,11 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
   bot.use(async (ctx, next) => {
     const fromId = ctx.from?.id;
     const text = ctx.message?.text;
-    if (fromId === undefined || text === undefined || !(text.startsWith('/') || text.startsWith('!'))) {
+    if (
+      fromId === undefined ||
+      text === undefined ||
+      !(text.startsWith('/') || text.startsWith('!'))
+    ) {
       return next();
     }
     const cmdMatch = text.match(/^[/!]([a-zA-Z0-9_]+)/);
@@ -235,26 +244,37 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     await ctx.reply('🧪 Running Automated Scenario Audit Suite...');
     const runner = new (await import('../testing/scenario-runner.js')).ScenarioRunner();
     const results = await runner.runAllScenarios();
-    const report = results.map((r) => `${r.passed ? '✅' : '❌'} <b>${r.name}</b>\n└─ ${r.details}`).join('\n\n');
+    const report = results
+      .map((r) => `${r.passed ? '✅' : '❌'} <b>${r.name}</b>\n└─ ${r.details}`)
+      .join('\n\n');
     await ctx.reply(`📊 <b>SCENARIO TEST REPORT</b>\n\n${report}`, { parse_mode: 'HTML' });
   });
 
   bot.command('testgif', async (ctx) => {
     if (!ctx.from) return;
     if (!env.devUserIds.includes(BigInt(ctx.from.id))) return;
-    const category = ((ctx.match as string | undefined) ?? '').trim() as import('../persistence/gif-pack.repository.js').GifCategory;
+    const category = (
+      (ctx.match as string | undefined) ?? ''
+    ).trim() as import('../persistence/gif-pack.repository.js').GifCategory;
     const validCategories = GIF_CATEGORIES as readonly string[];
     if (!category || !validCategories.includes(category)) {
-      await ctx.reply(`Usage: /testgif <category>\n\nAvailable categories:\n${GIF_CATEGORIES.join('\n')}`);
+      await ctx.reply(
+        `Usage: /testgif <category>\n\nAvailable categories:\n${GIF_CATEGORIES.join('\n')}`,
+      );
       return;
     }
     const localPack = new (await import('./local-gif-pack.js')).LocalGifPack();
-    const file = localPack.resolve(category as import('../persistence/gif-pack.repository.js').GifCategory);
+    const file = localPack.resolve(
+      category as import('../persistence/gif-pack.repository.js').GifCategory,
+    );
     if (!file) {
       await ctx.reply(`❌ No GIF found for category "${category}" in assets/gifs/`);
       return;
     }
-    await ctx.replyWithAnimation(file, { caption: `✅ Test GIF: <b>${category}</b>`, parse_mode: 'HTML' });
+    await ctx.replyWithAnimation(file, {
+      caption: `✅ Test GIF: <b>${category}</b>`,
+      parse_mode: 'HTML',
+    });
   });
 
   bot.command('version', async (ctx) => {
@@ -290,7 +310,7 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
         await ctx.reply(
           deps.translator.translate(lang, 'YourRoleIs', `${emoji} ${displayName}`) +
             `\n🏅 <b>${deps.translator.translate(lang, 'YourRankIs')}:</b> ${rank.emoji} ${displayRankTitle} (${player?.points ?? 0} pts)`,
-          { parse_mode: 'HTML' }
+          { parse_mode: 'HTML' },
         );
       }
     }
@@ -304,7 +324,9 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
 
   bot.command('setlang', async (ctx) => {
     if (!ctx.from) return;
-    const keyboard = new InlineKeyboard().text('English', 'setlang:en').text('Français', 'setlang:fr');
+    const keyboard = new InlineKeyboard()
+      .text('English', 'setlang:en')
+      .text('Français', 'setlang:fr');
     const player = await deps.playerRepository.findByTelegramId(BigInt(ctx.from.id));
     const language = player?.languageCode ?? 'en';
     try {
@@ -323,7 +345,9 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     if (!ctx.from) return;
     const language = ctx.match[1]!;
     await deps.playerRepository.setLanguage(BigInt(ctx.from.id), language);
-    await ctx.answerCallbackQuery({ text: deps.translator.translate(language, 'SetLangConfirmed', language) });
+    await ctx.answerCallbackQuery({
+      text: deps.translator.translate(language, 'SetLangConfirmed', language),
+    });
   });
 
   bot.command('stats', async (ctx) => {
@@ -339,12 +363,22 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
 
     const lines = [
       deps.translator.translate(language, 'StatsHeader'),
-      deps.translator.translate(language, 'StatsPlayerLine', name, playerStats.played, playerStats.won),
+      deps.translator.translate(
+        language,
+        'StatsPlayerLine',
+        name,
+        playerStats.played,
+        playerStats.won,
+      ),
       `🏅 <b>${deps.translator.translate(language, 'YourRankIs')}:</b> ${rank.emoji} ${displayRankTitle} (${player?.points ?? 0} pts)`,
     ];
 
     if (ctx.chat && ctx.chat.type !== 'private') {
-      const group = await deps.groupRepository.getOrCreate(BigInt(ctx.chat.id), ctx.chat.title ?? null, null);
+      const group = await deps.groupRepository.getOrCreate(
+        BigInt(ctx.chat.id),
+        ctx.chat.title ?? null,
+        null,
+      );
       const groupStats = await deps.gameRepository.getGroupStats(group.id);
       lines.push(deps.translator.translate(language, 'StatsGroupLine', groupStats.played));
     }
@@ -366,15 +400,21 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
       const rank = getRankForPoints(p.points);
       const rankTitle = deps.translator.translate(language, rank.titleKey);
       const displayRankTitle = rankTitle.startsWith('Rank_') ? rank.defaultTitle : rankTitle;
-      lines.push(`${idx + 1}. <b>${pName}</b> - ${rank.emoji} <i>${displayRankTitle}</i> (${p.points} pts | ${p.gamesWon}🏆/${p.gamesPlayed}🎮)`);
+      lines.push(
+        `${idx + 1}. <b>${pName}</b> - ${rank.emoji} <i>${displayRankTitle}</i> (${p.points} pts | ${p.gamesWon}🏆/${p.gamesPlayed}🎮)`,
+      );
     });
 
     const userRank = await deps.playerRepository.getPlayerRank(callerId);
     if (userRank && userRank.rank > 10) {
       const callerRank = getRankForPoints(caller?.points ?? 0);
       const callerRankTitle = deps.translator.translate(language, callerRank.titleKey);
-      const displayCallerRank = callerRankTitle.startsWith('Rank_') ? callerRank.defaultTitle : callerRankTitle;
-      lines.push(`\n📌 <b>Votre Rang :</b> #${userRank.rank} - ${callerRank.emoji} ${displayCallerRank} (${userRank.points} pts)`);
+      const displayCallerRank = callerRankTitle.startsWith('Rank_')
+        ? callerRank.defaultTitle
+        : callerRankTitle;
+      lines.push(
+        `\n📌 <b>Votre Rang :</b> #${userRank.rank} - ${callerRank.emoji} ${displayCallerRank} (${userRank.points} pts)`,
+      );
     }
 
     await ctx.reply(lines.join('\n'), { parse_mode: 'HTML' });
@@ -393,9 +433,14 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     const displayRankTitle = rankTitle.startsWith('Rank_') ? rank.defaultTitle : rankTitle;
 
     const equippedTitleObj = player?.equippedTitle ? getTitleById(player.equippedTitle) : null;
-    const titleText = equippedTitleObj ? `${equippedTitleObj.emoji} ${equippedTitleObj.defaultTitle}` : (isFr ? 'Aucun' : 'None');
+    const titleText = equippedTitleObj
+      ? `${equippedTitleObj.emoji} ${equippedTitleObj.defaultTitle}`
+      : isFr
+        ? 'Aucun'
+        : 'None';
 
-    const winrate = playerStats.played > 0 ? ((playerStats.won / playerStats.played) * 100).toFixed(1) : '0.0';
+    const winrate =
+      playerStats.played > 0 ? ((playerStats.won / playerStats.played) * 100).toFixed(1) : '0.0';
 
     const cardLines = [
       `👤 <b>CARTE DE PROFIL — ${ctx.from.first_name.toUpperCase()}</b>`,
@@ -407,7 +452,9 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
       `🏆 <b>Victoires :</b> ${playerStats.won} (${winrate}% winrate)`,
       `💎 <b>Palier Donateur :</b> ${donorBadge(player?.donationLevel ?? 0) || (isFr ? 'Membre' : 'Member')}`,
       `━━━━━━━━━━━━━━━━━━━━━━`,
-      isFr ? `💡 Utilise /titles pour changer ton titre équipé !` : `💡 Use /titles to change your equipped title!`,
+      isFr
+        ? `💡 Utilise /titles pour changer ton titre équipé !`
+        : `💡 Use /titles to change your equipped title!`,
     ];
 
     await ctx.reply(cardLines.join('\n'), { parse_mode: 'HTML' });
@@ -417,7 +464,10 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     const chatId = ctx.chat?.id ? ctx.chat.id.toString() : '';
     const gazette = LAST_GAZETTES_BY_CHAT.get(chatId);
     if (!gazette) {
-      await ctx.reply('📜 <i>Aucune gazette récente pour ce groupe. Jouez une partie pour éditer la première gazette !</i>', { parse_mode: 'HTML' });
+      await ctx.reply(
+        '📜 <i>Aucune gazette récente pour ce groupe. Jouez une partie pour éditer la première gazette !</i>',
+        { parse_mode: 'HTML' },
+      );
       return;
     }
     await ctx.reply(`${gazette.title}\n\n${gazette.lines.join('\n')}`, { parse_mode: 'HTML' });
@@ -445,10 +495,18 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     try {
       await ctx.api.sendMessage(ctx.from.id, msg, { reply_markup: keyboard, parse_mode: 'HTML' });
       if (ctx.chat && ctx.chat.type !== 'private') {
-        await ctx.reply(isFr ? 'Regarde tes messages privés pour gérer tes titres !' : 'Check your private messages to manage your titles!');
+        await ctx.reply(
+          isFr
+            ? 'Regarde tes messages privés pour gérer tes titres !'
+            : 'Check your private messages to manage your titles!',
+        );
       }
     } catch {
-      await ctx.reply(isFr ? "Démarre d'abord une conversation avec moi en MP pour gérer tes titres !" : "Start a PM with me first to manage your titles!");
+      await ctx.reply(
+        isFr
+          ? "Démarre d'abord une conversation avec moi en MP pour gérer tes titres !"
+          : 'Start a PM with me first to manage your titles!',
+      );
     }
   });
 
@@ -460,9 +518,14 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     await deps.playerRepository.setEquippedTitle(BigInt(ctx.from.id), newTitle);
 
     const titleObj = newTitle ? getTitleById(newTitle) : null;
-    const text = titleObj ? `Titre équipé : ${titleObj.emoji} ${titleObj.defaultTitle} !` : 'Titre retiré.';
+    const text = titleObj
+      ? `Titre équipé : ${titleObj.emoji} ${titleObj.defaultTitle} !`
+      : 'Titre retiré.';
     await ctx.answerCallbackQuery({ text });
-    await ctx.editMessageText(`✅ <b>${text}</b>\n\nUtilise /profile pour admirer ta nouvelle carte de profil !`, { parse_mode: 'HTML' });
+    await ctx.editMessageText(
+      `✅ <b>${text}</b>\n\nUtilise /profile pour admirer ta nouvelle carte de profil !`,
+      { parse_mode: 'HTML' },
+    );
   });
 
   bot.command('tagall', async (ctx) => {
@@ -475,7 +538,11 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
       const member = await ctx.api.getChatMember(ctx.chat.id, Number(callerId));
       const isAdmin = member.status === 'administrator' || member.status === 'creator';
       if (!isAdmin) {
-        await ctx.reply(language === 'fr' ? 'Seuls les administrateurs du groupe peuvent utiliser /tagall.' : 'Only group administrators can use /tagall.');
+        await ctx.reply(
+          language === 'fr'
+            ? 'Seuls les administrateurs du groupe peuvent utiliser /tagall.'
+            : 'Only group administrators can use /tagall.',
+        );
         return;
       }
       await lobby.tagAllMembers(BigInt(ctx.chat.id), language);
@@ -497,19 +564,29 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     const isFr = ctx.from.language_code === 'fr';
 
     if (!game || game.phase === 'Ended' || game.phase === 'Joining') {
-      await ctx.reply(isFr ? "Il n'y a pas de partie active en cours." : "There is no active game currently.");
+      await ctx.reply(
+        isFr ? "Il n'y a pas de partie active en cours." : 'There is no active game currently.',
+      );
       return;
     }
 
     const player = game.players.find((p) => p.id === userId);
     if (!player || player.isDead) {
-      await ctx.reply(isFr ? "Seuls les joueurs vivants de la partie peuvent effectuer un claim." : "Only living players in the game can claim a role.");
+      await ctx.reply(
+        isFr
+          ? 'Seuls les joueurs vivants de la partie peuvent effectuer un claim.'
+          : 'Only living players in the game can claim a role.',
+      );
       return;
     }
 
     const text = (ctx.message?.text ?? '').split(' ').slice(1).join(' ').trim();
     if (!text) {
-      await ctx.reply(isFr ? "Usage : /claim <rôle> (ex: /claim Voyante, /claim Villageois)" : "Usage: /claim <role> (e.g. /claim Seer, /claim Villager)");
+      await ctx.reply(
+        isFr
+          ? 'Usage : /claim <rôle> (ex: /claim Voyante, /claim Villageois)'
+          : 'Usage: /claim <role> (e.g. /claim Seer, /claim Villager)',
+      );
       return;
     }
 
@@ -526,7 +603,9 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
   bot.command('claims', async (ctx) => {
     if (!ctx.chat) return;
     const chatId = BigInt(ctx.chat.id);
-    const game = gameLoop.getGame(chatId) ?? (ctx.from ? deps.gameManager.findByPlayer(BigInt(ctx.from.id)) : undefined);
+    const game =
+      gameLoop.getGame(chatId) ??
+      (ctx.from ? deps.gameManager.findByPlayer(BigInt(ctx.from.id)) : undefined);
 
     if (!game || game.phase === 'Ended' || game.phase === 'Joining') {
       await ctx.reply("Il n'y a pas de partie en cours dans ce groupe.");
@@ -544,7 +623,7 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
       }
     }
 
-    const title = "📜 <b>RELEVÉ DES CLAIMS DE LA PARTIE :</b>\n\n";
+    const title = '📜 <b>RELEVÉ DES CLAIMS DE LA PARTIE :</b>\n\n';
     await ctx.reply(title + lines.join('\n'), { parse_mode: 'HTML' });
   });
 
@@ -630,7 +709,9 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     if (!ctx.from) return;
     const text = ctx.match?.trim();
     if (!text) {
-      await ctx.reply("🎭 Usage : /accuse @joueur [motif] (ex: /accuse @Gautier Il a l'air louche)");
+      await ctx.reply(
+        "🎭 Usage : /accuse @joueur [motif] (ex: /accuse @Gautier Il a l'air louche)",
+      );
       return;
     }
 
@@ -703,13 +784,22 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     async (ctx) => {
       if (!ctx.chat || ctx.chat.type === 'private' || !ctx.from) return;
       if (maintenance.on) {
-        await ctx.reply('Sorry, we are about to start maintenance.  Please check @greywolfdev for more information.');
+        await ctx.reply(
+          'Sorry, we are about to start maintenance.  Please check @greywolfdev for more information.',
+        );
         return;
       }
-      const cmdText = ctx.message?.text?.split(' ')[0]?.replace('/', '').split('@')[0]?.toLowerCase() ?? 'startgame';
+      const cmdText =
+        ctx.message?.text?.split(' ')[0]?.replace('/', '').split('@')[0]?.toLowerCase() ??
+        'startgame';
       const mode: GameMode = START_COMMAND_MODE_MAP[cmdText] ?? 'Normal';
       const name = `${ctx.from.first_name} ${ctx.from.last_name ?? ''}`.trim();
-      await lobby.startGame(BigInt(ctx.chat.id), ctx.chat.title ?? null, { id: BigInt(ctx.from.id), name }, mode);
+      await lobby.startGame(
+        BigInt(ctx.chat.id),
+        ctx.chat.title ?? null,
+        { id: BigInt(ctx.from.id), name },
+        mode,
+      );
     },
   );
 
@@ -743,7 +833,11 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     if (!ctx.chat || ctx.chat.type === 'private' || !ctx.from) return;
     if (!(await isGroupAdminOrAnonymous(ctx))) return;
 
-    const group = await deps.groupRepository.getOrCreate(BigInt(ctx.chat.id), ctx.chat.title ?? null, null);
+    const group = await deps.groupRepository.getOrCreate(
+      BigInt(ctx.chat.id),
+      ctx.chat.title ?? null,
+      null,
+    );
     const screen = await configMenu.open(BigInt(ctx.chat.id));
     try {
       await ctx.api.sendMessage(ctx.from.id, screen.text, { reply_markup: screen.keyboard });
@@ -762,7 +856,9 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     const groupTelegramId = BigInt(ctx.match[1]!);
     const [action, ...rest] = ctx.match[2]!.split(':');
 
-    const member = await ctx.api.getChatMember(Number(groupTelegramId), ctx.from.id).catch(() => null);
+    const member = await ctx.api
+      .getChatMember(Number(groupTelegramId), ctx.from.id)
+      .catch(() => null);
     const isAdmin = member?.status === 'creator' || member?.status === 'administrator';
     if (!isAdmin) {
       await ctx.answerCallbackQuery();
@@ -779,7 +875,11 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
   // everything else.
   bot.on('callback_query:data', async (ctx) => {
     if (!ctx.from || !ctx.chat) return;
-    const text = await gameLoop.handleCallback(BigInt(ctx.from.id), BigInt(ctx.chat.id), ctx.callbackQuery.data);
+    const text = await gameLoop.handleCallback(
+      BigInt(ctx.from.id),
+      BigInt(ctx.chat.id),
+      ctx.callbackQuery.data,
+    );
     await ctx.answerCallbackQuery({ text: text ?? '✅ Choix enregistré !' }).catch(() => null);
     if (text) {
       if (ctx.chat.type === 'private') {
@@ -814,18 +914,29 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     const count = parseInt((ctx.match as string | undefined) ?? '', 10) || 4;
     const added = await lobby.addBotPlayers(BigInt(ctx.chat.id), count);
     if (added > 0) {
-      await ctx.reply(`🤖 <b>${added} joueur(s) IA</b> ont été ajouté(s) à la partie !`, { parse_mode: 'HTML' });
+      await ctx.reply(`🤖 <b>${added} joueur(s) IA</b> ont été ajouté(s) à la partie !`, {
+        parse_mode: 'HTML',
+      });
     } else {
-      await ctx.reply(`⚠️ Lance d'abord une partie avec /startgame pour pouvoir ajouter des bots !`);
+      await ctx.reply(
+        `⚠️ Lance d'abord une partie avec /startgame pour pouvoir ajouter des bots !`,
+      );
     }
   });
 
   bot.command('botgame', async (ctx) => {
     if (!ctx.chat || ctx.chat.type === 'private' || !ctx.from) return;
     const name = `${ctx.from.first_name} ${ctx.from.last_name ?? ''}`.trim();
-    await lobby.startGame(BigInt(ctx.chat.id), ctx.chat.title ?? null, { id: BigInt(ctx.from.id), name }, 'Normal');
+    await lobby.startGame(
+      BigInt(ctx.chat.id),
+      ctx.chat.title ?? null,
+      { id: BigInt(ctx.from.id), name },
+      'Normal',
+    );
     const added = await lobby.addBotPlayers(BigInt(ctx.chat.id), 5);
-    await ctx.reply(`🎮 <b>Partie IA démarrée avec toi + ${added} joueurs virtuels (IA) !</b>`, { parse_mode: 'HTML' });
+    await ctx.reply(`🎮 <b>Partie IA démarrée avec toi + ${added} joueurs virtuels (IA) !</b>`, {
+      parse_mode: 'HTML',
+    });
     await lobby.forceStart(BigInt(ctx.chat.id), true);
   });
 
@@ -836,7 +947,11 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     const seconds = Number.isFinite(parsed) ? parsed : 30;
 
     if (seconds < 0 && !isAdmin) {
-      const group = await deps.groupRepository.getOrCreate(BigInt(ctx.chat.id), ctx.chat.title ?? null, null);
+      const group = await deps.groupRepository.getOrCreate(
+        BigInt(ctx.chat.id),
+        ctx.chat.title ?? null,
+        null,
+      );
       await ctx.reply(deps.translator.translate(group.language, 'GroupAdminOnly'));
       return;
     }
@@ -863,7 +978,11 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
 function registerWaitlistCommands(bot: Bot, deps: BotDependencies): void {
   bot.command('nextgame', async (ctx) => {
     if (!ctx.chat || ctx.chat.type === 'private' || !ctx.from) return;
-    const group = await deps.groupRepository.getOrCreate(BigInt(ctx.chat.id), ctx.chat.title ?? null, null);
+    const group = await deps.groupRepository.getOrCreate(
+      BigInt(ctx.chat.id),
+      ctx.chat.title ?? null,
+      null,
+    );
     const keyboard = new InlineKeyboard().text(
       deps.translator.translate(group.language, 'Cancel'),
       `stopwaiting:${ctx.chat.id}`,
@@ -872,9 +991,13 @@ function registerWaitlistCommands(bot: Bot, deps: BotDependencies): void {
     const added = await deps.notifyGameRepository.add(BigInt(ctx.from.id), BigInt(ctx.chat.id));
     const key = added ? 'AddedToWaitList' : 'AlreadyOnWaitList';
     try {
-      await ctx.api.sendMessage(ctx.from.id, deps.translator.translate(group.language, key, group.title ?? ''), {
-        reply_markup: keyboard,
-      });
+      await ctx.api.sendMessage(
+        ctx.from.id,
+        deps.translator.translate(group.language, key, group.title ?? ''),
+        {
+          reply_markup: keyboard,
+        },
+      );
     } catch (err) {
       if (!(err instanceof GrammyError)) throw err;
     }
@@ -882,7 +1005,8 @@ function registerWaitlistCommands(bot: Bot, deps: BotDependencies): void {
 
   bot.command('stopwaiting', async (ctx) => {
     if (!ctx.from) return;
-    const language = (await deps.playerRepository.findByTelegramId(BigInt(ctx.from.id)))?.languageCode ?? 'en';
+    const language =
+      (await deps.playerRepository.findByTelegramId(BigInt(ctx.from.id)))?.languageCode ?? 'en';
 
     let groupId: bigint | null = null;
     let groupTitle = '';
@@ -908,7 +1032,10 @@ function registerWaitlistCommands(bot: Bot, deps: BotDependencies): void {
     }
 
     await deps.notifyGameRepository.remove(BigInt(ctx.from.id), groupId);
-    await ctx.api.sendMessage(ctx.from.id, deps.translator.translate(language, 'DeletedFromWaitList', groupTitle));
+    await ctx.api.sendMessage(
+      ctx.from.id,
+      deps.translator.translate(language, 'DeletedFromWaitList', groupTitle),
+    );
   });
 
   bot.callbackQuery(/^stopwaiting:(-?\d+)$/, async (ctx) => {
@@ -918,7 +1045,9 @@ function registerWaitlistCommands(bot: Bot, deps: BotDependencies): void {
     const language = group?.language ?? 'en';
 
     await deps.notifyGameRepository.remove(BigInt(ctx.from.id), groupId);
-    await ctx.answerCallbackQuery({ text: deps.translator.translate(language, 'DeletedFromWaitList', group?.title ?? '') });
+    await ctx.answerCallbackQuery({
+      text: deps.translator.translate(language, 'DeletedFromWaitList', group?.title ?? ''),
+    });
   });
 }
 
@@ -927,7 +1056,9 @@ function registerRoleInfoCommands(bot: Bot, deps: BotDependencies): void {
   bot.command('rolelist', async (ctx) => {
     if (!ctx.from) return;
     const isGroup = ctx.chat && ctx.chat.type !== 'private';
-    const group = isGroup ? await deps.groupRepository.getOrCreate(BigInt(ctx.chat.id), ctx.chat.title ?? null, null) : null;
+    const group = isGroup
+      ? await deps.groupRepository.getOrCreate(BigInt(ctx.chat.id), ctx.chat.title ?? null, null)
+      : null;
     const player = await deps.playerRepository.findByTelegramId(BigInt(ctx.from.id));
     const language = group?.language ?? player?.languageCode ?? 'en';
     const lines = Object.entries(ABOUT_ROLE_BY_TRIGGER).map(
@@ -959,11 +1090,16 @@ function registerRoleInfoCommands(bot: Bot, deps: BotDependencies): void {
     if (!role) return;
 
     const isGroup = ctx.chat && ctx.chat.type !== 'private';
-    const group = isGroup ? await deps.groupRepository.getOrCreate(BigInt(ctx.chat.id), ctx.chat.title ?? null, null) : null;
+    const group = isGroup
+      ? await deps.groupRepository.getOrCreate(BigInt(ctx.chat.id), ctx.chat.title ?? null, null)
+      : null;
     const player = await deps.playerRepository.findByTelegramId(BigInt(ctx.from.id));
     const language = group?.language ?? player?.languageCode ?? 'en';
     try {
-      await ctx.api.sendMessage(ctx.from.id, deps.translator.translate(language, aboutLocaleKey(role)));
+      await ctx.api.sendMessage(
+        ctx.from.id,
+        deps.translator.translate(language, aboutLocaleKey(role)),
+      );
       if (isGroup) await ctx.reply(deps.translator.translate(language, 'CheckYourPM'));
     } catch (err) {
       if (err instanceof GrammyError) {
@@ -1006,7 +1142,11 @@ function registerModerationCommands(
       targets.push({ id, name: id.toString() });
     }
 
-    const group = await deps.groupRepository.getOrCreate(BigInt(ctx.chat.id), ctx.chat.title ?? null, null);
+    const group = await deps.groupRepository.getOrCreate(
+      BigInt(ctx.chat.id),
+      ctx.chat.title ?? null,
+      null,
+    );
     if (targets.length === 0) {
       await ctx.reply(deps.translator.translate(group.language, 'ModTargetMissing'));
       return;
@@ -1020,9 +1160,15 @@ function registerModerationCommands(
     if (!ctx.chat || ctx.chat.type === 'private' || !ctx.from) return;
     if (!(await isGroupAdmin(ctx))) return;
 
-    const group = await deps.groupRepository.getOrCreate(BigInt(ctx.chat.id), ctx.chat.title ?? null, null);
+    const group = await deps.groupRepository.getOrCreate(
+      BigInt(ctx.chat.id),
+      ctx.chat.title ?? null,
+      null,
+    );
     if (ctx.chat.username) {
-      await ctx.reply(deps.translator.translate(group.language, 'SetLinkAlreadySet', ctx.chat.username));
+      await ctx.reply(
+        deps.translator.translate(group.language, 'SetLinkAlreadySet', ctx.chat.username),
+      );
       return;
     }
 
@@ -1044,7 +1190,11 @@ function registerModerationCommands(
     if (!ctx.chat || ctx.chat.type === 'private' || !ctx.from) return;
     if (!(await isGroupAdmin(ctx))) return;
 
-    const group = await deps.groupRepository.getOrCreate(BigInt(ctx.chat.id), ctx.chat.title ?? null, null);
+    const group = await deps.groupRepository.getOrCreate(
+      BigInt(ctx.chat.id),
+      ctx.chat.title ?? null,
+      null,
+    );
     await deps.groupRepository.updateConfig(BigInt(ctx.chat.id), { inviteLink: null });
     await ctx.reply(deps.translator.translate(group.language, 'RemLinkConfirmed'));
   });
@@ -1053,7 +1203,11 @@ function registerModerationCommands(
     if (!ctx.chat || ctx.chat.type === 'private' || !ctx.from) return;
     if (!(await isGroupAdmin(ctx))) return;
 
-    const group = await deps.groupRepository.getOrCreate(BigInt(ctx.chat.id), ctx.chat.title ?? null, null);
+    const group = await deps.groupRepository.getOrCreate(
+      BigInt(ctx.chat.id),
+      ctx.chat.title ?? null,
+      null,
+    );
     const ids = new Set<bigint>(numericIdTargets(ctx.match as string | undefined));
     for (const entity of ctx.message?.entities ?? []) {
       if (entity.type === 'text_mention' && entity.user) ids.add(BigInt(entity.user.id));
@@ -1082,7 +1236,11 @@ function registerModerationCommands(
     if (!ctx.chat || !ctx.from) return;
     if (!(await isGlobalAdmin(BigInt(ctx.from.id)))) return;
 
-    const group = await deps.groupRepository.getOrCreate(BigInt(ctx.chat.id), ctx.chat.title ?? null, null);
+    const group = await deps.groupRepository.getOrCreate(
+      BigInt(ctx.chat.id),
+      ctx.chat.title ?? null,
+      null,
+    );
     const targets = await resolveEntityTargets(ctx, deps.playerRepository);
     for (const id of numericIdTargets(ctx.match as string | undefined)) {
       targets.push({ id, name: id.toString() });
@@ -1106,7 +1264,11 @@ function registerModerationCommands(
     if (!ctx.chat || !ctx.from) return;
     if (!(await isGlobalAdmin(BigInt(ctx.from.id)))) return;
 
-    const group = await deps.groupRepository.getOrCreate(BigInt(ctx.chat.id), ctx.chat.title ?? null, null);
+    const group = await deps.groupRepository.getOrCreate(
+      BigInt(ctx.chat.id),
+      ctx.chat.title ?? null,
+      null,
+    );
     const targets = await resolveEntityTargets(ctx, deps.playerRepository);
     for (const id of numericIdTargets(ctx.match as string | undefined)) {
       targets.push({ id, name: id.toString() });
@@ -1130,16 +1292,26 @@ function registerModerationCommands(
     if (!ctx.chat || ctx.chat.type === 'private' || !ctx.from) return;
     if (!(await isGlobalAdmin(BigInt(ctx.from.id)))) return;
 
-    const group = await deps.groupRepository.getOrCreate(BigInt(ctx.chat.id), ctx.chat.title ?? null, null);
+    const group = await deps.groupRepository.getOrCreate(
+      BigInt(ctx.chat.id),
+      ctx.chat.title ?? null,
+      null,
+    );
     const killed = gameLoop.killGame(BigInt(ctx.chat.id));
-    await ctx.reply(deps.translator.translate(group.language, killed ? 'GameKilledMsg' : 'NoGameRunning'));
+    await ctx.reply(
+      deps.translator.translate(group.language, killed ? 'GameKilledMsg' : 'NoGameRunning'),
+    );
   });
 
   bot.command('getbans', async (ctx) => {
     if (!ctx.chat || !ctx.from) return;
     if (!(await isGlobalAdmin(BigInt(ctx.from.id)))) return;
 
-    const group = await deps.groupRepository.getOrCreate(BigInt(ctx.chat.id), ctx.chat.title ?? null, null);
+    const group = await deps.groupRepository.getOrCreate(
+      BigInt(ctx.chat.id),
+      ctx.chat.title ?? null,
+      null,
+    );
     const bans = await deps.adminRepository.listActiveBans();
     if (bans.length === 0) {
       await ctx.reply(deps.translator.translate(group.language, 'GetBansEmpty'));
@@ -1149,7 +1321,13 @@ function registerModerationCommands(
     // Mirrors the original's three-section /getbans layout: spam bans (temporary, in-memory list)
     // separate from global bans, themselves split into expiring-soonest-first vs permanent.
     const line = (ban: (typeof bans)[number]) =>
-      deps.translator.translate(group.language, 'GetBansLine', ban.playerName ?? ban.telegramId.toString(), ban.telegramId.toString(), ban.reason);
+      deps.translator.translate(
+        group.language,
+        'GetBansLine',
+        ban.playerName ?? ban.telegramId.toString(),
+        ban.telegramId.toString(),
+        ban.reason,
+      );
 
     const spam = bans.filter((b) => b.scope === 'SPAM');
     const manual = bans.filter((b) => b.scope !== 'SPAM');
@@ -1178,7 +1356,11 @@ function registerModerationCommands(
     if (!ctx.chat || !ctx.from) return;
     if (!(await isGlobalAdmin(BigInt(ctx.from.id)))) return;
 
-    const group = await deps.groupRepository.getOrCreate(BigInt(ctx.chat.id), ctx.chat.title ?? null, null);
+    const group = await deps.groupRepository.getOrCreate(
+      BigInt(ctx.chat.id),
+      ctx.chat.title ?? null,
+      null,
+    );
     const targets = await resolveEntityTargets(ctx, deps.playerRepository);
     for (const id of numericIdTargets(ctx.match as string | undefined)) {
       targets.push({ id, name: id.toString() });
@@ -1196,10 +1378,22 @@ function registerModerationCommands(
       await ctx.reply(deps.translator.translate(group.language, 'GetBanNotBanned', target.name));
       return;
     }
-    const expires = ban.expiresAt ? ban.expiresAt.toISOString() : deps.translator.translate(group.language, 'GetBanPermanent');
-    const firstSeen = ban.firstSeen ? ban.firstSeen.toISOString() : deps.translator.translate(group.language, 'GetBanUnknown');
+    const expires = ban.expiresAt
+      ? ban.expiresAt.toISOString()
+      : deps.translator.translate(group.language, 'GetBanPermanent');
+    const firstSeen = ban.firstSeen
+      ? ban.firstSeen.toISOString()
+      : deps.translator.translate(group.language, 'GetBanUnknown');
     await ctx.reply(
-      deps.translator.translate(group.language, 'GetBanStatus', target.name, ban.reason, ban.bannedBy?.toString() ?? '?', expires, firstSeen),
+      deps.translator.translate(
+        group.language,
+        'GetBanStatus',
+        target.name,
+        ban.reason,
+        ban.bannedBy?.toString() ?? '?',
+        expires,
+        firstSeen,
+      ),
     );
   });
 
@@ -1207,7 +1401,11 @@ function registerModerationCommands(
     if (!ctx.chat || !ctx.from) return;
     if (!(await isGlobalAdmin(BigInt(ctx.from.id)))) return;
 
-    const group = await deps.groupRepository.getOrCreate(BigInt(ctx.chat.id), ctx.chat.title ?? null, null);
+    const group = await deps.groupRepository.getOrCreate(
+      BigInt(ctx.chat.id),
+      ctx.chat.title ?? null,
+      null,
+    );
     const targets = await resolveEntityTargets(ctx, deps.playerRepository);
     for (const id of numericIdTargets(ctx.match as string | undefined)) {
       targets.push({ id, name: id.toString() });
@@ -1233,7 +1431,9 @@ function registerModerationCommands(
           group.language,
           'UserProfileBanned',
           ban.reason,
-          ban.expiresAt ? ban.expiresAt.toISOString() : deps.translator.translate(group.language, 'GetBanPermanent'),
+          ban.expiresAt
+            ? ban.expiresAt.toISOString()
+            : deps.translator.translate(group.language, 'GetBanPermanent'),
         )
       : deps.translator.translate(group.language, 'UserProfileNotBanned');
 
@@ -1254,7 +1454,11 @@ function registerModerationCommands(
   });
 }
 
-async function isGlobalAdminCheck(env: Env, deps: BotDependencies, telegramId: bigint): Promise<boolean> {
+async function isGlobalAdminCheck(
+  env: Env,
+  deps: BotDependencies,
+  telegramId: bigint,
+): Promise<boolean> {
   if (env.devUserIds.includes(telegramId)) return true;
   return deps.adminRepository.isGlobalAdmin(telegramId);
 }
@@ -1269,7 +1473,8 @@ async function isGlobalAdminCheck(env: Env, deps: BotDependencies, telegramId: b
 function registerAchievementCommands(bot: Bot, env: Env, deps: BotDependencies): void {
   bot.command('achv', async (ctx) => {
     if (!ctx.from) return;
-    const language = (await deps.playerRepository.findByTelegramId(BigInt(ctx.from.id)))?.languageCode ?? 'en';
+    const language =
+      (await deps.playerRepository.findByTelegramId(BigInt(ctx.from.id)))?.languageCode ?? 'en';
     const unlocked = await deps.achievementRepository.listForPlayer(BigInt(ctx.from.id));
 
     if (unlocked.length === 0) {
@@ -1277,12 +1482,16 @@ function registerAchievementCommands(bot: Bot, env: Env, deps: BotDependencies):
       return;
     }
 
-    const lines = [deps.translator.translate(language, 'AchvHeader', unlocked.length, ACHIEVEMENT_CODES.length)];
-    for (const a of unlocked) lines.push(deps.translator.translate(language, 'AchvLine', a.name, a.description));
+    const lines = [
+      deps.translator.translate(language, 'AchvHeader', unlocked.length, ACHIEVEMENT_CODES.length),
+    ];
+    for (const a of unlocked)
+      lines.push(deps.translator.translate(language, 'AchvLine', a.name, a.description));
 
     try {
       await ctx.api.sendMessage(ctx.from.id, lines.join('\n'));
-      if (ctx.chat && ctx.chat.type !== 'private') await ctx.reply(deps.translator.translate(language, 'CheckYourPM'));
+      if (ctx.chat && ctx.chat.type !== 'private')
+        await ctx.reply(deps.translator.translate(language, 'CheckYourPM'));
     } catch (err) {
       if (err instanceof GrammyError) {
         await ctx.reply(deps.translator.translate(language, 'CantPMYou'));
@@ -1297,7 +1506,8 @@ function registerAchievementCommands(bot: Bot, env: Env, deps: BotDependencies):
     if (!(await isGlobalAdminCheck(env, deps, BigInt(ctx.from.id)))) return;
     const isAdd = ctx.message?.text?.startsWith('/addach') ?? true;
 
-    const language = (await deps.playerRepository.findByTelegramId(BigInt(ctx.from.id)))?.languageCode ?? 'en';
+    const language =
+      (await deps.playerRepository.findByTelegramId(BigInt(ctx.from.id)))?.languageCode ?? 'en';
     const words = ((ctx.match as string | undefined) ?? '').trim().split(/\s+/).filter(Boolean);
     const codeWord = words[words.length - 1] ?? '';
     const idArgText = words.slice(0, -1).join(' ');
@@ -1321,11 +1531,15 @@ function registerAchievementCommands(bot: Bot, env: Env, deps: BotDependencies):
     if (isAdd) {
       const added = await deps.achievementRepository.unlock(target.id, code);
       const key = added ? 'AchAdded' : 'AchAlreadyHad';
-      await ctx.reply(deps.translator.translate(language, key, ACHIEVEMENTS[code].name, target.name));
+      await ctx.reply(
+        deps.translator.translate(language, key, ACHIEVEMENTS[code].name, target.name),
+      );
     } else {
       const removed = await deps.achievementRepository.remove(target.id, code);
       const key = removed ? 'AchRemoved' : 'AchDidntHave';
-      await ctx.reply(deps.translator.translate(language, key, ACHIEVEMENTS[code].name, target.name));
+      await ctx.reply(
+        deps.translator.translate(language, key, ACHIEVEMENTS[code].name, target.name),
+      );
     }
   });
 }
@@ -1340,13 +1554,19 @@ function registerUtilityCommands(bot: Bot, deps: BotDependencies): void {
   bot.command('myidles', async (ctx) => {
     if (!ctx.from) return;
     const isGroup = ctx.chat != null && ctx.chat.type !== 'private';
-    const group = isGroup ? await deps.groupRepository.getOrCreate(BigInt(ctx.chat!.id), ctx.chat!.title ?? null, null) : null;
+    const group = isGroup
+      ? await deps.groupRepository.getOrCreate(BigInt(ctx.chat!.id), ctx.chat!.title ?? null, null)
+      : null;
     const language =
-      group?.language ?? (await deps.playerRepository.findByTelegramId(BigInt(ctx.from.id)))?.languageCode ?? 'en';
+      group?.language ??
+      (await deps.playerRepository.findByTelegramId(BigInt(ctx.from.id)))?.languageCode ??
+      'en';
 
     const [overall, inGroup] = await Promise.all([
       deps.gameRepository.getIdleKills24Hours(BigInt(ctx.from.id)),
-      group ? deps.gameRepository.getIdleKills24Hours(BigInt(ctx.from.id), group.id) : Promise.resolve(0),
+      group
+        ? deps.gameRepository.getIdleKills24Hours(BigInt(ctx.from.id), group.id)
+        : Promise.resolve(0),
     ]);
 
     let reply = deps.translator.translate(language, 'IdleCount', ctx.from.id.toString(), overall);
@@ -1439,9 +1659,14 @@ function registerDevCommands(
     try {
       await ctx.api.leaveChat(Number(group.telegramId));
     } catch (err) {
-      logger.warn({ err, chatId: group.telegramId.toString() }, 'Failed to leave a group just banned via /bangroup');
+      logger.warn(
+        { err, chatId: group.telegramId.toString() },
+        'Failed to leave a group just banned via /bangroup',
+      );
     }
-    await ctx.reply(`Group${group.title ? ` ${group.title}` : ''} banned - the bot will refuse to play there and leave on sight.`);
+    await ctx.reply(
+      `Group${group.title ? ` ${group.title}` : ''} banned - the bot will refuse to play there and leave on sight.`,
+    );
   });
 
   bot.command('getroles', async (ctx) => {
@@ -1460,7 +1685,11 @@ function registerDevCommands(
     if (!ctx.chat || ctx.chat.type === 'private' || !ctx.from) return;
     if (!isDev(BigInt(ctx.from.id))) return;
     const skipped = gameLoop.skipVote(BigInt(ctx.chat.id));
-    await ctx.reply(skipped ? 'Skipping current phase timer...' : 'No phase is currently waiting on a timer here.');
+    await ctx.reply(
+      skipped
+        ? 'Skipping current phase timer...'
+        : 'No phase is currently waiting on a timer here.',
+    );
   });
 
   bot.command('whois', async (ctx) => {
@@ -1496,7 +1725,10 @@ function registerDevCommands(
   bot.command('runinfo', async (ctx) => {
     if (!ctx.from || !isDev(BigInt(ctx.from.id))) return;
     const chatIds = gameManager.activeChatIds();
-    const playerCount = chatIds.reduce((sum, id) => sum + (gameManager.get(id)?.players.length ?? 0), 0);
+    const playerCount = chatIds.reduce(
+      (sum, id) => sum + (gameManager.get(id)?.players.length ?? 0),
+      0,
+    );
     await ctx.reply(
       `Run information\nUptime: ${formatUptime(Date.now() - startTime.getTime())}\n` +
         `Current Games: ${chatIds.length}\nCurrent Players: ${playerCount}`,
@@ -1516,7 +1748,9 @@ function registerDevCommands(
 
   bot.command('update', async (ctx) => {
     if (!ctx.from || !isDev(BigInt(ctx.from.id))) return;
-    await ctx.reply('Pulling latest code and rebuilding - the process will restart shortly if this succeeds...');
+    await ctx.reply(
+      'Pulling latest code and rebuilding - the process will restart shortly if this succeeds...',
+    );
     exec('git pull && npm run build', { cwd: process.cwd() }, (err) => {
       if (err) {
         logger.error({ err }, 'Update failed');
@@ -1530,7 +1764,10 @@ function registerDevCommands(
     if (!ctx.from || !isDev(BigInt(ctx.from.id))) return;
     const arg = (ctx.match as string | undefined)?.trim();
     if (!arg || !/^-?\d+$/.test(arg)) return;
-    await ctx.api.sendMessage(Number(BigInt(arg)), 'You have been banned.  You may appeal your ban in @werewolfbanappeal');
+    await ctx.api.sendMessage(
+      Number(BigInt(arg)),
+      'You have been banned.  You may appeal your ban in @werewolfbanappeal',
+    );
   });
 
   bot.command('notifyspam', async (ctx) => {
@@ -1581,7 +1818,8 @@ function registerGifCommands(bot: Bot, env: Env, deps: BotDependencies): void {
 
     try {
       await ctx.api.sendMessage(ctx.from.id, lines.join('\n'));
-      if (ctx.chat && ctx.chat.type !== 'private') await ctx.reply(deps.translator.translate(language, 'CheckYourPM'));
+      if (ctx.chat && ctx.chat.type !== 'private')
+        await ctx.reply(deps.translator.translate(language, 'CheckYourPM'));
     } catch (err) {
       if (err instanceof GrammyError) {
         await ctx.reply(deps.translator.translate(language, 'CantPMYou'));
@@ -1603,7 +1841,9 @@ function registerGifCommands(bot: Bot, env: Env, deps: BotDependencies): void {
     const categoryArg = ((ctx.match as string | undefined) ?? '').trim();
     const category = GIF_CATEGORIES.find((c) => c.toLowerCase() === categoryArg.toLowerCase());
     if (!category) {
-      await ctx.reply(deps.translator.translate(language, 'GifPackUnknownCategory', GIF_CATEGORIES.join(', ')));
+      await ctx.reply(
+        deps.translator.translate(language, 'GifPackUnknownCategory', GIF_CATEGORIES.join(', ')),
+      );
       return;
     }
 
@@ -1625,7 +1865,8 @@ function registerGifCommands(bot: Bot, env: Env, deps: BotDependencies): void {
       return;
     }
     const lines = pending.map(
-      (p) => `${p.ownerTelegramId.toString()}: ${Object.keys(p.fileIds).length}/${GIF_CATEGORIES.length} categories${p.nsfw ? ' [NSFW]' : ''}`,
+      (p) =>
+        `${p.ownerTelegramId.toString()}: ${Object.keys(p.fileIds).length}/${GIF_CATEGORIES.length} categories${p.nsfw ? ' [NSFW]' : ''}`,
     );
     await ctx.reply(['Pending gif pack submissions:', ...lines].join('\n'));
   });
@@ -1642,14 +1883,22 @@ function registerGifCommands(bot: Bot, env: Env, deps: BotDependencies): void {
     const ok = isApprove
       ? await deps.gifPackRepository.approve(target, BigInt(ctx.from.id))
       : await deps.gifPackRepository.disapprove(target);
-    await ctx.reply(ok ? `Gif pack ${isApprove ? 'approved' : 'disapproved'} for ${arg}.` : `No gif pack submission found for ${arg}.`);
+    await ctx.reply(
+      ok
+        ? `Gif pack ${isApprove ? 'approved' : 'disapproved'} for ${arg}.`
+        : `No gif pack submission found for ${arg}.`,
+    );
   });
 
   bot.command('usegifpack', async (ctx) => {
     if (!ctx.chat || ctx.chat.type === 'private' || !ctx.from) return;
     if (!(await isGroupAdminOrAnonymous(ctx))) return;
 
-    const group = await deps.groupRepository.getOrCreate(BigInt(ctx.chat.id), ctx.chat.title ?? null, null);
+    const group = await deps.groupRepository.getOrCreate(
+      BigInt(ctx.chat.id),
+      ctx.chat.title ?? null,
+      null,
+    );
     const arg = (ctx.match as string | undefined)?.trim();
 
     if (!arg || arg.toLowerCase() === 'none') {
@@ -1689,13 +1938,18 @@ function registerDonationCommands(bot: Bot, env: Env, deps: BotDependencies): vo
 
   bot.command('donate', async (ctx) => {
     if (!ctx.from || !ctx.chat) return;
-    await deps.playerRepository.upsert(BigInt(ctx.from.id), { username: ctx.from.username ?? null });
-    const language = (await deps.playerRepository.findByTelegramId(BigInt(ctx.from.id)))?.languageCode ?? 'en';
+    await deps.playerRepository.upsert(BigInt(ctx.from.id), {
+      username: ctx.from.username ?? null,
+    });
+    const language =
+      (await deps.playerRepository.findByTelegramId(BigInt(ctx.from.id)))?.languageCode ?? 'en';
 
     const arg = (ctx.match as string | undefined)?.trim();
     const amount = arg ? Number.parseInt(arg, 10) : NaN;
     if (!arg || !Number.isInteger(amount) || amount < 1 || amount > 10000) {
-      await ctx.reply(deps.translator.translate(language, 'DonateHelp', DONATION_TIERS.join(' / ')));
+      await ctx.reply(
+        deps.translator.translate(language, 'DonateHelp', DONATION_TIERS.join(' / ')),
+      );
       return;
     }
 
@@ -1718,10 +1972,16 @@ function registerDonationCommands(bot: Bot, env: Env, deps: BotDependencies): vo
     const payment = ctx.message.successful_payment;
     if (!payment.invoice_payload.startsWith(DONATE_PAYLOAD_PREFIX)) return;
 
-    const language = (await deps.playerRepository.findByTelegramId(BigInt(ctx.from.id)))?.languageCode ?? 'en';
-    const result = await deps.playerRepository.recordDonation(BigInt(ctx.from.id), payment.total_amount);
+    const language =
+      (await deps.playerRepository.findByTelegramId(BigInt(ctx.from.id)))?.languageCode ?? 'en';
+    const result = await deps.playerRepository.recordDonation(
+      BigInt(ctx.from.id),
+      payment.total_amount,
+    );
 
-    await ctx.reply(deps.translator.translate(language, 'DonateThanks', payment.total_amount, result.totalStars));
+    await ctx.reply(
+      deps.translator.translate(language, 'DonateThanks', payment.total_amount, result.totalStars),
+    );
     if (result.leveledUp) {
       await ctx.reply(deps.translator.translate(language, 'DonateLeveledUp', result.level));
     }
@@ -1739,6 +1999,8 @@ function registerDonationCommands(bot: Bot, env: Env, deps: BotDependencies): vo
     const target = BigInt(words[0]!);
     const totalStars = Number.parseInt(words[1]!, 10);
     const result = await deps.playerRepository.setDonatedTotal(target, totalStars);
-    await ctx.reply(`${target.toString()} now has ${result.totalStars} lifetime stars (level ${result.level}).`);
+    await ctx.reply(
+      `${target.toString()} now has ${result.totalStars} lifetime stars (level ${result.level}).`,
+    );
   });
 }

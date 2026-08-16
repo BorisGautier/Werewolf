@@ -2,10 +2,7 @@ import { GameManager } from '../../application/game-manager.js';
 import { ROLE_BIT } from '../../domain/roles/role.js';
 import { getTeamForRole } from '../../domain/game/team.js';
 import { createPlayer, SPARK } from '../../domain/game/player.js';
-import {
-  initialNightState,
-  resolveArsonistNight,
-} from '../../domain/game/night-resolution.js';
+import { initialNightState, resolveArsonistNight } from '../../domain/game/night-resolution.js';
 
 export interface ScenarioResult {
   name: string;
@@ -62,7 +59,11 @@ export class ScenarioRunner {
       tm.choice = game.players[2]!.id;
       if (tm.choice !== game.players[2]!.id) throw new Error('Attempt 2 vote failed');
 
-      return { name, passed: true, details: 'Double lynch activation and choice resets on attempt 2 working 100%' };
+      return {
+        name,
+        passed: true,
+        details: 'Double lynch activation and choice resets on attempt 2 working 100%',
+      };
     } catch (err: any) {
       return { name, passed: false, details: err.message };
     }
@@ -120,7 +121,11 @@ export class ScenarioRunner {
         throw new Error('Burn death event missing');
       }
 
-      return { name, passed: true, details: 'Douse and SPARK ignition burn deaths functioning 100%' };
+      return {
+        name,
+        passed: true,
+        details: 'Douse and SPARK ignition burn deaths functioning 100%',
+      };
     } catch (err: any) {
       return { name, passed: false, details: err.message };
     }
@@ -147,7 +152,11 @@ export class ScenarioRunner {
 
       if (!events) throw new Error('Night resolution returned undefined');
 
-      return { name, passed: true, details: 'Necromancer resurrection resolution functioning 100%' };
+      return {
+        name,
+        passed: true,
+        details: 'Necromancer resurrection resolution functioning 100%',
+      };
     } catch (err: any) {
       return { name, passed: false, details: err.message };
     }
@@ -248,7 +257,11 @@ export class ScenarioRunner {
         game.resolveLynch();
       }
 
-      return { name, passed: true, details: `Played ${rounds} rounds of Chaos Mode autonomously without stalling` };
+      return {
+        name,
+        passed: true,
+        details: `Played ${rounds} rounds of Chaos Mode autonomously without stalling`,
+      };
     } catch (err: any) {
       return { name, passed: false, details: err.message };
     }

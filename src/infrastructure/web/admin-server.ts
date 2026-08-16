@@ -37,9 +37,13 @@ export class AdminServer {
     this.gameManager = deps.gameManager;
     this.logger = deps.logger;
     this.authManager = deps.authManager ?? new AdminAuthManager();
-    this.backupManager = deps.backupManager ?? new DatabaseBackupManager(deps.logger ? { logger: deps.logger } : undefined);
+    this.backupManager =
+      deps.backupManager ??
+      new DatabaseBackupManager(deps.logger ? { logger: deps.logger } : undefined);
     this.bot = deps.bot;
-    this.tournamentRepository = deps.tournamentRepository ?? (deps.prisma ? new TournamentRepository(deps.prisma) : undefined);
+    this.tournamentRepository =
+      deps.tournamentRepository ??
+      (deps.prisma ? new TournamentRepository(deps.prisma) : undefined);
   }
 
   /** Starts the Admin HTTP Server */
@@ -48,7 +52,9 @@ export class AdminServer {
       this.server = http.createServer((req, res) => this.handleRequest(req, res));
       this.server.on('error', (err: { code?: string }) => {
         if (err.code === 'EADDRINUSE') {
-          this.logger?.warn(`[AdminServer] Port ${this.port} is already in use. Admin Web Dashboard is disabled for this instance.`);
+          this.logger?.warn(
+            `[AdminServer] Port ${this.port} is already in use. Admin Web Dashboard is disabled for this instance.`,
+          );
           resolve();
         } else {
           this.logger?.error({ err }, '[AdminServer] Server startup error');
@@ -56,7 +62,9 @@ export class AdminServer {
         }
       });
       this.server.listen(this.port, () => {
-        this.logger?.info(`[AdminServer] Admin Web Dashboard & API listening on http://localhost:${this.port}`);
+        this.logger?.info(
+          `[AdminServer] Admin Web Dashboard & API listening on http://localhost:${this.port}`,
+        );
         resolve();
       });
     });
@@ -114,7 +122,10 @@ export class AdminServer {
       const session = this.authManager.verifyToken(token);
 
       if (!session) {
-        this.sendJson(res, 401, { success: false, error: 'Unauthorized. Invalid or expired token.' });
+        this.sendJson(res, 401, {
+          success: false,
+          error: 'Unauthorized. Invalid or expired token.',
+        });
         return;
       }
 
@@ -123,14 +134,22 @@ export class AdminServer {
         await this.handleGetStats(res);
       } else if (pathname === '/api/admin/games' && req.method === 'GET') {
         this.handleGetGames(res);
-      } else if (pathname.startsWith('/api/admin/games/') && pathname.endsWith('/action') && req.method === 'POST') {
+      } else if (
+        pathname.startsWith('/api/admin/games/') &&
+        pathname.endsWith('/action') &&
+        req.method === 'POST'
+      ) {
         const parts = pathname.split('/');
         const chatIdStr = parts[4] ?? '';
         const body = await this.readJsonBody(req);
         await this.handleGameAction(res, chatIdStr, body);
       } else if (pathname === '/api/admin/players' && req.method === 'GET') {
         await this.handleGetPlayers(res, url);
-      } else if (pathname.startsWith('/api/admin/players/') && pathname.endsWith('/ban') && req.method === 'POST') {
+      } else if (
+        pathname.startsWith('/api/admin/players/') &&
+        pathname.endsWith('/ban') &&
+        req.method === 'POST'
+      ) {
         const parts = pathname.split('/');
         const telegramIdStr = parts[4] ?? '';
         const body = await this.readJsonBody(req);
@@ -142,7 +161,10 @@ export class AdminServer {
         const chatIdStr = matches[1]!;
         const body = await this.readJsonBody(req);
         await this.handleGroupBan(res, chatIdStr, body);
-      } else if (pathname.match(/^\/api\/admin\/groups\/([^/]+)\/approve$/) && req.method === 'POST') {
+      } else if (
+        pathname.match(/^\/api\/admin\/groups\/([^/]+)\/approve$/) &&
+        req.method === 'POST'
+      ) {
         const matches = pathname.match(/^\/api\/admin\/groups\/([^/]+)\/approve$/)!;
         const chatIdStr = matches[1]!;
         const body = await this.readJsonBody(req);
@@ -165,7 +187,11 @@ export class AdminServer {
       } else if (pathname === '/api/admin/tournaments/create' && req.method === 'POST') {
         const body = await this.readJsonBody(req);
         await this.handleCreateTournament(res, body);
-      } else if (pathname.startsWith('/api/admin/tournaments/') && pathname.endsWith('/status') && req.method === 'POST') {
+      } else if (
+        pathname.startsWith('/api/admin/tournaments/') &&
+        pathname.endsWith('/status') &&
+        req.method === 'POST'
+      ) {
         const idStr = pathname.split('/')[4] ?? '0';
         const id = parseInt(idStr, 10);
         const body = await this.readJsonBody(req);
@@ -183,7 +209,9 @@ export class AdminServer {
     const activeGamesCount = this.gameManager ? this.gameManager.size : 0;
     const totalPlayers = this.prisma ? await this.prisma.player.count() : 0;
     const totalGroups = this.prisma ? await this.prisma.group.count() : 0;
-    const pendingGroups = this.prisma ? await this.prisma.group.count({ where: { isApproved: false } }) : 0;
+    const pendingGroups = this.prisma
+      ? await this.prisma.group.count({ where: { isApproved: false } })
+      : 0;
 
     this.sendJson(res, 200, {
       success: true,
@@ -226,7 +254,11 @@ export class AdminServer {
     this.sendJson(res, 200, { success: true, games: gamesData });
   }
 
-  private async handleGameAction(res: ServerResponse, chatIdStr: string, body: Record<string, unknown>): Promise<void> {
+  private async handleGameAction(
+    res: ServerResponse,
+    chatIdStr: string,
+    body: Record<string, unknown>,
+  ): Promise<void> {
     if (!this.gameManager) {
       this.sendJson(res, 400, { success: false, error: 'GameManager not available' });
       return;
@@ -285,7 +317,11 @@ export class AdminServer {
     });
   }
 
-  private async handlePlayerBan(res: ServerResponse, telegramIdStr: string, body: Record<string, unknown>): Promise<void> {
+  private async handlePlayerBan(
+    res: ServerResponse,
+    telegramIdStr: string,
+    body: Record<string, unknown>,
+  ): Promise<void> {
     if (!this.prisma) {
       this.sendJson(res, 400, { success: false, error: 'Database not available' });
       return;
@@ -326,7 +362,11 @@ export class AdminServer {
     });
   }
 
-  private async handleGroupBan(res: ServerResponse, chatIdStr: string, body: Record<string, unknown>): Promise<void> {
+  private async handleGroupBan(
+    res: ServerResponse,
+    chatIdStr: string,
+    body: Record<string, unknown>,
+  ): Promise<void> {
     if (!this.prisma) {
       this.sendJson(res, 400, { success: false, error: 'Database not available' });
       return;
@@ -342,7 +382,11 @@ export class AdminServer {
     this.sendJson(res, 200, { success: true, chatId: chatIdStr, isBanned: banned });
   }
 
-  private async handleGroupApprove(res: ServerResponse, chatIdStr: string, body: Record<string, unknown>): Promise<void> {
+  private async handleGroupApprove(
+    res: ServerResponse,
+    chatIdStr: string,
+    body: Record<string, unknown>,
+  ): Promise<void> {
     if (!this.prisma) {
       this.sendJson(res, 400, { success: false, error: 'Database not available' });
       return;
@@ -367,21 +411,36 @@ export class AdminServer {
     this.sendJson(res, 200, { success: true, tournaments });
   }
 
-  private async handleCreateTournament(res: ServerResponse, body: Record<string, unknown>): Promise<void> {
+  private async handleCreateTournament(
+    res: ServerResponse,
+    body: Record<string, unknown>,
+  ): Promise<void> {
     if (!this.tournamentRepository) {
       this.sendJson(res, 400, { success: false, error: 'Tournament repository not available' });
       return;
     }
-    const name = typeof body.name === 'string' && body.name.trim() ? body.name.trim() : 'Grand Tournoi Loup-Garou';
+    const name =
+      typeof body.name === 'string' && body.name.trim()
+        ? body.name.trim()
+        : 'Grand Tournoi Loup-Garou';
     const maxTeams = typeof body.maxTeams === 'number' ? body.maxTeams : 4;
     const teamSize = typeof body.teamSize === 'number' ? body.teamSize : 4;
     const totalRounds = typeof body.totalRounds === 'number' ? body.totalRounds : 5;
 
-    const tournament = await this.tournamentRepository.createTournament(name, maxTeams, teamSize, totalRounds);
+    const tournament = await this.tournamentRepository.createTournament(
+      name,
+      maxTeams,
+      teamSize,
+      totalRounds,
+    );
     this.sendJson(res, 200, { success: true, tournament });
   }
 
-  private async handleUpdateTournamentStatus(res: ServerResponse, id: number, body: Record<string, unknown>): Promise<void> {
+  private async handleUpdateTournamentStatus(
+    res: ServerResponse,
+    id: number,
+    body: Record<string, unknown>,
+  ): Promise<void> {
     if (!this.tournamentRepository) {
       this.sendJson(res, 400, { success: false, error: 'Tournament repository not available' });
       return;
@@ -448,7 +507,10 @@ export class AdminServer {
           await this.bot.api.sendMessage(chatIdNum, formattedMessage, { parse_mode: 'HTML' });
           deliveredCount++;
         } catch (err) {
-          this.logger?.warn({ err, chatId: chatIdStr }, '[AdminServer] Failed to send broadcast message to group');
+          this.logger?.warn(
+            { err, chatId: chatIdStr },
+            '[AdminServer] Failed to send broadcast message to group',
+          );
         }
       }
     } else {
@@ -456,7 +518,10 @@ export class AdminServer {
       deliveredCount = targetChatIds.length || 1;
     }
 
-    this.logger?.info({ message, deliveredCount, targetGroupsCount: targetChatIds.length }, '[AdminServer] Broadcast message dispatched');
+    this.logger?.info(
+      { message, deliveredCount, targetGroupsCount: targetChatIds.length },
+      '[AdminServer] Broadcast message dispatched',
+    );
     this.sendJson(res, 200, {
       success: true,
       deliveredCount,
@@ -1133,9 +1198,7 @@ export class AdminServer {
     try {
       res.writeHead(statusCode, { 'Content-Type': 'application/json' });
       res.end(
-        JSON.stringify(data, (_, value) =>
-          typeof value === 'bigint' ? value.toString() : value,
-        ),
+        JSON.stringify(data, (_, value) => (typeof value === 'bigint' ? value.toString() : value)),
       );
     } catch (err) {
       this.logger?.error({ err }, '[AdminServer] Error serializing JSON response');

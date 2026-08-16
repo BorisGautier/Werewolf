@@ -81,7 +81,10 @@ describe('ReportRepository', () => {
       expect.objectContaining({
         where: { status: 'PENDING' },
         take: 10,
-        include: expect.objectContaining({ reporter: expect.anything(), reported: expect.anything() }),
+        include: expect.objectContaining({
+          reporter: expect.anything(),
+          reported: expect.anything(),
+        }),
       }),
     );
     expect(results).toHaveLength(1);

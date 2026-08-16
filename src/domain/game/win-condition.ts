@@ -27,7 +27,12 @@ const CLASSIC_WOLF_ROLES: readonly Role[] = [
   ROLE_BIT.BerserkerWolf,
 ];
 
-const NO_ONE_SOLO_ROLES: readonly Role[] = [ROLE_BIT.Sorcerer, ROLE_BIT.Tanner, ROLE_BIT.Thief, ROLE_BIT.Doppelganger];
+const NO_ONE_SOLO_ROLES: readonly Role[] = [
+  ROLE_BIT.Sorcerer,
+  ROLE_BIT.Tanner,
+  ROLE_BIT.Thief,
+  ROLE_BIT.Doppelganger,
+];
 
 function isClassicWolf(role: Role): boolean {
   return CLASSIC_WOLF_ROLES.includes(role);
@@ -52,7 +57,10 @@ export interface WinConditionResult {
   events: GameEvent[];
 }
 
-export function evaluateWinCondition(players: Player[], context: WinConditionContext = {}): WinConditionResult {
+export function evaluateWinCondition(
+  players: Player[],
+  context: WinConditionContext = {},
+): WinConditionResult {
   const checkBitten = context.checkBitten ?? false;
   const random = context.random ?? Math.random;
   const hunterKillWolfChancePercent = context.hunterKillWolfChancePercent ?? 30;
@@ -108,11 +116,24 @@ export function evaluateWinCondition(players: Player[], context: WinConditionCon
       if (other.role === ROLE_BIT.SerialKiller) return end('SKHunter');
       if (isWolfOrSnowWolf(other.role)) {
         if (Math.floor(random() * 100) < hunterKillWolfChancePercent) {
-          events.push({ type: 'HunterKilledWolfInStandoff', hunterId: hunter.id, wolfId: other.id });
-          events.push(...killPlayer(players, other.id, 'HunterShot', { killerIds: [hunter.id], isNight: false }));
+          events.push({
+            type: 'HunterKilledWolfInStandoff',
+            hunterId: hunter.id,
+            wolfId: other.id,
+          });
+          events.push(
+            ...killPlayer(players, other.id, 'HunterShot', {
+              killerIds: [hunter.id],
+              isNight: false,
+            }),
+          );
           return end('Village');
         } else {
-          events.push({ type: 'WolfKilledHunterInStandoff', wolfId: other.id, hunterId: hunter.id });
+          events.push({
+            type: 'WolfKilledHunterInStandoff',
+            wolfId: other.id,
+            hunterId: hunter.id,
+          });
           events.push(
             ...killPlayer(players, hunter.id, 'Eat', {
               killerIds: [other.id],
@@ -127,7 +148,10 @@ export function evaluateWinCondition(players: Player[], context: WinConditionCon
 
     if (alive.some((p) => p.role === ROLE_BIT.SerialKiller)) return end('SerialKiller');
 
-    if (alive.some((p) => p.role === ROLE_BIT.Arsonist) && !alive.some((p) => p.role === ROLE_BIT.Gunner && p.bullet > 0)) {
+    if (
+      alive.some((p) => p.role === ROLE_BIT.Arsonist) &&
+      !alive.some((p) => p.role === ROLE_BIT.Gunner && p.bullet > 0)
+    ) {
       return end('Arsonist');
     }
 
@@ -139,7 +163,11 @@ export function evaluateWinCondition(players: Player[], context: WinConditionCon
       if (isWolfOrSnowWolf(other.role)) return end('Wolf');
 
       if (other.role === ROLE_BIT.CultistHunter) {
-        events.push({ type: 'CultistHunterKilledCultist', cultistHunterId: other.id, cultistId: cultist.id });
+        events.push({
+          type: 'CultistHunterKilledCultist',
+          cultistHunterId: other.id,
+          cultistId: cultist.id,
+        });
         return end('Village');
       }
 
@@ -154,7 +182,11 @@ export function evaluateWinCondition(players: Player[], context: WinConditionCon
   }
 
   if (alive.length === 3) {
-    if (alive.every((p) => [ROLE_BIT.Sorcerer, ROLE_BIT.Thief, ROLE_BIT.Doppelganger].includes(p.role))) {
+    if (
+      alive.every((p) =>
+        [ROLE_BIT.Sorcerer, ROLE_BIT.Thief, ROLE_BIT.Doppelganger].includes(p.role),
+      )
+    ) {
       return end('NoOne');
     }
   }

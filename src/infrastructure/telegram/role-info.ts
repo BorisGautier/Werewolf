@@ -85,4 +85,3 @@ export function resolveRoleFromTrigger(input: string): RoleName | null {
   const roleEntry = Object.values(ABOUT_ROLE_BY_TRIGGER).find((r) => r.toLowerCase() === clean);
   return roleEntry ?? null;
 }
-

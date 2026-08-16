@@ -10,7 +10,9 @@ import { GroupRepository, type GroupWithConfig } from '../persistence/group.repo
 import type { Translator } from '../i18n/translator.js';
 import { configMenuInteractions } from '../monitoring/metrics.js';
 
-const DISABLEABLE_ROLES: readonly RoleName[] = ROLE_NAMES.filter((name) => ROLE_META[name].canBeDisabled);
+const DISABLEABLE_ROLES: readonly RoleName[] = ROLE_NAMES.filter(
+  (name) => ROLE_META[name].canBeDisabled,
+);
 const ROLES_PER_PAGE = 8;
 
 const TIMER_PRESETS = [30, 60, 90, 120, 150, 180, 240, 300] as const;
@@ -92,7 +94,11 @@ export class ConfigMenu {
    * anything worth re-rendering (shouldn't normally happen, but keeps the caller's edit a no-op
    * instead of erroring if it does).
    */
-  async handleAction(groupTelegramId: bigint, action: string, rest: string[]): Promise<MenuScreen | null> {
+  async handleAction(
+    groupTelegramId: bigint,
+    action: string,
+    rest: string[],
+  ): Promise<MenuScreen | null> {
     configMenuInteractions.inc();
     const group = await this.groups.getOrCreate(groupTelegramId, null, null);
 
@@ -213,7 +219,10 @@ export class ConfigMenu {
     const disabledSet = new Set(group.disabledRoles.map((r) => r.role));
     const totalPages = Math.ceil(DISABLEABLE_ROLES.length / ROLES_PER_PAGE);
     const clampedPage = Math.max(0, Math.min(page, totalPages - 1));
-    const pageRoles = DISABLEABLE_ROLES.slice(clampedPage * ROLES_PER_PAGE, (clampedPage + 1) * ROLES_PER_PAGE);
+    const pageRoles = DISABLEABLE_ROLES.slice(
+      clampedPage * ROLES_PER_PAGE,
+      (clampedPage + 1) * ROLES_PER_PAGE,
+    );
 
     const keyboard = new InlineKeyboard();
     for (const role of pageRoles) {
@@ -248,9 +257,15 @@ export class ConfigMenu {
     const gid = group.telegramId.toString();
     const mark = (value: string) => (group.mode === value ? '✅ ' : '');
     const keyboard = new InlineKeyboard()
-      .text(`${mark('PLAYER_CHOICE')}${this.t.translate(lang, 'CfgModePlayerChoice')}`, `cfg:${gid}:setmode:PLAYER_CHOICE`)
+      .text(
+        `${mark('PLAYER_CHOICE')}${this.t.translate(lang, 'CfgModePlayerChoice')}`,
+        `cfg:${gid}:setmode:PLAYER_CHOICE`,
+      )
       .row()
-      .text(`${mark('NORMAL')}${this.t.translate(lang, 'CfgModeNormal')}`, `cfg:${gid}:setmode:NORMAL`)
+      .text(
+        `${mark('NORMAL')}${this.t.translate(lang, 'CfgModeNormal')}`,
+        `cfg:${gid}:setmode:NORMAL`,
+      )
       .row()
       .text(`${mark('CHAOS')}${this.t.translate(lang, 'CfgModeChaos')}`, `cfg:${gid}:setmode:CHAOS`)
       .row()
@@ -263,11 +278,20 @@ export class ConfigMenu {
     const gid = group.telegramId.toString();
     const mark = (value: string) => (group.showRolesEnd === value ? '✅ ' : '');
     const keyboard = new InlineKeyboard()
-      .text(`${mark('NONE')}${this.t.translate(lang, 'CfgShowRolesEndNone')}`, `cfg:${gid}:setshowrolesend:NONE`)
+      .text(
+        `${mark('NONE')}${this.t.translate(lang, 'CfgShowRolesEndNone')}`,
+        `cfg:${gid}:setshowrolesend:NONE`,
+      )
       .row()
-      .text(`${mark('LIVING')}${this.t.translate(lang, 'CfgShowRolesEndLiving')}`, `cfg:${gid}:setshowrolesend:LIVING`)
+      .text(
+        `${mark('LIVING')}${this.t.translate(lang, 'CfgShowRolesEndLiving')}`,
+        `cfg:${gid}:setshowrolesend:LIVING`,
+      )
       .row()
-      .text(`${mark('ALL')}${this.t.translate(lang, 'CfgShowRolesEndAll')}`, `cfg:${gid}:setshowrolesend:ALL`)
+      .text(
+        `${mark('ALL')}${this.t.translate(lang, 'CfgShowRolesEndAll')}`,
+        `cfg:${gid}:setshowrolesend:ALL`,
+      )
       .row()
       .text(this.t.translate(lang, 'CfgBack'), `cfg:${gid}:main`);
     return { text: this.t.translate(lang, 'CfgShowRolesEndTitle'), keyboard };
@@ -278,7 +302,10 @@ export class ConfigMenu {
     const gid = group.telegramId.toString();
     const keyboard = new InlineKeyboard();
 
-    const timerRow = (field: 'dayTimerSeconds' | 'nightTimerSeconds' | 'lynchTimerSeconds', current: number) => {
+    const timerRow = (
+      field: 'dayTimerSeconds' | 'nightTimerSeconds' | 'lynchTimerSeconds',
+      current: number,
+    ) => {
       for (const seconds of TIMER_PRESETS) {
         const label = seconds === current ? `[${seconds}]` : `${seconds}`;
         keyboard.text(label, `cfg:${gid}:timer:${field}:${seconds}`);
@@ -343,7 +370,12 @@ export class ConfigMenu {
     const packs = this.t.listPacksForBase(baseCode);
     const keyboard = new InlineKeyboard();
     const defaultMark = group.language === baseCode ? '✅ ' : '';
-    keyboard.text(`${defaultMark}${this.t.translate(lang, 'CfgLangPackDefault')}`, `cfg:${gid}:setlang:${baseCode}`).row();
+    keyboard
+      .text(
+        `${defaultMark}${this.t.translate(lang, 'CfgLangPackDefault')}`,
+        `cfg:${gid}:setlang:${baseCode}`,
+      )
+      .row();
     for (const pack of packs) {
       const mark = pack.code === group.language ? '✅ ' : '';
       keyboard.text(`${mark}${pack.name}`, `cfg:${gid}:setlang:${pack.code}`).row();

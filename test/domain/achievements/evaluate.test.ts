@@ -2,10 +2,23 @@ import { describe, expect, it } from 'vitest';
 import { ROLE_BIT } from '../../../src/domain/roles/role.js';
 import { createPlayer, type Player } from '../../../src/domain/game/player.js';
 import type { GameEvent } from '../../../src/domain/game/game-event.js';
-import { evaluateGameAchievements, type AchievementEvalContext } from '../../../src/domain/achievements/evaluate.js';
+import {
+  evaluateGameAchievements,
+  type AchievementEvalContext,
+} from '../../../src/domain/achievements/evaluate.js';
 
-function ctx(players: Player[], overrides: Partial<AchievementEvalContext> = {}): AchievementEvalContext {
-  return { players, mode: 'Normal', winningTeam: 'Village', eventBatches: [], showRolesOnDeath: true, ...overrides };
+function ctx(
+  players: Player[],
+  overrides: Partial<AchievementEvalContext> = {},
+): AchievementEvalContext {
+  return {
+    players,
+    mode: 'Normal',
+    winningTeam: 'Village',
+    eventBatches: [],
+    showRolesOnDeath: true,
+    ...overrides,
+  };
 }
 
 function unlocksFor(map: Map<bigint, string[]>, id: bigint): string[] {
@@ -28,15 +41,23 @@ describe('evaluateGameAchievements', () => {
 
   it('grants SpyVsSpy only when roles are hidden on death', () => {
     const a = createPlayer(1n, 'A', ROLE_BIT.Villager, 'Village');
-    expect(unlocksFor(evaluateGameAchievements(ctx([a], { showRolesOnDeath: false })), 1n)).toContain('SpyVsSpy');
-    expect(unlocksFor(evaluateGameAchievements(ctx([a], { showRolesOnDeath: true })), 1n)).not.toContain('SpyVsSpy');
+    expect(
+      unlocksFor(evaluateGameAchievements(ctx([a], { showRolesOnDeath: false })), 1n),
+    ).toContain('SpyVsSpy');
+    expect(
+      unlocksFor(evaluateGameAchievements(ctx([a], { showRolesOnDeath: true })), 1n),
+    ).not.toContain('SpyVsSpy');
   });
 
   it('grants Enochlophobia for 35+ players and Introvert for exactly 5', () => {
-    const many = Array.from({ length: 35 }, (_, i) => createPlayer(BigInt(i + 1), `P${i}`, ROLE_BIT.Villager, 'Village'));
+    const many = Array.from({ length: 35 }, (_, i) =>
+      createPlayer(BigInt(i + 1), `P${i}`, ROLE_BIT.Villager, 'Village'),
+    );
     expect(unlocksFor(evaluateGameAchievements(ctx(many)), 1n)).toContain('Enochlophobia');
 
-    const five = Array.from({ length: 5 }, (_, i) => createPlayer(BigInt(i + 1), `P${i}`, ROLE_BIT.Villager, 'Village'));
+    const five = Array.from({ length: 5 }, (_, i) =>
+      createPlayer(BigInt(i + 1), `P${i}`, ROLE_BIT.Villager, 'Village'),
+    );
     expect(unlocksFor(evaluateGameAchievements(ctx(five)), 1n)).toContain('Introvert');
   });
 
@@ -44,7 +65,9 @@ describe('evaluateGameAchievements', () => {
     const tanner = createPlayer(1n, 'T', ROLE_BIT.Tanner, 'Tanner');
     tanner.won = true;
     const drunk = createPlayer(2n, 'D', ROLE_BIT.Drunk, 'Village');
-    const rest = Array.from({ length: 8 }, (_, i) => createPlayer(BigInt(i + 3), `P${i}`, ROLE_BIT.Villager, 'Village'));
+    const rest = Array.from({ length: 8 }, (_, i) =>
+      createPlayer(BigInt(i + 3), `P${i}`, ROLE_BIT.Villager, 'Village'),
+    );
 
     const result = evaluateGameAchievements(ctx([tanner, drunk, ...rest]));
     expect(unlocksFor(result, 1n)).toContain('Masochist');
@@ -88,7 +111,9 @@ describe('evaluateGameAchievements', () => {
   it('does not grant HeyManNiceShot for a live counter-attack (shooter has no prior death)', () => {
     const hunter = createPlayer(1n, 'H', ROLE_BIT.Hunter, 'Village');
     const wolf = createPlayer(2n, 'W', ROLE_BIT.Wolf, 'Wolf');
-    const events: GameEvent[][] = [[{ type: 'PlayerDied', playerId: 2n, method: 'HunterShot', killerIds: [1n], isNight: true }]];
+    const events: GameEvent[][] = [
+      [{ type: 'PlayerDied', playerId: 2n, method: 'HunterShot', killerIds: [1n], isNight: true }],
+    ];
     const result = evaluateGameAchievements(ctx([hunter, wolf], { eventBatches: events }));
     expect(unlocksFor(result, 1n)).not.toContain('HeyManNiceShot');
   });
@@ -96,7 +121,9 @@ describe('evaluateGameAchievements', () => {
   it('grants DontStayHome to the wolf pack when a Harlot is eaten at home', () => {
     const wolf = createPlayer(1n, 'W', ROLE_BIT.Wolf, 'Wolf');
     const harlot = createPlayer(2n, 'Ha', ROLE_BIT.Harlot, 'Village');
-    const events: GameEvent[][] = [[{ type: 'PlayerDied', playerId: 2n, method: 'Eat', killerIds: [1n], isNight: true }]];
+    const events: GameEvent[][] = [
+      [{ type: 'PlayerDied', playerId: 2n, method: 'Eat', killerIds: [1n], isNight: true }],
+    ];
     const result = evaluateGameAchievements(ctx([wolf, harlot], { eventBatches: events }));
     expect(unlocksFor(result, 1n)).toContain('DontStayHome');
   });
@@ -109,17 +136,30 @@ describe('evaluateGameAchievements', () => {
     expect(unlocksFor(result, 2n)).toContain('DoubleKill');
   });
 
-  it('grants LackOfTrust to a Seer who is the game\'s first lynch victim', () => {
+  it("grants LackOfTrust to a Seer who is the game's first lynch victim", () => {
     const seer = createPlayer(1n, 'S', ROLE_BIT.Seer, 'Village');
-    const events: GameEvent[][] = [[{ type: 'PlayerDied', playerId: 1n, method: 'Lynch', killerIds: [], isNight: false }]];
+    const events: GameEvent[][] = [
+      [{ type: 'PlayerDied', playerId: 1n, method: 'Lynch', killerIds: [], isNight: false }],
+    ];
     const result = evaluateGameAchievements(ctx([seer], { eventBatches: events }));
     expect(unlocksFor(result, 1n)).toContain('LackOfTrust');
   });
 
   it('grants BloodyNight to all 4+ victims of the same night', () => {
-    const players = Array.from({ length: 4 }, (_, i) => createPlayer(BigInt(i + 1), `P${i}`, ROLE_BIT.Villager, 'Village'));
+    const players = Array.from({ length: 4 }, (_, i) =>
+      createPlayer(BigInt(i + 1), `P${i}`, ROLE_BIT.Villager, 'Village'),
+    );
     const events: GameEvent[][] = [
-      players.map((p) => ({ type: 'PlayerDied', playerId: p.id, method: 'Eat', killerIds: [], isNight: true }) as GameEvent),
+      players.map(
+        (p) =>
+          ({
+            type: 'PlayerDied',
+            playerId: p.id,
+            method: 'Eat',
+            killerIds: [],
+            isNight: true,
+          }) as GameEvent,
+      ),
     ];
     const result = evaluateGameAchievements(ctx(players, { eventBatches: events }));
     for (const p of players) expect(unlocksFor(result, p.id)).toContain('BloodyNight');
@@ -131,13 +171,17 @@ describe('evaluateGameAchievements', () => {
     const villager = createPlayer(2n, 'V', ROLE_BIT.Villager, 'Village');
     villager.won = true;
     const events: GameEvent[][] = [[{ type: 'LoversCreated', lover1Id: 1n, lover2Id: 2n }]];
-    const result = evaluateGameAchievements(ctx([wolf, villager], { winningTeam: 'Wolf', eventBatches: events }));
+    const result = evaluateGameAchievements(
+      ctx([wolf, villager], { winningTeam: 'Wolf', eventBatches: events }),
+    );
     expect(unlocksFor(result, 1n)).toContain('ForbiddenLove');
     expect(unlocksFor(result, 2n)).toContain('ForbiddenLove');
   });
 
   it('grants CultCon when 10+ cultists survive', () => {
-    const cultists = Array.from({ length: 10 }, (_, i) => createPlayer(BigInt(i + 1), `C${i}`, ROLE_BIT.Cultist, 'Cult'));
+    const cultists = Array.from({ length: 10 }, (_, i) =>
+      createPlayer(BigInt(i + 1), `C${i}`, ROLE_BIT.Cultist, 'Cult'),
+    );
     const result = evaluateGameAchievements(ctx(cultists, { winningTeam: 'Cult' }));
     for (const c of cultists) expect(unlocksFor(result, c.id)).toContain('CultCon');
   });
@@ -152,9 +196,17 @@ describe('evaluateGameAchievements', () => {
 
   it('grants SerialSamaritan to a Serial Killer who kills 3 wolves', () => {
     const sk = createPlayer(1n, 'SK', ROLE_BIT.SerialKiller, 'SerialKiller');
-    const wolves = Array.from({ length: 3 }, (_, i) => createPlayer(BigInt(i + 2), `W${i}`, ROLE_BIT.Wolf, 'Wolf'));
+    const wolves = Array.from({ length: 3 }, (_, i) =>
+      createPlayer(BigInt(i + 2), `W${i}`, ROLE_BIT.Wolf, 'Wolf'),
+    );
     const events: GameEvent[][] = wolves.map((w) => [
-      { type: 'PlayerDied', playerId: w.id, method: 'SerialKilled', killerIds: [1n], isNight: true } as GameEvent,
+      {
+        type: 'PlayerDied',
+        playerId: w.id,
+        method: 'SerialKilled',
+        killerIds: [1n],
+        isNight: true,
+      } as GameEvent,
     ]);
     const result = evaluateGameAchievements(ctx([sk, ...wolves], { eventBatches: events }));
     expect(unlocksFor(result, 1n)).toContain('SerialSamaritan');
@@ -163,13 +215,19 @@ describe('evaluateGameAchievements', () => {
   it('grants LoneWolf to the sole wolf in a 10+ player chaos game who wins', () => {
     const wolf = createPlayer(1n, 'W', ROLE_BIT.Wolf, 'Wolf');
     wolf.won = true;
-    const villagers = Array.from({ length: 9 }, (_, i) => createPlayer(BigInt(i + 2), `V${i}`, ROLE_BIT.Villager, 'Village'));
-    const result = evaluateGameAchievements(ctx([wolf, ...villagers], { mode: 'Chaos', winningTeam: 'Wolf' }));
+    const villagers = Array.from({ length: 9 }, (_, i) =>
+      createPlayer(BigInt(i + 2), `V${i}`, ROLE_BIT.Villager, 'Village'),
+    );
+    const result = evaluateGameAchievements(
+      ctx([wolf, ...villagers], { mode: 'Chaos', winningTeam: 'Wolf' }),
+    );
     expect(unlocksFor(result, 1n)).toContain('LoneWolf');
   });
 
   it('grants PackHunter for 7+ living wolves', () => {
-    const wolves = Array.from({ length: 7 }, (_, i) => createPlayer(BigInt(i + 1), `W${i}`, ROLE_BIT.Wolf, 'Wolf'));
+    const wolves = Array.from({ length: 7 }, (_, i) =>
+      createPlayer(BigInt(i + 1), `W${i}`, ROLE_BIT.Wolf, 'Wolf'),
+    );
     const result = evaluateGameAchievements(ctx(wolves, { winningTeam: 'Wolf' }));
     for (const w of wolves) expect(unlocksFor(result, w.id)).toContain('PackHunter');
   });
@@ -179,7 +237,9 @@ describe('evaluateGameAchievements', () => {
     const lover = createPlayer(2n, 'L', ROLE_BIT.Villager, 'Village');
     lover.loverId = 1n;
     wolf.loverId = 2n;
-    const events: GameEvent[][] = [[{ type: 'PlayerDied', playerId: 2n, method: 'Eat', killerIds: [1n], isNight: true }]];
+    const events: GameEvent[][] = [
+      [{ type: 'PlayerDied', playerId: 2n, method: 'Eat', killerIds: [1n], isNight: true }],
+    ];
     const result = evaluateGameAchievements(ctx([wolf, lover], { eventBatches: events }));
     expect(unlocksFor(result, 1n)).toContain('OhShi');
   });
@@ -187,7 +247,9 @@ describe('evaluateGameAchievements', () => {
   it('grants NoSorcery to the pack when they eat their own Sorcerer', () => {
     const wolf = createPlayer(1n, 'W', ROLE_BIT.Wolf, 'Wolf');
     const sorcerer = createPlayer(2n, 'S', ROLE_BIT.Sorcerer, 'Wolf');
-    const events: GameEvent[][] = [[{ type: 'PlayerDied', playerId: 2n, method: 'Eat', killerIds: [1n], isNight: true }]];
+    const events: GameEvent[][] = [
+      [{ type: 'PlayerDied', playerId: 2n, method: 'Eat', killerIds: [1n], isNight: true }],
+    ];
     const result = evaluateGameAchievements(ctx([wolf, sorcerer], { eventBatches: events }));
     expect(unlocksFor(result, 1n)).toContain('NoSorcery');
   });
@@ -208,7 +270,9 @@ describe('evaluateGameAchievements', () => {
     const gunner = createPlayer(2n, 'G', ROLE_BIT.Gunner, 'Village');
     const wolf = createPlayer(3n, 'W', ROLE_BIT.Wolf, 'Wolf');
     const events: GameEvent[][] = [[{ type: 'GunnerPreventsWolfWin' }]];
-    const result = evaluateGameAchievements(ctx([villager, gunner, wolf], { eventBatches: events }));
+    const result = evaluateGameAchievements(
+      ctx([villager, gunner, wolf], { eventBatches: events }),
+    );
     expect(unlocksFor(result, 1n)).toContain('GunnerSaves');
     expect(unlocksFor(result, 2n)).toContain('GunnerSaves');
     expect(unlocksFor(result, 3n)).not.toContain('GunnerSaves');
@@ -220,7 +284,7 @@ describe('evaluateGameAchievements', () => {
     expect(unlocksFor(result, 1n)).not.toContain('GunnerSaves');
   });
 
-  it('grants ReallyBadLuck to the Serial Killer when a random re-target lands on the Guardian Angel\'s pick', () => {
+  it("grants ReallyBadLuck to the Serial Killer when a random re-target lands on the Guardian Angel's pick", () => {
     const sk = createPlayer(1n, 'SK', ROLE_BIT.SerialKiller, 'SerialKiller');
     const events: GameEvent[][] = [
       [
@@ -267,14 +331,18 @@ describe('evaluateGameAchievements', () => {
 
   it('grants SpoiledRichBrat to a Prince who ends up lynched', () => {
     const prince = createPlayer(1n, 'P', ROLE_BIT.Prince, 'Village');
-    const events: GameEvent[][] = [[{ type: 'PlayerDied', playerId: 1n, method: 'Lynch', killerIds: [], isNight: false }]];
+    const events: GameEvent[][] = [
+      [{ type: 'PlayerDied', playerId: 1n, method: 'Lynch', killerIds: [], isNight: false }],
+    ];
     const result = evaluateGameAchievements(ctx([prince], { eventBatches: events }));
     expect(unlocksFor(result, 1n)).toContain('SpoiledRichBrat');
   });
 
   it('grants ThreeLittleWolves to a surviving Sorcerer with 3+ living wolves', () => {
     const sorcerer = createPlayer(1n, 'S', ROLE_BIT.Sorcerer, 'Wolf');
-    const wolves = Array.from({ length: 3 }, (_, i) => createPlayer(BigInt(i + 2), `W${i}`, ROLE_BIT.Wolf, 'Wolf'));
+    const wolves = Array.from({ length: 3 }, (_, i) =>
+      createPlayer(BigInt(i + 2), `W${i}`, ROLE_BIT.Wolf, 'Wolf'),
+    );
     const result = evaluateGameAchievements(ctx([sorcerer, ...wolves], { winningTeam: 'Wolf' }));
     expect(unlocksFor(result, 1n)).toContain('ThreeLittleWolves');
   });
@@ -285,8 +353,12 @@ describe('evaluateGameAchievements', () => {
     tanner.isDead = true;
     const p2 = createPlayer(2n, 'P2', ROLE_BIT.Villager, 'Village');
     const p3 = createPlayer(3n, 'P3', ROLE_BIT.Villager, 'Village');
-    const events: GameEvent[][] = [[{ type: 'PlayerDied', playerId: 1n, method: 'Lynch', killerIds: [], isNight: false }]];
-    const result = evaluateGameAchievements(ctx([tanner, p2, p3], { winningTeam: 'Tanner', eventBatches: events }));
+    const events: GameEvent[][] = [
+      [{ type: 'PlayerDied', playerId: 1n, method: 'Lynch', killerIds: [], isNight: false }],
+    ];
+    const result = evaluateGameAchievements(
+      ctx([tanner, p2, p3], { winningTeam: 'Tanner', eventBatches: events }),
+    );
     expect(unlocksFor(result, 1n)).toContain('ThatCameUnexpected');
   });
 
@@ -312,7 +384,9 @@ describe('evaluateGameAchievements', () => {
     const wolf = createPlayer(1n, 'W', ROLE_BIT.Wolf, 'Wolf');
     const traitor = createPlayer(2n, 'T', ROLE_BIT.Traitor, 'Village');
     traitor.isDead = true;
-    const events: GameEvent[][] = [[{ type: 'PlayerDied', playerId: 2n, method: 'Eat', killerIds: [1n], isNight: true }]];
+    const events: GameEvent[][] = [
+      [{ type: 'PlayerDied', playerId: 2n, method: 'Eat', killerIds: [1n], isNight: true }],
+    ];
     const result = evaluateGameAchievements(ctx([wolf, traitor], { eventBatches: events }));
     expect(unlocksFor(result, 1n)).toContain('ConditionRed');
   });
@@ -327,7 +401,9 @@ describe('evaluateGameAchievements', () => {
   it('grants PsychopathKiller to a winning Serial Killer in a 35-player game', () => {
     const sk = createPlayer(1n, 'SK', ROLE_BIT.SerialKiller, 'SerialKiller');
     sk.won = true;
-    const rest = Array.from({ length: 34 }, (_, i) => createPlayer(BigInt(i + 2), `P${i}`, ROLE_BIT.Villager, 'Village'));
+    const rest = Array.from({ length: 34 }, (_, i) =>
+      createPlayer(BigInt(i + 2), `P${i}`, ROLE_BIT.Villager, 'Village'),
+    );
     const result = evaluateGameAchievements(ctx([sk, ...rest], { winningTeam: 'SerialKiller' }));
     expect(unlocksFor(result, 1n)).toContain('PsychopathKiller');
   });
@@ -338,15 +414,21 @@ describe('evaluateGameAchievements', () => {
     tanner.loverId = 2n;
     const lover = createPlayer(2n, 'L', ROLE_BIT.Villager, 'Village');
     lover.won = true;
-    const events: GameEvent[][] = [[{ type: 'PlayerDied', playerId: 1n, method: 'Lynch', killerIds: [], isNight: false }]];
-    const result = evaluateGameAchievements(ctx([tanner, lover], { winningTeam: 'Tanner', eventBatches: events }));
+    const events: GameEvent[][] = [
+      [{ type: 'PlayerDied', playerId: 1n, method: 'Lynch', killerIds: [], isNight: false }],
+    ];
+    const result = evaluateGameAchievements(
+      ctx([tanner, lover], { winningTeam: 'Tanner', eventBatches: events }),
+    );
     expect(unlocksFor(result, 2n)).toContain('RomeoAndJuliet');
   });
 
-  it('grants Domino when a Hunter\'s shot kills another Hunter', () => {
+  it("grants Domino when a Hunter's shot kills another Hunter", () => {
     const shooter = createPlayer(1n, 'H1', ROLE_BIT.Hunter, 'Village');
     const victim = createPlayer(2n, 'H2', ROLE_BIT.Hunter, 'Village');
-    const events: GameEvent[][] = [[{ type: 'PlayerDied', playerId: 2n, method: 'HunterShot', killerIds: [1n], isNight: false }]];
+    const events: GameEvent[][] = [
+      [{ type: 'PlayerDied', playerId: 2n, method: 'HunterShot', killerIds: [1n], isNight: false }],
+    ];
     const result = evaluateGameAchievements(ctx([shooter, victim], { eventBatches: events }));
     expect(unlocksFor(result, 1n)).toContain('Domino');
   });
@@ -357,7 +439,9 @@ describe('evaluateGameAchievements', () => {
     wolf.loverId = 3n;
     const sk = createPlayer(3n, 'SK', ROLE_BIT.SerialKiller, 'SerialKiller');
     sk.loverId = 2n;
-    const events: GameEvent[][] = [[{ type: 'PlayerDied', playerId: 2n, method: 'HunterShot', killerIds: [1n], isNight: false }]];
+    const events: GameEvent[][] = [
+      [{ type: 'PlayerDied', playerId: 2n, method: 'HunterShot', killerIds: [1n], isNight: false }],
+    ];
     const result = evaluateGameAchievements(ctx([shooter, wolf, sk], { eventBatches: events }));
     expect(unlocksFor(result, 1n)).toContain('DoubleShot');
   });
@@ -475,7 +559,7 @@ describe('evaluateGameAchievements', () => {
     expect(unlocksFor(result, 1n)).toContain('InTheMiddleOfTheTrouble');
   });
 
-  it('grants DemotedByTheDeath when the Hunter\'s final shot demotes them for killing the Wise Elder', () => {
+  it("grants DemotedByTheDeath when the Hunter's final shot demotes them for killing the Wise Elder", () => {
     const hunter = createPlayer(1n, 'H', ROLE_BIT.Villager, 'Village'); // already demoted by the time this fires
     const events: GameEvent[][] = [[{ type: 'HunterLostPowerToWiseElder', playerId: 1n }]];
     const result = evaluateGameAchievements(ctx([hunter], { eventBatches: events }));
@@ -506,12 +590,20 @@ describe('evaluateGameAchievements', () => {
 
   it('grants Inconspicuous to a surviving player never voted against, only in 20+ player games', () => {
     const untouched = createPlayer(1n, 'U', ROLE_BIT.Villager, 'Village');
-    const rest = Array.from({ length: 19 }, (_, i) => createPlayer(BigInt(i + 2), `P${i}`, ROLE_BIT.Villager, 'Village'));
+    const rest = Array.from({ length: 19 }, (_, i) =>
+      createPlayer(BigInt(i + 2), `P${i}`, ROLE_BIT.Villager, 'Village'),
+    );
 
-    expect(unlocksFor(evaluateGameAchievements(ctx([untouched, ...rest])), 1n)).toContain('Inconspicuous');
-    expect(unlocksFor(evaluateGameAchievements(ctx([untouched])), 1n)).not.toContain('Inconspicuous'); // too few players
+    expect(unlocksFor(evaluateGameAchievements(ctx([untouched, ...rest])), 1n)).toContain(
+      'Inconspicuous',
+    );
+    expect(unlocksFor(evaluateGameAchievements(ctx([untouched])), 1n)).not.toContain(
+      'Inconspicuous',
+    ); // too few players
     untouched.hasBeenVoted = true;
-    expect(unlocksFor(evaluateGameAchievements(ctx([untouched, ...rest])), 1n)).not.toContain('Inconspicuous');
+    expect(unlocksFor(evaluateGameAchievements(ctx([untouched, ...rest])), 1n)).not.toContain(
+      'Inconspicuous',
+    );
   });
 
   it('grants DoubleVision to every player simultaneously holding the Seer role', () => {
@@ -527,8 +619,12 @@ describe('evaluateGameAchievements', () => {
 
   it("grants ShouldHaveKnown when the Seer's vision reveals the Beholder", () => {
     const seer = createPlayer(1n, 'S', ROLE_BIT.Seer, 'Village');
-    const events: GameEvent[][] = [[{ type: 'SeerVision', playerId: 1n, targetId: 2n, shownRole: ROLE_BIT.Beholder }]];
-    expect(unlocksFor(evaluateGameAchievements(ctx([seer], { eventBatches: events })), 1n)).toContain('ShouldHaveKnown');
+    const events: GameEvent[][] = [
+      [{ type: 'SeerVision', playerId: 1n, targetId: 2n, shownRole: ROLE_BIT.Beholder }],
+    ];
+    expect(
+      unlocksFor(evaluateGameAchievements(ctx([seer], { eventBatches: events })), 1n),
+    ).toContain('ShouldHaveKnown');
   });
 
   it('grants FirstStone at 5 first-votes and SmartGunner at 2 baddie-hitting bullets', () => {
@@ -629,9 +725,9 @@ describe('evaluateGameAchievements', () => {
         { type: 'WolfPackAteTwice', alphaId: 1n },
       ],
     ];
-    expect(unlocksFor(evaluateGameAchievements(ctx([alpha, v1], { eventBatches: events })), 1n)).not.toContain(
-      'IncreaseThePack',
-    );
+    expect(
+      unlocksFor(evaluateGameAchievements(ctx([alpha, v1], { eventBatches: events })), 1n),
+    ).not.toContain('IncreaseThePack');
   });
 
   it('grants ItWasABusyNight and StrongestAlpha from their respective flags', () => {
@@ -670,9 +766,9 @@ describe('evaluateGameAchievements', () => {
 
   it('grants TimeToRetire to a surviving Sorcerer in a no-winner ending', () => {
     const sorcerer = createPlayer(1n, 'S', ROLE_BIT.Sorcerer, 'Village');
-    expect(unlocksFor(evaluateGameAchievements(ctx([sorcerer], { winningTeam: undefined })), 1n)).toContain(
-      'TimeToRetire',
-    );
+    expect(
+      unlocksFor(evaluateGameAchievements(ctx([sorcerer], { winningTeam: undefined })), 1n),
+    ).toContain('TimeToRetire');
   });
 
   it('grants SeeingBetweenTeams to a Cupid-paired Seer/Sorcerer couple', () => {
@@ -689,15 +785,19 @@ describe('evaluateGameAchievements', () => {
     const wolfMan = createPlayer(1n, 'WM', ROLE_BIT.Wolf, 'Wolf'); // already promoted by the time this fires
     wolfMan.originalRole = ROLE_BIT.WolfMan;
     const events: GameEvent[][] = [[{ type: 'BittenPlayerTurnedWolf', playerId: 1n }]];
-    expect(unlocksFor(evaluateGameAchievements(ctx([wolfMan], { eventBatches: events })), 1n)).toContain(
-      'JustABeardyGuy',
-    );
+    expect(
+      unlocksFor(evaluateGameAchievements(ctx([wolfMan], { eventBatches: events })), 1n),
+    ).toContain('JustABeardyGuy');
   });
 
   it('grants NowImBlind when the Oracle gets a null vision', () => {
     const oracle = createPlayer(1n, 'O', ROLE_BIT.Oracle, 'Village');
-    const events: GameEvent[][] = [[{ type: 'OracleVision', playerId: 1n, targetId: 2n, shownRole: null }]];
-    expect(unlocksFor(evaluateGameAchievements(ctx([oracle], { eventBatches: events })), 1n)).toContain('NowImBlind');
+    const events: GameEvent[][] = [
+      [{ type: 'OracleVision', playerId: 1n, targetId: 2n, shownRole: null }],
+    ];
+    expect(
+      unlocksFor(evaluateGameAchievements(ctx([oracle], { eventBatches: events })), 1n),
+    ).toContain('NowImBlind');
   });
 
   it('grants EveryManForHimself/MySweetieSoStrong from their respective flags', () => {
@@ -718,7 +818,7 @@ describe('evaluateGameAchievements', () => {
     expect(unlocksFor(evaluateGameAchievements(ctx([elder])), 1n)).toContain('ILostMyWisdom');
   });
 
-  it("does not grant ILostMyWisdom to a Wise Elder whose role never changed", () => {
+  it('does not grant ILostMyWisdom to a Wise Elder whose role never changed', () => {
     const elder = createPlayer(1n, 'E', ROLE_BIT.WiseElder, 'Village');
     expect(unlocksFor(evaluateGameAchievements(ctx([elder])), 1n)).not.toContain('ILostMyWisdom');
   });
@@ -726,7 +826,9 @@ describe('evaluateGameAchievements', () => {
   it('grants LuckyDay to the Alpha Wolf from the AlphaWolfLuckyDay event', () => {
     const alpha = createPlayer(1n, 'A', ROLE_BIT.AlphaWolf, 'Wolf');
     const events: GameEvent[][] = [[{ type: 'AlphaWolfLuckyDay', alphaId: 1n }]];
-    expect(unlocksFor(evaluateGameAchievements(ctx([alpha], { eventBatches: events })), 1n)).toContain('LuckyDay');
+    expect(
+      unlocksFor(evaluateGameAchievements(ctx([alpha], { eventBatches: events })), 1n),
+    ).toContain('LuckyDay');
   });
 
   it('grants ShouldveMentioned when a wolf eats their own lover on a night after the first', () => {
@@ -738,9 +840,9 @@ describe('evaluateGameAchievements', () => {
       [], // night 1 - nothing happens
       [{ type: 'PlayerDied', playerId: 2n, method: 'Eat', killerIds: [1n], isNight: true }], // night 2
     ];
-    expect(unlocksFor(evaluateGameAchievements(ctx([wolf, lover], { eventBatches: events })), 1n)).toContain(
-      'ShouldveMentioned',
-    );
+    expect(
+      unlocksFor(evaluateGameAchievements(ctx([wolf, lover], { eventBatches: events })), 1n),
+    ).toContain('ShouldveMentioned');
   });
 
   it('does not grant ShouldveMentioned for a lover killed on the very first night (that is OhShi instead)', () => {
@@ -748,7 +850,9 @@ describe('evaluateGameAchievements', () => {
     const lover = createPlayer(2n, 'L', ROLE_BIT.Villager, 'Village');
     wolf.loverId = 2n;
     lover.loverId = 1n;
-    const events: GameEvent[][] = [[{ type: 'PlayerDied', playerId: 2n, method: 'Eat', killerIds: [1n], isNight: true }]];
+    const events: GameEvent[][] = [
+      [{ type: 'PlayerDied', playerId: 2n, method: 'Eat', killerIds: [1n], isNight: true }],
+    ];
 
     const result = evaluateGameAchievements(ctx([wolf, lover], { eventBatches: events }));
     expect(unlocksFor(result, 1n)).toContain('OhShi');
@@ -778,16 +882,18 @@ describe('evaluateGameAchievements', () => {
     const harlot = createPlayer(1n, 'H', ROLE_BIT.Harlot, 'Village');
     harlot.loverId = 2n;
     const events: GameEvent[][] = [[{ type: 'HarlotVisited', harlotId: 1n, targetId: 2n }]];
-    expect(unlocksFor(evaluateGameAchievements(ctx([harlot], { eventBatches: events })), 1n)).toContain('Affectionate');
+    expect(
+      unlocksFor(evaluateGameAchievements(ctx([harlot], { eventBatches: events })), 1n),
+    ).toContain('Affectionate');
   });
 
   it('does not grant Affectionate when the Harlot visits someone else', () => {
     const harlot = createPlayer(1n, 'H', ROLE_BIT.Harlot, 'Village');
     harlot.loverId = 2n;
     const events: GameEvent[][] = [[{ type: 'HarlotVisited', harlotId: 1n, targetId: 3n }]];
-    expect(unlocksFor(evaluateGameAchievements(ctx([harlot], { eventBatches: events })), 1n)).not.toContain(
-      'Affectionate',
-    );
+    expect(
+      unlocksFor(evaluateGameAchievements(ctx([harlot], { eventBatches: events })), 1n),
+    ).not.toContain('Affectionate');
   });
 
   it('grants GoodChoiceForYou to a Chemist with 3 successful (non-backfired) poisonings', () => {
@@ -797,9 +903,9 @@ describe('evaluateGameAchievements', () => {
       [{ type: 'PlayerDied', playerId: 3n, method: 'Chemistry', killerIds: [1n], isNight: true }],
       [{ type: 'PlayerDied', playerId: 4n, method: 'Chemistry', killerIds: [1n], isNight: true }],
     ];
-    expect(unlocksFor(evaluateGameAchievements(ctx([chemist], { eventBatches: events })), 1n)).toContain(
-      'GoodChoiceForYou',
-    );
+    expect(
+      unlocksFor(evaluateGameAchievements(ctx([chemist], { eventBatches: events })), 1n),
+    ).toContain('GoodChoiceForYou');
   });
 
   it('does not count a backfire (self-kill) toward GoodChoiceForYou', () => {
@@ -809,9 +915,9 @@ describe('evaluateGameAchievements', () => {
       [{ type: 'PlayerDied', playerId: 3n, method: 'Chemistry', killerIds: [1n], isNight: true }],
       [{ type: 'PlayerDied', playerId: 1n, method: 'Chemistry', killerIds: [1n], isNight: true }], // backfire
     ];
-    expect(unlocksFor(evaluateGameAchievements(ctx([chemist], { eventBatches: events })), 1n)).not.toContain(
-      'GoodChoiceForYou',
-    );
+    expect(
+      unlocksFor(evaluateGameAchievements(ctx([chemist], { eventBatches: events })), 1n),
+    ).not.toContain('GoodChoiceForYou');
   });
 
   it('grants LuckyNight to a survivor of both a Chemist backfire and a Harlot visit the same night', () => {
@@ -822,7 +928,9 @@ describe('evaluateGameAchievements', () => {
         { type: 'HarlotVisited', harlotId: 3n, targetId: 1n },
       ],
     ];
-    expect(unlocksFor(evaluateGameAchievements(ctx([target], { eventBatches: events })), 1n)).toContain('LuckyNight');
+    expect(
+      unlocksFor(evaluateGameAchievements(ctx([target], { eventBatches: events })), 1n),
+    ).toContain('LuckyNight');
   });
 
   it('grants ThanksJunior to sober wolves listed in a WolfPackHasDrunkMembers event', () => {

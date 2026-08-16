@@ -10,7 +10,11 @@ import { gameRecordsSaved, killRecordsSaved } from '../monitoring/metrics.js';
 export class GameRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  async createGame(groupDbId: number, groupTitleSnapshot: string | null, mode: GameMode): Promise<number> {
+  async createGame(
+    groupDbId: number,
+    groupTitleSnapshot: string | null,
+    mode: GameMode,
+  ): Promise<number> {
     const game = await this.prisma.game.create({
       data: {
         groupId: groupDbId,
@@ -31,13 +35,19 @@ export class GameRepository {
     const rows = players.flatMap((p) => {
       const playerDbId = playerDbIdByTelegramId.get(p.id);
       if (playerDbId === undefined) return [];
-      return [{ gameId, playerId: playerDbId, role: roleToPrisma(p.role), team: teamToPrisma(p.team) }];
+      return [
+        { gameId, playerId: playerDbId, role: roleToPrisma(p.role), team: teamToPrisma(p.team) },
+      ];
     });
     if (rows.length > 0) await this.prisma.gamePlayer.createMany({ data: rows });
   }
 
   /** Returns the game's `startedAt` so the caller can compute wall-clock duration (LongHaul). */
-  async finalizeGame(gameId: number, winnerTeam: Team | undefined, players: readonly Player[]): Promise<Date> {
+  async finalizeGame(
+    gameId: number,
+    winnerTeam: Team | undefined,
+    players: readonly Player[],
+  ): Promise<Date> {
     const updated = await this.prisma.game.update({
       where: { id: gameId },
       data: { endedAt: new Date(), winnerTeam: winnerTeam ? teamToPrisma(winnerTeam) : null },
@@ -105,7 +115,9 @@ export class GameRepository {
   /** Powers `/stats`: how many finished games this player has been in, and how many they won. */
   async getPlayerStats(telegramId: bigint): Promise<{ played: number; won: number }> {
     const [played, won] = await Promise.all([
-      this.prisma.gamePlayer.count({ where: { player: { telegramId }, game: { endedAt: { not: null } } } }),
+      this.prisma.gamePlayer.count({
+        where: { player: { telegramId }, game: { endedAt: { not: null } } },
+      }),
       this.prisma.gamePlayer.count({ where: { player: { telegramId }, won: true } }),
     ]);
     return { played, won };
@@ -113,7 +125,9 @@ export class GameRepository {
 
   /** Powers `/stats` in a group: how many finished games this group has hosted. */
   async getGroupStats(groupDbId: number): Promise<{ played: number }> {
-    const played = await this.prisma.game.count({ where: { groupId: groupDbId, endedAt: { not: null } } });
+    const played = await this.prisma.game.count({
+      where: { groupId: groupDbId, endedAt: { not: null } },
+    });
     return { played };
   }
 }

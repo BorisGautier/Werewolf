@@ -17,10 +17,23 @@
 import { randomInt } from 'node:crypto';
 import { balance, WOLF_ROLES, type BalanceOptions } from './game-balancing.js';
 import { killPlayer, type KillOptions } from './kill.js';
-import { resetLynchState, resolveLynchVotes, type LynchOptions, type LynchResult } from './lynch.js';
-import { evaluateWinCondition, type WinConditionContext, type WinConditionResult } from './win-condition.js';
+import {
+  resetLynchState,
+  resolveLynchVotes,
+  type LynchOptions,
+  type LynchResult,
+} from './lynch.js';
+import {
+  evaluateWinCondition,
+  type WinConditionContext,
+  type WinConditionResult,
+} from './win-condition.js';
 import { resolveClairvoyanceNight } from './clairvoyance.js';
-import { resolveDetectiveSnoop, resolveGunnerShot, resolveSpumpkinDetonate } from './day-actions.js';
+import {
+  resolveDetectiveSnoop,
+  resolveGunnerShot,
+  resolveSpumpkinDetonate,
+} from './day-actions.js';
 import {
   findActingGuardianAngel,
   initialNightState,
@@ -155,7 +168,8 @@ export class Game {
   }
 
   addPlayer(id: bigint, name: string, isBot = false): Player {
-    if (this.phase !== 'Joining') throw new GameError('Cannot join once the game has started.', 'NOT_JOINING');
+    if (this.phase !== 'Joining')
+      throw new GameError('Cannot join once the game has started.', 'NOT_JOINING');
     if (this.players.some((p) => p.id === id)) {
       throw new GameError('This player already joined.', 'ALREADY_JOINED');
     }
@@ -195,7 +209,10 @@ export class Game {
   start(balanceOptions: Partial<Pick<BalanceOptions, 'chaos'>> = {}): GameEvent[] {
     if (this.phase !== 'Joining') throw new GameError('The game already started.', 'WRONG_PHASE');
     if (!this.canStart()) {
-      throw new GameError(`Not enough players joined (need at least ${this.minPlayers}).`, 'NOT_ENOUGH_PLAYERS');
+      throw new GameError(
+        `Not enough players joined (need at least ${this.minPlayers}).`,
+        'NOT_ENOUGH_PLAYERS',
+      );
     }
 
     const { rolesToAssign, possibleRoles } = balance({
@@ -434,7 +451,9 @@ export class Game {
    * they last dug. Skipped entirely on a Sandman-slept night, same as every other night action.
    */
   private digGraves(): GameEvent[] {
-    const gravedigger = this.players.find((p) => p.role === ROLE_BIT.GraveDigger && !p.isDead && !p.drunk);
+    const gravedigger = this.players.find(
+      (p) => p.role === ROLE_BIT.GraveDigger && !p.isDead && !p.drunk,
+    );
     if (!gravedigger) return [];
 
     const diedSinceLastDig = this.players.filter(
@@ -448,7 +467,9 @@ export class Game {
     gravedigger.choice = ABSTAIN;
     this.secondLastGraveDigAt = this.lastGraveDigAt;
     this.lastGraveDigAt = new Date();
-    return [{ type: 'GraveDug', playerId: gravedigger.id, graveCount: gravedigger.dugGravesLastNight }];
+    return [
+      { type: 'GraveDug', playerId: gravedigger.id, graveCount: gravedigger.dugGravesLastNight },
+    ];
   }
 
   /**
@@ -459,7 +480,9 @@ export class Game {
 
   /** Mirrors the Mayor's "reveal" button: doubles their lynch vote from now on. */
   useMayorReveal(playerId: bigint): boolean {
-    const mayor = this.players.find((p) => p.id === playerId && p.role === ROLE_BIT.Mayor && !p.isDead);
+    const mayor = this.players.find(
+      (p) => p.id === playerId && p.role === ROLE_BIT.Mayor && !p.isDead,
+    );
     if (!mayor || mayor.hasUsedAbility) return false;
     mayor.hasUsedAbility = true;
     mayorAnnouncements.inc();
@@ -467,7 +490,9 @@ export class Game {
   }
 
   usePacifistPeace(playerId: bigint): boolean {
-    const pacifist = this.players.find((p) => p.id === playerId && p.role === ROLE_BIT.Pacifist && !p.isDead);
+    const pacifist = this.players.find(
+      (p) => p.id === playerId && p.role === ROLE_BIT.Pacifist && !p.isDead,
+    );
     if (!pacifist || pacifist.hasUsedAbility) return false;
     pacifist.hasUsedAbility = true;
     this.pacifistUsed = true;
@@ -477,7 +502,9 @@ export class Game {
   }
 
   useBlacksmithSpreadSilver(playerId: bigint): GameEvent[] {
-    const blacksmith = this.players.find((p) => p.id === playerId && p.role === ROLE_BIT.Blacksmith && !p.isDead);
+    const blacksmith = this.players.find(
+      (p) => p.id === playerId && p.role === ROLE_BIT.Blacksmith && !p.isDead,
+    );
     if (!blacksmith || blacksmith.hasUsedAbility) return [];
     blacksmith.hasUsedAbility = true;
     this.silverSpread = true;
@@ -486,7 +513,9 @@ export class Game {
   }
 
   useSandmanSleep(playerId: bigint): GameEvent[] {
-    const sandman = this.players.find((p) => p.id === playerId && p.role === ROLE_BIT.Sandman && !p.isDead);
+    const sandman = this.players.find(
+      (p) => p.id === playerId && p.role === ROLE_BIT.Sandman && !p.isDead,
+    );
     if (!sandman || sandman.hasUsedAbility) return [];
     sandman.hasUsedAbility = true;
     this.sandmanSleep = true;
@@ -495,7 +524,9 @@ export class Game {
   }
 
   useTroublemakerDoubleLynch(playerId: bigint): boolean {
-    const troublemaker = this.players.find((p) => p.id === playerId && p.role === ROLE_BIT.Troublemaker && !p.isDead);
+    const troublemaker = this.players.find(
+      (p) => p.id === playerId && p.role === ROLE_BIT.Troublemaker && !p.isDead,
+    );
     if (!troublemaker || troublemaker.hasUsedAbility) return false;
     troublemaker.hasUsedAbility = true;
     this.doubleLynchPending = true;
@@ -527,7 +558,12 @@ export class Game {
     state.guardianAngel = findActingGuardianAngel(this.players);
     state.silverSpread = this.silverSpread;
     this.silverSpread = false; // consumed for tonight - mirrors the original resetting `_silverSpread` once menus for this night are settled
-    const visitCtx: VisitContext = { players: this.players, dayNumber: this.dayNumber, thiefFull: this.thiefFull, random };
+    const visitCtx: VisitContext = {
+      players: this.players,
+      dayNumber: this.dayNumber,
+      thiefFull: this.thiefFull,
+      random,
+    };
 
     events.push(...resolveSnowWolfNight(this.players, state, visitCtx));
     // A Snow Wolf freezing a Grave Digger who dug tonight rewinds the state's copy of `lastGraveDigAt`
@@ -652,7 +688,10 @@ export class Game {
 
   private assertPhase(expected: GamePhase): void {
     if (this.phase !== expected) {
-      throw new GameError(`Expected phase ${expected} but the game is in ${this.phase}.`, 'WRONG_PHASE');
+      throw new GameError(
+        `Expected phase ${expected} but the game is in ${this.phase}.`,
+        'WRONG_PHASE',
+      );
     }
   }
 }

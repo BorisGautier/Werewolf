@@ -1,19 +1,23 @@
 import cron from 'node-cron';
 import type { PrismaClient } from '@prisma/client';
 import type { Logger } from '../logging/logger.js';
+import type { Env } from '../config/env.js';
 import { expireBans, purgeStaleGames, rotateDailyStats } from './jobs.js';
 import { cronJobFailures, cronJobRuns } from '../monitoring/metrics.js';
 
 /** Starts the bot's background maintenance jobs. Returns a function that stops them all. */
-export function startCronJobs(prisma: PrismaClient, logger: Logger): () => void {
+export function startCronJobs(prisma: PrismaClient, logger: Logger, env?: Env): () => void {
   logger.debug('Registering background cron job schedules');
 
   const tasks = [
     // Once a day, just after midnight UTC - rolls up the day that just ended.
     cron.schedule('5 0 * * *', () => {
       cronJobRuns.labels('rotateDailyStats').inc();
-      logger.info({ job: 'rotateDailyStats', schedule: '5 0 * * *' }, 'Cron triggered: daily stats rotation starting');
-      void rotateDailyStats(prisma, logger).catch((err: unknown) => {
+      logger.info(
+        { job: 'rotateDailyStats', schedule: '5 0 * * *' },
+        'Cron triggered: daily stats rotation starting',
+      );
+      void rotateDailyStats(prisma, logger, env).catch((err: unknown) => {
         cronJobFailures.labels('rotateDailyStats').inc();
         logger.error({ err, job: 'rotateDailyStats' }, 'Cron job error: rotateDailyStats failed');
       });
@@ -32,7 +36,10 @@ export function startCronJobs(prisma: PrismaClient, logger: Logger): () => void 
     // Hourly, offset by 30 minutes - cleans up games orphaned by a crashed/redeployed process.
     cron.schedule('30 * * * *', () => {
       cronJobRuns.labels('purgeStaleGames').inc();
-      logger.info({ job: 'purgeStaleGames', schedule: '30 * * * *' }, 'Cron triggered: stale game purge starting');
+      logger.info(
+        { job: 'purgeStaleGames', schedule: '30 * * * *' },
+        'Cron triggered: stale game purge starting',
+      );
       void purgeStaleGames(prisma, logger).catch((err: unknown) => {
         cronJobFailures.labels('purgeStaleGames').inc();
         logger.error({ err, job: 'purgeStaleGames' }, 'Cron job error: purgeStaleGames failed');
@@ -41,7 +48,10 @@ export function startCronJobs(prisma: PrismaClient, logger: Logger): () => void 
   ];
 
   logger.info(
-    { jobs: tasks.length, schedules: ['5 0 * * * (daily stats)', '* * * * * (ban expiry)', '30 * * * * (stale games)'] },
+    {
+      jobs: tasks.length,
+      schedules: ['5 0 * * * (daily stats)', '* * * * * (ban expiry)', '30 * * * * (stale games)'],
+    },
     'Cron jobs registered and running',
   );
 
