@@ -147,9 +147,34 @@ export class AdminServer {
         return;
       }
 
-      // Serve static dashboard HTML SPA for non-API routes
+      if (pathname === '/api/public/stats' && req.method === 'GET') {
+        const activeGames = this.gameManager ? this.gameManager.size : 0;
+        let totalPlayers = 0;
+        let totalGroups = 0;
+        if (this.prisma) {
+          try {
+            totalPlayers = await this.prisma.player.count();
+            totalGroups = await this.prisma.group.count();
+          } catch {}
+        }
+        this.sendJson(res, 200, {
+          success: true,
+          activeGames,
+          totalPlayers,
+          totalGroups,
+          rolesCount: 63,
+          modesCount: 11,
+        });
+        return;
+      }
+
+      // Serve static dashboard or landing page HTML for non-API routes
       if (!pathname.startsWith('/api/')) {
-        this.serveDashboardHtml(res);
+        if (pathname === '/admin' || pathname.startsWith('/admin/')) {
+          this.serveDashboardHtml(res);
+        } else {
+          this.serveLandingPageHtml(res);
+        }
         return;
       }
 
@@ -1263,5 +1288,421 @@ export class AdminServer {
     } catch (err) {
       this.logger?.error({ err }, '[AdminServer] Error serializing JSON response');
     }
+  }
+
+  private serveLandingPageHtml(res: ServerResponse): void {
+    const html = `<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🐺 EpicWolf Game — Le Jeu de Loup-Garou Telegram Ultime</title>
+  <meta name="description" content="EpicWolf est le jeu de Loup-Garou Telegram ultime avec 63+ rôles uniques, bots IA Gemini 2.5, tournois d'équipes et 11 modes de jeu. Rejoins l'aventure !">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    :root {
+      --bg: #070913;
+      --bg-card: rgba(15, 23, 42, 0.75);
+      --border: rgba(255, 255, 255, 0.08);
+      --red: #ff3366;
+      --red-glow: rgba(255, 51, 102, 0.4);
+      --purple: #a855f7;
+      --purple-glow: rgba(168, 85, 247, 0.4);
+      --cyan: #06b6d4;
+      --gold: #fbbf24;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Plus Jakarta Sans', sans-serif; }
+    h1, h2, h3, h4 { font-family: 'Outfit', sans-serif; }
+    body { background: var(--bg); color: var(--text); overflow-x: hidden; min-height: 100vh; line-height: 1.6; }
+    
+    .glow-orb { position: absolute; border-radius: 50%; filter: blur(120px); pointer-events: none; z-index: 0; }
+    .glow-red { top: -100px; right: -100px; width: 500px; height: 500px; background: rgba(255, 51, 102, 0.18); }
+    .glow-purple { top: 400px; left: -100px; width: 600px; height: 600px; background: rgba(168, 85, 247, 0.15); }
+    .glow-cyan { bottom: -100px; right: -100px; width: 500px; height: 500px; background: rgba(6, 182, 212, 0.12); }
+    
+    nav { position: fixed; top: 0; left: 0; right: 0; height: 80px; backdrop-filter: blur(20px); background: rgba(7, 9, 19, 0.85); border-bottom: 1px solid var(--border); z-index: 1000; display: flex; align-items: center; justify-content: space-between; padding: 0 40px; }
+    .logo { display: flex; align-items: center; gap: 12px; font-size: 1.5rem; font-weight: 800; text-decoration: none; color: white; font-family: 'Outfit', sans-serif; }
+    .logo-icon { font-size: 2rem; filter: drop-shadow(0 0 10px var(--red-glow)); }
+    .logo-text span { background: linear-gradient(135deg, var(--red), var(--purple)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .nav-links { display: flex; align-items: center; gap: 32px; list-style: none; }
+    .nav-links a { color: var(--text-muted); text-decoration: none; font-weight: 500; transition: color 0.2s; font-size: 0.95rem; }
+    .nav-links a:hover { color: white; }
+    .btn { display: inline-flex; align-items: center; gap: 10px; padding: 12px 24px; border-radius: 14px; font-weight: 700; text-decoration: none; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; border: none; font-size: 0.95rem; }
+    .btn-primary { background: linear-gradient(135deg, #ff3366, #e11d48); color: white; box-shadow: 0 10px 25px -5px var(--red-glow); }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 15px 30px -5px rgba(255, 51, 102, 0.6); }
+    .btn-secondary { background: rgba(255, 255, 255, 0.06); border: 1px solid var(--border); color: white; backdrop-filter: blur(10px); }
+    .btn-secondary:hover { background: rgba(255, 255, 255, 0.12); transform: translateY(-2px); }
+
+    .hero { position: relative; padding: 180px 20px 100px; text-align: center; max-width: 1100px; margin: 0 auto; z-index: 1; }
+    .badge { display: inline-flex; align-items: center; gap: 8px; padding: 8px 18px; border-radius: 30px; background: rgba(255, 51, 102, 0.1); border: 1px solid rgba(255, 51, 102, 0.3); color: #ff6699; font-weight: 600; font-size: 0.85rem; margin-bottom: 24px; }
+    .hero-title { font-size: 4rem; font-weight: 900; line-height: 1.1; margin-bottom: 24px; letter-spacing: -1.5px; }
+    .hero-title .gradient { background: linear-gradient(135deg, #ffffff 30%, #ff3366 70%, #a855f7 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .hero-subtitle { font-size: 1.25rem; color: var(--text-muted); max-width: 780px; margin: 0 auto 40px; font-weight: 400; }
+    .hero-actions { display: flex; align-items: center; justify-content: center; gap: 20px; flex-wrap: wrap; }
+    
+    .stats-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; max-width: 1000px; margin: 60px auto 0; padding: 30px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 24px; backdrop-filter: blur(20px); }
+    .stat-item { text-align: center; }
+    .stat-number { font-size: 2.5rem; font-weight: 800; font-family: 'Outfit'; background: linear-gradient(135deg, white, var(--text-muted)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .stat-number.red { background: linear-gradient(135deg, #ff3366, #ff6699); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .stat-number.purple { background: linear-gradient(135deg, #a855f7, #c084fc); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .stat-number.gold { background: linear-gradient(135deg, #fbbf24, #fef08a); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .stat-label { font-size: 0.85rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; font-weight: 600; }
+
+    .section { padding: 100px 20px; max-width: 1200px; margin: 0 auto; position: relative; z-index: 1; }
+    .section-header { text-align: center; margin-bottom: 60px; }
+    .section-tag { color: var(--red); font-weight: 700; text-transform: uppercase; font-size: 0.85rem; letter-spacing: 2px; margin-bottom: 8px; display: block; }
+    .section-title { font-size: 2.75rem; font-weight: 800; margin-bottom: 16px; }
+    .section-subtitle { color: var(--text-muted); font-size: 1.1rem; max-width: 600px; margin: 0 auto; }
+
+    .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 28px; }
+    .feature-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 24px; padding: 36px; backdrop-filter: blur(20px); transition: all 0.3s ease; position: relative; overflow: hidden; }
+    .feature-card:hover { transform: translateY(-6px); border-color: rgba(255, 51, 102, 0.4); box-shadow: 0 20px 40px -15px rgba(0,0,0,0.5); }
+    .feature-icon { width: 60px; height: 60px; border-radius: 16px; background: rgba(255, 51, 102, 0.1); border: 1px solid rgba(255, 51, 102, 0.2); display: flex; align-items: center; justify-content: center; font-size: 1.75rem; margin-bottom: 24px; color: var(--red); }
+    .feature-title { font-size: 1.35rem; font-weight: 700; margin-bottom: 12px; }
+    .feature-desc { color: var(--text-muted); font-size: 0.95rem; line-height: 1.6; }
+
+    .tabs { display: flex; justify-content: center; gap: 12px; margin-bottom: 40px; flex-wrap: wrap; }
+    .tab-btn { padding: 10px 20px; border-radius: 12px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); color: var(--text-muted); font-weight: 600; cursor: pointer; transition: all 0.2s; }
+    .tab-btn.active, .tab-btn:hover { background: var(--red); color: white; border-color: var(--red); }
+
+    .roles-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px; }
+    .role-card { background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border); border-radius: 18px; padding: 24px; transition: all 0.3s ease; }
+    .role-card:hover { border-color: var(--purple); transform: scale(1.02); }
+    .role-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .role-emoji { font-size: 2rem; }
+    .role-team { font-size: 0.75rem; padding: 4px 10px; border-radius: 20px; font-weight: 700; text-transform: uppercase; }
+    .team-village { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+    .team-wolves { background: rgba(244, 63, 94, 0.15); color: #fb7185; border: 1px solid rgba(244, 63, 94, 0.3); }
+    .team-solo { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+    .role-name { font-size: 1.15rem; font-weight: 700; margin-bottom: 6px; }
+    .role-desc { font-size: 0.85rem; color: var(--text-muted); }
+
+    .mode-badge { font-size: 0.8rem; background: rgba(168, 85, 247, 0.15); color: #c084fc; padding: 4px 12px; border-radius: 12px; display: inline-block; margin-top: 10px; font-weight: 600; }
+
+    .steps-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 30px; margin-top: 40px; }
+    .step-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 24px; padding: 32px; position: relative; }
+    .step-number { font-size: 3.5rem; font-weight: 900; font-family: 'Outfit'; color: rgba(255, 51, 102, 0.2); position: absolute; top: 16px; right: 24px; }
+    .step-title { font-size: 1.25rem; font-weight: 700; margin-bottom: 12px; position: relative; z-index: 1; }
+    .step-desc { color: var(--text-muted); font-size: 0.95rem; position: relative; z-index: 1; }
+
+    .cta-banner { background: linear-gradient(135deg, rgba(255, 51, 102, 0.15), rgba(168, 85, 247, 0.15)); border: 1px solid rgba(255, 51, 102, 0.3); border-radius: 32px; padding: 60px 40px; text-align: center; margin: 100px auto 60px; max-width: 1000px; position: relative; overflow: hidden; backdrop-filter: blur(20px); }
+    .cta-title { font-size: 2.75rem; font-weight: 900; margin-bottom: 16px; }
+
+    footer { border-top: 1px solid var(--border); padding: 40px 20px; text-align: center; color: var(--text-muted); font-size: 0.9rem; background: rgba(7, 9, 19, 0.95); }
+    footer a { color: var(--text-muted); text-decoration: none; margin: 0 10px; transition: color 0.2s; }
+    footer a:hover { color: white; }
+
+    @media (max-width: 768px) {
+      nav { padding: 0 20px; }
+      .nav-links { display: none; }
+      .hero-title { font-size: 2.75rem; }
+      .section-title { font-size: 2rem; }
+      .cta-title { font-size: 2rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="glow-orb glow-red"></div>
+  <div class="glow-orb glow-purple"></div>
+  <div class="glow-orb glow-cyan"></div>
+
+  <!-- Navbar -->
+  <nav>
+    <a href="#" class="logo">
+      <span class="logo-icon">🐺</span>
+      <div class="logo-text">EPIC<span>WOLF</span></div>
+    </a>
+    <ul class="nav-links">
+      <li><a href="#features">Fonctionnalités</a></li>
+      <li><a href="#roles">Rôles (63+)</a></li>
+      <li><a href="#modes">Modes de Jeu</a></li>
+      <li><a href="#howtoplay">Comment Jouer</a></li>
+    </ul>
+    <div style="display:flex; gap: 12px;">
+      <a href="/admin" class="btn btn-secondary"><i class="fa-solid fa-lock"></i> Espace Admin</a>
+      <a href="https://t.me/WerewolfBot" target="_blank" class="btn btn-primary"><i class="fa-brands fa-telegram"></i> Jouer</a>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="badge">
+      <i class="fa-solid fa-bolt"></i> V0.1.0 — Powered by Gemini 2.5 AI & Node.js
+    </div>
+    <h1 class="hero-title">
+      Le jeu de <span class="gradient">Loup-Garou Telegram</span> ultime
+    </h1>
+    <p class="hero-subtitle">
+      Plongez au cœur du village d'EpicWolf. 63+ rôles secrets, parties en solo avec des IA dotées d'une personnalité, tournois d'équipes et 11 modes de jeu impitoyables.
+    </p>
+    <div class="hero-actions">
+      <a href="https://t.me/WerewolfBot" target="_blank" class="btn btn-primary" style="padding: 16px 36px; font-size: 1.1rem;">
+        <i class="fa-brands fa-telegram" style="font-size: 1.3rem;"></i> Lancer sur Telegram
+      </a>
+      <a href="#roles" class="btn btn-secondary" style="padding: 16px 36px; font-size: 1.1rem;">
+        <i class="fa-solid fa-mask"></i> Découvrir les 63 Rôles
+      </a>
+    </div>
+
+    <!-- Live Stats Bar -->
+    <div class="stats-bar">
+      <div class="stat-item">
+        <div class="stat-number red" id="stat-active">--</div>
+        <div class="stat-label">Parties en Cours</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-number purple">63+</div>
+        <div class="stat-label">Rôles Uniques</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-number gold">11</div>
+        <div class="stat-label">Modes de Jeu</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-number" id="stat-players">--</div>
+        <div class="stat-label">Joueurs Inscrits</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Key Features Grid -->
+  <section class="section" id="features">
+    <div class="section-header">
+      <span class="section-tag">Expérience Inégalée</span>
+      <h2 class="section-title">Une expérience de jeu complète</h2>
+      <p class="section-subtitle">Conçu pour offrir une profondeur tactique maximale et un divertissement captivant.</p>
+    </div>
+
+    <div class="grid-3">
+      <div class="feature-card">
+        <div class="feature-icon"><i class="fa-solid fa-brain"></i></div>
+        <h3 class="feature-title">Bots IA Gemini 2.5</h3>
+        <p class="feature-desc">Affrontez des joueurs IA capables de bluffer, voter, accuser et faire des claims stratégiques en partie solo /botgame.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon" style="color:#a855f7; background:rgba(168,85,247,0.1); border-color:rgba(168,85,247,0.2);"><i class="fa-solid fa-trophy"></i></div>
+        <h3 class="feature-title">Tournois & Équipes</h3>
+        <p class="feature-desc">Créez votre escouade avec /creerequipe, affrontez d'autres clans lors de rondes de championnat et décrochez les trophées.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon" style="color:#fbbf24; background:rgba(251,191,36,0.1); border-color:rgba(251,191,36,0.2);"><i class="fa-solid fa-crown"></i></div>
+        <h3 class="feature-title">Profils & Titres Épiques</h3>
+        <p class="feature-desc">Débloquez des réussites, augmentez vos points et équipez des titres d'honneur comme Légende du Crépuscule sur votre carte /profile.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon" style="color:#06b6d4; background:rgba(6,182,212,0.1); border-color:rgba(6,182,212,0.2);"><i class="fa-solid fa-clapperboard"></i></div>
+        <h3 class="feature-title">Packs GIF & Gazette</h3>
+        <p class="feature-desc">Chaque nuit et chaque lynchage sont accompagnés de séquences GIF animées et d'un journal complet en fin de partie (/gazette).</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon" style="color:#10b981; background:rgba(16,185,129,0.1); border-color:rgba(16,185,129,0.2);"><i class="fa-solid fa-sliders"></i></div>
+        <h3 class="feature-title">Configuration Avancée</h3>
+        <p class="feature-desc">Ajustez le rôle de chaque membre, activez le vote anonyme par MP, modifiez les compteurs et personnalisez les règles de votre groupe.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon" style="color:#ec4899; background:rgba(236,72,153,0.1); border-color:rgba(236,72,153,0.2);"><i class="fa-solid fa-language"></i></div>
+        <h3 class="feature-title">Support Multilingue FR / EN</h3>
+        <p class="feature-desc">Basculez instantanément le bot en français ou en anglais via la commande /setlang selon les membres de votre groupe.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Roles Showcase -->
+  <section class="section" id="roles">
+    <div class="section-header">
+      <span class="section-tag">Catalogue de Rôles</span>
+      <h2 class="section-title">63+ Rôles aux pouvoirs uniques</h2>
+      <p class="section-subtitle">Chaque rôle possède des compétences spécifiques qui peuvent renverser le cours d'une nuit.</p>
+    </div>
+
+    <div class="tabs">
+      <button class="tab-btn active" onclick="filterRoles('all', this)">Tous les rôles</button>
+      <button class="tab-btn" onclick="filterRoles('village', this)">🏘️ Villageois</button>
+      <button class="tab-btn" onclick="filterRoles('wolves', this)">🐺 Loups-Garous</button>
+      <button class="tab-btn" onclick="filterRoles('solo', this)">🔮 Solitaires & Neutres</button>
+    </div>
+
+    <div class="roles-grid" id="roles-container">
+      <!-- Roles injected dynamically via JS -->
+    </div>
+  </section>
+
+  <!-- Game Modes -->
+  <section class="section" id="modes">
+    <div class="section-header">
+      <span class="section-tag">Variantes de Jeu</span>
+      <h2 class="section-title">11 Modes de Jeu Captivants</h2>
+      <p class="section-subtitle">Lancez des parties sur-mesure avec la commande /start... adaptée à votre groupe.</p>
+    </div>
+
+    <div class="grid-3">
+      <div class="feature-card">
+        <div class="role-emoji">🎯</div>
+        <h3 class="feature-title" style="margin-top:12px;">Mode Normal</h3>
+        <p class="feature-desc">L'expérience équilibrée classique avec voyance, loups-garous et protecteurs.</p>
+        <span class="mode-badge">/startgame</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="role-emoji">🌀</div>
+        <h3 class="feature-title" style="margin-top:12px;">Mode Chaos</h3>
+        <p class="feature-desc">Distribution complètement imprévisible avec les rôles les plus rares et chaotiques.</p>
+        <span class="mode-badge">/startchaos</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="role-emoji">🩸</div>
+        <h3 class="feature-title" style="margin-top:12px;">Mode Bain de Sang</h3>
+        <p class="feature-desc">Un massacre accéléré avec des rôles extrêmement offensifs et des timers réduits.</p>
+        <span class="mode-badge">/startbloodbath</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="role-emoji">🔮</div>
+        <h3 class="feature-title" style="margin-top:12px;">Mode Magie Noire</h3>
+        <p class="feature-desc">Sorceleur, Sorcière, Necromancer et Potionnier s'affrontent dans l'ombre.</p>
+        <span class="mode-badge">/startdarkmagic</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="role-emoji">🐺</div>
+        <h3 class="feature-title" style="margin-top:12px;">Mode Meute de Loups</h3>
+        <p class="feature-desc">Nombre élevé de loups (Loup des Neiges, Alpha, Maudit) face à un village armé.</p>
+        <span class="mode-badge">/startwolfpack</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="role-emoji">🤖</div>
+        <h3 class="feature-title" style="margin-top:12px;">Mode Solo IA Gemini</h3>
+        <p class="feature-desc">Jouez une partie immédiate sans attendre d'autres joueurs humains.</p>
+        <span class="mode-badge">/botgame</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- How To Play -->
+  <section class="section" id="howtoplay">
+    <div class="section-header">
+      <span class="section-tag">Prise en main</span>
+      <h2 class="section-title">Comment jouer en 3 étapes ?</h2>
+    </div>
+
+    <div class="steps-grid">
+      <div class="step-card">
+        <div class="step-number">01</div>
+        <h3 class="step-title">Ajoutez le Bot</h3>
+        <p class="step-desc">Ajoutez <b>@WerewolfBot</b> dans votre groupe Telegram et donnez-lui les droits d'envoi de messages.</p>
+      </div>
+
+      <div class="step-card">
+        <div class="step-number">02</div>
+        <h3 class="step-title">Lancez le Lobby</h3>
+        <p class="step-desc">Tapez <b>/startgame</b> dans le groupe (ou <b>/botgame</b> en privé pour jouer avec des IA Gemini).</p>
+      </div>
+
+      <div class="step-card">
+        <div class="step-number">03</div>
+        <h3 class="step-title">Que la Chasse commence</h3>
+        <p class="step-desc">Chaque joueur reçoit son rôle secret en MP. Utilisez <b>/claim</b>, votez et démasquez les loups !</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA Banner -->
+  <div class="cta-banner">
+    <h2 class="cta-title">Prêt à défendre votre village ?</h2>
+    <p style="color:var(--text-muted); font-size:1.1rem; margin-bottom: 30px;">
+      Rejoignez l'expérience Loup-Garou la plus aboutie sur Telegram dès aujourd'hui.
+    </p>
+    <a href="https://t.me/WerewolfBot" target="_blank" class="btn btn-primary" style="padding:18px 42px; font-size:1.15rem;">
+      <i class="fa-brands fa-telegram" style="font-size:1.4rem;"></i> Lancer le Bot Telegram
+    </a>
+  </div>
+
+  <!-- Footer -->
+  <footer>
+    <p style="margin-bottom:12px;">© 2026 <b>EpicWolf Game</b> — Développé avec passion pour la communauté Telegram.</p>
+    <p>
+      <a href="/admin">Espace Administration</a> • 
+      <a href="https://t.me/WerewolfBot" target="_blank">Bot Telegram</a> • 
+      <a href="https://github.com/BorisGautier/Werewolf" target="_blank">Dépôt GitHub</a>
+    </p>
+  </footer>
+
+  <script>
+    const sampleRoles = [
+      { name: "Voyante", emoji: "🔮", team: "village", desc: "Découvre le rôle exact d'un joueur chaque nuit." },
+      { name: "Loup-Garou", emoji: "🐺", team: "wolves", desc: "Se concerte avec la meute pour dévorer un villageois chaque nuit." },
+      { name: "Sorcière", emoji: "🧪", team: "village", desc: "Possède une potion de guérison et une potion de poison mortel." },
+      { name: "Chasseur", emoji: "🏹", team: "village", desc: "S'il meurt, il tire une dernière balle pour éliminer un joueur." },
+      { name: "Augure", emoji: "👁️", team: "village", desc: "Révèle chaque nuit un rôle qui n'est PAS présent dans la partie." },
+      { name: "Arsonist", emoji: "🔥", team: "solo", desc: "Asperge les joueurs d'essence puis les brûle tous simultanément." },
+      { name: "Loup des Neiges", emoji: "❄️", team: "wolves", desc: "Gèle une cible pendant la nuit, annulant toute son action." },
+      { name: "Chasseur de Cultistes", emoji: "🗡️", team: "solo", desc: "Traque et liquide les membres de la secte la nuit." },
+      { name: "Doppelganger", emoji: "🎭", team: "solo", desc: "Sélectionne un joueur et hérite de son rôle lorsqu'il meurt." },
+      { name: "Ange Gardien", emoji: "👼", team: "village", desc: "Protège un joueur contre les attaques nocturnes des loups." },
+      { name: "Grand Méchant Loup", emoji: "🐺", team: "wolves", desc: "Peut dévorer une deuxième victime tant qu'aucun loup n'est mort." },
+      { name: "Tanner (L'Idiot)", emoji: "🤡", team: "solo", desc: "Gagne immédiatement la partie s'il réussit à se faire lynchera par le village !" }
+    ];
+
+    function renderRoles(filter = 'all') {
+      const container = document.getElementById('roles-container');
+      container.innerHTML = '';
+      const list = filter === 'all' ? sampleRoles : sampleRoles.filter(r => r.team === filter);
+      
+      list.forEach(role => {
+        const teamClass = role.team === 'village' ? 'team-village' : role.team === 'wolves' ? 'team-wolves' : 'team-solo';
+        const teamLabel = role.team === 'village' ? 'Village' : role.team === 'wolves' ? 'Meute' : 'Solitaire';
+        
+        const card = document.createElement('div');
+        card.className = 'role-card';
+        card.innerHTML = \`
+          <div class="role-header">
+            <span class="role-emoji">\${role.emoji}</span>
+            <span class="role-team \${teamClass}">\${teamLabel}</span>
+          </div>
+          <div class="role-name">\${role.name}</div>
+          <div class="role-desc">\${role.desc}</div>
+        \`;
+        container.appendChild(card);
+      });
+    }
+
+    function filterRoles(filter, btn) {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderRoles(filter);
+    }
+
+    async function fetchPublicStats() {
+      try {
+        const res = await fetch('/api/public/stats');
+        const data = await res.json();
+        if (data.success) {
+          document.getElementById('stat-active').textContent = data.activeGames || 0;
+          document.getElementById('stat-players').textContent = data.totalPlayers || 0;
+        }
+      } catch {}
+    }
+
+    renderRoles('all');
+    fetchPublicStats();
+  </script>
+</body>
+</html>`;
+
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(html);
   }
 }
