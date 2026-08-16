@@ -35,8 +35,9 @@ COPY locales ./locales
 COPY assets ./assets
 COPY package.json ./
 COPY docker-entrypoint.sh ./
+RUN chmod +x ./docker-entrypoint.sh
 
-EXPOSE 9090 4000
+EXPOSE 4000
 
 USER werewolf
 
