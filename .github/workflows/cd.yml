@@ -121,21 +121,23 @@ jobs:
             ${{ secrets.ENV_FILE_CONTENT }}
             EOF
 
-            # 2. Configurer le VirtualHost Apache2
+            # 2. Configurer les VirtualHosts Apache2 (HTTP 80 & HTTPS 443)
             sudo mkdir -p /etc/apache2/sites-available
             sudo cp /var/www/werewolf/deploy/apache/epicwolf.borisgauty.com.conf /etc/apache2/sites-available/epicwolf.borisgauty.com.conf
+            if [ -d "/etc/letsencrypt/live/epicwolf.borisgauty.com" ]; then
+              sudo cp /var/www/werewolf/deploy/apache/epicwolf.borisgauty.com-le-ssl.conf /etc/apache2/sites-available/epicwolf.borisgauty.com-le-ssl.conf
+            fi
 
-            # 3. Activer les modules Apache & le VirtualHost
+            # 3. Activer les modules Apache & les VirtualHosts
             sudo a2enmod proxy proxy_http headers rewrite ssl || true
             sudo a2ensite epicwolf.borisgauty.com.conf || true
+            if [ -f "/etc/apache2/sites-available/epicwolf.borisgauty.com-le-ssl.conf" ]; then
+              sudo a2ensite epicwolf.borisgauty.com-le-ssl.conf || true
+            fi
 
-            # 4. Certification SSL Certbot Automatique & Sync SSL (port 443)
+            # 4. Certification SSL Certbot Automatique (si non encore configuré)
             if [ ! -d "/etc/letsencrypt/live/epicwolf.borisgauty.com" ]; then
               sudo certbot --apache -d epicwolf.borisgauty.com --non-interactive --agree-tos -m admin@borisgauty.com --redirect || true
-            else
-              if [ -f "/etc/apache2/sites-available/epicwolf.borisgauty.com-le-ssl.conf" ]; then
-                sudo certbot --apache -d epicwolf.borisgauty.com --non-interactive --reinstall || true
-              fi
             fi
             sudo systemctl reload apache2 || true
 

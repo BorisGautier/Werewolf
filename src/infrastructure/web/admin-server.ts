@@ -335,34 +335,39 @@ export class AdminServer {
       this.sendJson(res, 200, { success: true, players: [] });
       return;
     }
-    const search = url.searchParams.get('q') ?? '';
-    const players = await this.prisma.player.findMany({
-      ...(search
-        ? {
-            where: {
-              OR: [
-                { username: { contains: search, mode: 'insensitive' } },
-                { displayName: { contains: search, mode: 'insensitive' } },
-              ],
-            },
-          }
-        : {}),
-      take: 50,
-      orderBy: { createdAt: 'desc' },
-    });
+    try {
+      const search = url.searchParams.get('q') ?? '';
+      const players = await this.prisma.player.findMany({
+        ...(search
+          ? {
+              where: {
+                OR: [
+                  { username: { contains: search, mode: 'insensitive' } },
+                  { displayName: { contains: search, mode: 'insensitive' } },
+                ],
+              },
+            }
+          : {}),
+        take: 50,
+        orderBy: { createdAt: 'desc' },
+      });
 
-    this.sendJson(res, 200, {
-      success: true,
-      players: players.map((p) => ({
-        id: p.id,
-        telegramId: p.telegramId.toString(),
-        username: p.username,
-        displayName: p.displayName,
-        isBanned: p.isBanned,
-        banReason: p.banReason,
-        createdAt: p.createdAt,
-      })),
-    });
+      this.sendJson(res, 200, {
+        success: true,
+        players: players.map((p) => ({
+          id: p.id,
+          telegramId: p.telegramId.toString(),
+          username: p.username,
+          displayName: p.displayName,
+          isBanned: p.isBanned,
+          banReason: p.banReason,
+          createdAt: p.createdAt,
+        })),
+      });
+    } catch (err) {
+      this.logger?.warn({ err }, '[AdminServer] Error fetching players list');
+      this.sendJson(res, 200, { success: true, players: [] });
+    }
   }
 
   private async handlePlayerBan(
@@ -391,23 +396,28 @@ export class AdminServer {
       this.sendJson(res, 200, { success: true, groups: [] });
       return;
     }
-    const groups = await this.prisma.group.findMany({
-      take: 50,
-      orderBy: { createdAt: 'desc' },
-    });
+    try {
+      const groups = await this.prisma.group.findMany({
+        take: 50,
+        orderBy: { createdAt: 'desc' },
+      });
 
-    this.sendJson(res, 200, {
-      success: true,
-      groups: groups.map((g) => ({
-        id: g.id,
-        chatId: g.telegramId.toString(),
-        title: g.title || (g.username ? `@${g.username}` : `Groupe #${g.telegramId}`),
-        gameMode: g.mode,
-        isBanned: g.banned,
-        isApproved: g.isApproved,
-        createdAt: g.createdAt,
-      })),
-    });
+      this.sendJson(res, 200, {
+        success: true,
+        groups: groups.map((g) => ({
+          id: g.id,
+          chatId: g.telegramId.toString(),
+          title: g.title || (g.username ? `@${g.username}` : `Groupe #${g.telegramId}`),
+          gameMode: g.mode,
+          isBanned: g.banned,
+          isApproved: g.isApproved,
+          createdAt: g.createdAt,
+        })),
+      });
+    } catch (err) {
+      this.logger?.warn({ err }, '[AdminServer] Error fetching groups list');
+      this.sendJson(res, 200, { success: true, groups: [] });
+    }
   }
 
   private async handleGroupBan(
@@ -887,7 +897,8 @@ export class AdminServer {
         \`;
       } else if (tab === 'players') {
         const data = await apiFetch('/api/admin/players');
-        let rows = data.players.map(p => \`
+        const playersList = (data && Array.isArray(data.players)) ? data.players : [];
+        let rows = playersList.map(p => \`
           <tr>
             <td><strong>\${p.username ? '@' + p.username : (p.displayName || 'Joueur #' + p.telegramId)}</strong><br><small style="color:var(--text-muted);">ID: \${p.telegramId}</small></td>
             <td>\${p.isBanned ? '<span class="badge badge-rose">BANNIS</span>' : '<span class="badge badge-emerald">ACTIF</span>'}</td>
@@ -913,7 +924,8 @@ export class AdminServer {
         \`;
       } else if (tab === 'groups') {
         const data = await apiFetch('/api/admin/groups');
-        let rows = data.groups.map(g => \`
+        const groupsList = (data && Array.isArray(data.groups)) ? data.groups : [];
+        let rows = groupsList.map(g => \`
           <tr>
             <td><strong>\${g.title || (g.username ? '@' + g.username : 'Groupe #' + g.chatId)}</strong><br><small style="color:var(--text-muted);">ID: \${g.chatId}</small></td>
             <td><span class="badge badge-purple">\${g.gameMode}</span></td>
@@ -943,7 +955,8 @@ export class AdminServer {
         \`;
       } else if (tab === 'backups') {
         const data = await apiFetch('/api/admin/backups');
-        let rows = data.backups.map(b => \`
+        const backupsList = (data && Array.isArray(data.backups)) ? data.backups : [];
+        let rows = backupsList.map(b => \`
           <tr>
             <td><strong>\${b.filename}</strong></td>
             <td>\${(b.sizeBytes / 1024).toFixed(1)} KB</td>
