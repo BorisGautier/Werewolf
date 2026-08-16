@@ -27,7 +27,7 @@ describe('seerSees', () => {
     expect(seerSees(ROLE_BIT.Lycan)).toBe(ROLE_BIT.Villager);
   });
 
-  it("splits the Traitor 50/50 between Wolf and Villager based on the roll", () => {
+  it('splits the Traitor 50/50 between Wolf and Villager based on the roll', () => {
     expect(seerSees(ROLE_BIT.Traitor, () => 0)).toBe(ROLE_BIT.Wolf);
     expect(seerSees(ROLE_BIT.Traitor, () => 0.99)).toBe(ROLE_BIT.Villager);
   });
@@ -89,7 +89,9 @@ describe('oracleSeesRandomRole', () => {
     const wolf = createPlayer(3n, 'W', ROLE_BIT.Wolf, 'Wolf');
 
     for (let i = 0; i < 20; i++) {
-      expect(oracleSeesRandomRole([oracle, villager, wolf], oracle.id, ROLE_BIT.Villager)).toBe(ROLE_BIT.Wolf);
+      expect(oracleSeesRandomRole([oracle, villager, wolf], oracle.id, ROLE_BIT.Villager)).toBe(
+        ROLE_BIT.Wolf,
+      );
     }
   });
 });
@@ -140,7 +142,9 @@ describe('resolveClairvoyanceNight', () => {
 
     const events = resolveClairvoyanceNight([seer, wolfMan], []);
 
-    expect(events).toEqual([{ type: 'SeerVision', playerId: seer.id, targetId: wolfMan.id, shownRole: ROLE_BIT.Wolf }]);
+    expect(events).toEqual([
+      { type: 'SeerVision', playerId: seer.id, targetId: wolfMan.id, shownRole: ROLE_BIT.Wolf },
+    ]);
     expect(wolfMan.trustworthy).toBe(true);
   });
 
@@ -164,7 +168,12 @@ describe('resolveClairvoyanceNight', () => {
     const events = resolveClairvoyanceNight([sorcerer, wolf], []);
 
     expect(events).toEqual([
-      { type: 'SorcererVision', playerId: sorcerer.id, targetId: wolf.id, detectedRole: ROLE_BIT.Wolf },
+      {
+        type: 'SorcererVision',
+        playerId: sorcerer.id,
+        targetId: wolf.id,
+        detectedRole: ROLE_BIT.Wolf,
+      },
     ]);
   });
 
@@ -195,7 +204,9 @@ describe('resolveClairvoyanceNight', () => {
     // Only the Oracle and their target exist, and both share no other role to show - shownRole is null.
     const events = resolveClairvoyanceNight([oracle, villager], []);
 
-    expect(events).toEqual([{ type: 'OracleVision', playerId: oracle.id, targetId: villager.id, shownRole: null }]);
+    expect(events).toEqual([
+      { type: 'OracleVision', playerId: oracle.id, targetId: villager.id, shownRole: null },
+    ]);
   });
 
   it("emits the Augur's vision using the game's possible-roles pool", () => {
@@ -204,7 +215,9 @@ describe('resolveClairvoyanceNight', () => {
 
     const events = resolveClairvoyanceNight([augur, wolf], [ROLE_BIT.Villager]);
 
-    expect(events).toEqual([{ type: 'AugurVision', playerId: augur.id, shownRole: ROLE_BIT.Villager }]);
+    expect(events).toEqual([
+      { type: 'AugurVision', playerId: augur.id, shownRole: ROLE_BIT.Villager },
+    ]);
   });
 
   it('skips a frozen or dead informational role entirely', () => {

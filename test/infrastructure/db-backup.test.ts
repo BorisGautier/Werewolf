@@ -35,7 +35,7 @@ describe('DatabaseBackupManager', () => {
 
   it('lists existing backups in chronological order', async () => {
     const manager = new DatabaseBackupManager({ backupDir: testDir });
-    
+
     // Write two dummy backups
     fs.writeFileSync(path.join(testDir, 'werewolf_db_backup_1.sql.gz'), 'dummy 1');
     fs.writeFileSync(path.join(testDir, 'werewolf_db_backup_2.sql.gz'), 'dummy 2');

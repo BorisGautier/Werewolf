@@ -4,7 +4,10 @@ import { GameManager } from '../../src/application/game-manager.js';
 import { GameLobbyManager } from '../../src/infrastructure/telegram/game-lobby.js';
 import { getDefaultLocale, loadLocales } from '../../src/infrastructure/i18n/locale-loader.js';
 import { Translator } from '../../src/infrastructure/i18n/translator.js';
-import type { GroupRepository, GroupWithConfig } from '../../src/infrastructure/persistence/group.repository.js';
+import type {
+  GroupRepository,
+  GroupWithConfig,
+} from '../../src/infrastructure/persistence/group.repository.js';
 import type { PlayerRepository } from '../../src/infrastructure/persistence/player.repository.js';
 import type { GameRepository } from '../../src/infrastructure/persistence/game.repository.js';
 
@@ -19,7 +22,11 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-function fakeGroup(telegramId: bigint, title: string | null, overrides: Partial<GroupWithConfig> = {}): GroupWithConfig {
+function fakeGroup(
+  telegramId: bigint,
+  title: string | null,
+  overrides: Partial<GroupWithConfig> = {},
+): GroupWithConfig {
   return {
     id: Number(telegramId),
     telegramId,
@@ -82,7 +89,9 @@ function createHarness(joinTimeSeconds = 5) {
       }
       return g;
     }),
-    findByTelegramId: vi.fn(async (telegramId: bigint) => groupsStore.get(telegramId.toString()) ?? null),
+    findByTelegramId: vi.fn(
+      async (telegramId: bigint) => groupsStore.get(telegramId.toString()) ?? null,
+    ),
   } as unknown as GroupRepository;
 
   const playersStore = new Map<string, { id: number; telegramId: bigint }>();
@@ -96,7 +105,9 @@ function createHarness(joinTimeSeconds = 5) {
       }
       return p;
     }),
-    findByTelegramId: vi.fn(async (telegramId: bigint) => playersStore.get(telegramId.toString()) ?? null),
+    findByTelegramId: vi.fn(
+      async (telegramId: bigint) => playersStore.get(telegramId.toString()) ?? null,
+    ),
     isBanned: vi.fn(async () => false),
     checkSuspension: vi.fn(async () => ({ isSuspended: false, suspendedUntil: null })),
   } as unknown as PlayerRepository;
@@ -107,9 +118,15 @@ function createHarness(joinTimeSeconds = 5) {
     finalizeGame: vi.fn(async () => {}),
   } as unknown as GameRepository;
 
-  const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as import('../../src/infrastructure/logging/logger.js').Logger;
+  const logger = {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  } as unknown as import('../../src/infrastructure/logging/logger.js').Logger;
 
-  const gameLoop = { start: vi.fn() } as unknown as import('../../src/infrastructure/telegram/game-loop.js').GameLoop;
+  const gameLoop = {
+    start: vi.fn(),
+  } as unknown as import('../../src/infrastructure/telegram/game-loop.js').GameLoop;
 
   const notifyGames = {
     listWaiting: vi.fn(async () => []),
@@ -118,9 +135,32 @@ function createHarness(joinTimeSeconds = 5) {
     remove: vi.fn(async () => true),
   } as unknown as import('../../src/infrastructure/persistence/notify-game.repository.js').NotifyGameRepository;
 
-  const lobby = new GameLobbyManager(bot, gameManager, groups, players, gameRepo, translator, logger, gameLoop, notifyGames, joinTimeSeconds);
+  const lobby = new GameLobbyManager(
+    bot,
+    gameManager,
+    groups,
+    players,
+    gameRepo,
+    translator,
+    logger,
+    gameLoop,
+    notifyGames,
+    joinTimeSeconds,
+  );
 
-  return { lobby, bot, sendMessage, leaveChat, gameManager, groups, groupsStore, players, gameRepo, gameLoop, notifyGames };
+  return {
+    lobby,
+    bot,
+    sendMessage,
+    leaveChat,
+    gameManager,
+    groups,
+    groupsStore,
+    players,
+    gameRepo,
+    gameLoop,
+    notifyGames,
+  };
 }
 
 function user(id: number, firstName: string) {
@@ -253,7 +293,10 @@ describe('GameLobbyManager', () => {
 
     // The starter (1n) is on the waitlist too but shouldn't be PM'd about their own game.
     expect(sendMessage).toHaveBeenCalledWith(99, expect.stringContaining('Group'));
-    expect(sendMessage).not.toHaveBeenCalledWith(1, expect.stringContaining('A new game has started'));
+    expect(sendMessage).not.toHaveBeenCalledWith(
+      1,
+      expect.stringContaining('A new game has started'),
+    );
   });
 
   it('clears the /nextgame waitlist once a lobby locks in and deals roles', async () => {
@@ -276,7 +319,10 @@ describe('GameLobbyManager', () => {
     vi.useFakeTimers();
     const { lobby, gameManager, groupsStore } = createHarness(60);
     const chatId = 111n;
-    groupsStore.set(chatId.toString(), fakeGroup(chatId, 'Group', { allowExtend: true, maxExtendSeconds: 20 }));
+    groupsStore.set(
+      chatId.toString(),
+      fakeGroup(chatId, 'Group', { allowExtend: true, maxExtendSeconds: 20 }),
+    );
 
     await lobby.startGame(chatId, 'Group', { id: 1n, name: 'Starter' }, 'Normal');
     for (let i = 2; i <= 6; i++) {
@@ -290,11 +336,14 @@ describe('GameLobbyManager', () => {
     expect(gameManager.get(chatId)!.phase).toBe('Joining');
   });
 
-  it("extend rejects a second request from the same non-admin player", async () => {
+  it('extend rejects a second request from the same non-admin player', async () => {
     vi.useFakeTimers();
     const { lobby, sendMessage, groupsStore } = createHarness(60);
     const chatId = 112n;
-    groupsStore.set(chatId.toString(), fakeGroup(chatId, 'Group', { allowExtend: true, maxExtendSeconds: 20 }));
+    groupsStore.set(
+      chatId.toString(),
+      fakeGroup(chatId, 'Group', { allowExtend: true, maxExtendSeconds: 20 }),
+    );
 
     await lobby.startGame(chatId, 'Group', { id: 1n, name: 'Starter' }, 'Normal');
     await lobby.join(chatId, user(2, 'Alice'));
@@ -396,8 +445,9 @@ describe('GameLobbyManager', () => {
     await lobby.join(chatId, user(2, 'Alice'));
     await lobby.join(chatId, user(3, 'Bob'));
 
-    (players.findByTelegramId as ReturnType<typeof vi.fn>).mockImplementation(async (telegramId: bigint) =>
-      telegramId === 2n ? { donationLevel: 3 } : { donationLevel: 0 },
+    (players.findByTelegramId as ReturnType<typeof vi.fn>).mockImplementation(
+      async (telegramId: bigint) =>
+        telegramId === 2n ? { donationLevel: 3 } : { donationLevel: 0 },
     );
     sendMessage.mockClear();
     await lobby.showPlayers(chatId);
@@ -406,7 +456,7 @@ describe('GameLobbyManager', () => {
     expect(sendMessage).not.toHaveBeenCalledWith(109, expect.stringContaining('Bob 🥇'));
   });
 
-  it("/players shows plain names when nobody has donated", async () => {
+  it('/players shows plain names when nobody has donated', async () => {
     const { lobby, sendMessage } = createHarness();
     const chatId = 110n;
 

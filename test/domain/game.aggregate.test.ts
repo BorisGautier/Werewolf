@@ -162,7 +162,9 @@ describe('Game (full day/night/lynch cycle)', () => {
 
     const result = game.resolveLynch();
 
-    expect(result.events.some((e) => e.type === 'WildChildTurnedWolf' && e.playerId === wildChild!.id)).toBe(true);
+    expect(
+      result.events.some((e) => e.type === 'WildChildTurnedWolf' && e.playerId === wildChild!.id),
+    ).toBe(true);
     expect(wildChild!.role).toBe(ROLE_BIT.Wolf);
     // The Wild Child is now the last Wolf standing against 2 villagers - the game must NOT have
     // ended as a Village win.
@@ -170,7 +172,7 @@ describe('Game (full day/night/lynch cycle)', () => {
     expect(game.phase).not.toBe('Ended');
   });
 
-  it('re-evaluates the win condition after the Hunter\'s final shot lands the killing blow', () => {
+  it("re-evaluates the win condition after the Hunter's final shot lands the killing blow", () => {
     // Regression test: `game.killPlayer` (the Hunter final-shot entrypoint) must trigger a fresh
     // win-condition check by itself - the caller (GameLoop.handleHunterShots) has no other signal
     // that the shot just finished the game.
@@ -217,7 +219,9 @@ describe('Game (full day/night/lynch cycle)', () => {
     const events = game.killPlayer(seer!.id, 'HunterShot', { killerIds: [hunter!.id] });
 
     expect(appSeer!.role).toBe(ROLE_BIT.Seer);
-    expect(events.some((e) => e.type === 'ApprenticeSeerPromoted' && e.playerId === appSeer!.id)).toBe(true);
+    expect(
+      events.some((e) => e.type === 'ApprenticeSeerPromoted' && e.playerId === appSeer!.id),
+    ).toBe(true);
   });
 
   it('cannot resolve a lynch or advance phases once the game has ended', () => {
@@ -239,7 +243,7 @@ describe('Game (full day/night/lynch cycle)', () => {
     expect(() => game.killPlayer(a!.id, 'Eat')).toThrow(GameError);
   });
 
-  it("demotes the Hunter to Villager when their final shot kills the Wise Elder", () => {
+  it('demotes the Hunter to Villager when their final shot kills the Wise Elder', () => {
     const game = joinedGame(5);
     game.start();
     for (const p of game.players) {
@@ -256,7 +260,9 @@ describe('Game (full day/night/lynch cycle)', () => {
     expect(hunter.role).toBe(ROLE_BIT.Villager);
     expect(hunter.team).toBe('Village');
     expect(hunter.changedRolesCount).toBe(1);
-    expect(events.some((e) => e.type === 'HunterLostPowerToWiseElder' && e.playerId === hunter.id)).toBe(true);
+    expect(
+      events.some((e) => e.type === 'HunterLostPowerToWiseElder' && e.playerId === hunter.id),
+    ).toBe(true);
     expect(events.some((e) => e.type === 'PlayerDied' && e.playerId === wiseElder.id)).toBe(true);
   });
 

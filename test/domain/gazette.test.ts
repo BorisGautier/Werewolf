@@ -30,7 +30,13 @@ describe('Gazette Generator', () => {
     game.winningTeam = 'Wolves';
 
     const events: GameEvent[] = [
-      { type: 'PlayerDied', playerId: BigInt(1), method: 'Eat', killerIds: [BigInt(2)], isNight: true },
+      {
+        type: 'PlayerDied',
+        playerId: BigInt(1),
+        method: 'Eat',
+        killerIds: [BigInt(2)],
+        isNight: true,
+      },
     ];
 
     const gazette = generateGazette(game, [events], 'en');

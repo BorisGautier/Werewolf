@@ -129,7 +129,13 @@ export interface Player {
   hasRepeatedVisit: boolean;
 }
 
-export function createPlayer(id: bigint, name: string, role: Role, team: Team, isBot = false): Player {
+export function createPlayer(
+  id: bigint,
+  name: string,
+  role: Role,
+  team: Team,
+  isBot = false,
+): Player {
   return {
     id,
     name,

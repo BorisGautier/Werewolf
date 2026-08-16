@@ -17,7 +17,7 @@ const MODES_DATA_FR: Record<GameMode, ModeInfo> = {
     command: '/startgame (ou /start)',
     atmosphere: 'Équilibré, tactique et authentique',
     description:
-      "Le mode Werewolf classique et équilibré. Un algorithme ajuste automatiquement les forces entre le Village et les Loups/Tueurs selon le nombre de participants.",
+      'Le mode Werewolf classique et équilibré. Un algorithme ajuste automatiquement les forces entre le Village et les Loups/Tueurs selon le nombre de participants.',
     keyRoles: 'Villageois, Voyante, Ange Gardien, Loups-Garous, Catin, Chasseur.',
   },
   Chaos: {
@@ -27,7 +27,7 @@ const MODES_DATA_FR: Record<GameMode, ModeInfo> = {
     atmosphere: 'Folie totale, imprévisible et hilarant',
     description:
       "Aucun algorithme d'équilibrage ! Tous les rôles sont attribués 100% au hasard. Il peut y avoir 3 Tueurs en série, 0 Voyante ou une meute géante.",
-    keyRoles: 'N\'importe quel rôle parmi les 63 disponibles !',
+    keyRoles: "N'importe quel rôle parmi les 63 disponibles !",
   },
   Bloodbath: {
     emoji: '🩸',
@@ -53,7 +53,7 @@ const MODES_DATA_FR: Record<GameMode, ModeInfo> = {
     command: '/startwolfpack',
     atmosphere: 'Traque féroce et survie du Village',
     description:
-      "Les Loups-Garous règnent en maîtres avec tous leurs sous-rôles spéciaux les plus redoutables.",
+      'Les Loups-Garous règnent en maîtres avec tous leurs sous-rôles spéciaux les plus redoutables.',
     keyRoles: 'Loup Berserker, Loup Hypnotiseur, Loup Piégeur, Loup Hurleur, Loup des Neiges.',
   },
   CursedVillage: {
@@ -71,7 +71,7 @@ const MODES_DATA_FR: Record<GameMode, ModeInfo> = {
     command: '/startinfection',
     atmosphere: 'Mutations et conversions nocturnes',
     description:
-      "Les forces de conversion sont décuplées ! La composition des équipes évolue continuellement pendant la nuit.",
+      'Les forces de conversion sont décuplées ! La composition des équipes évolue continuellement pendant la nuit.',
     keyRoles: 'Culte, Loup Alpha (mordeur), Sosie, Enfant Sauvage, Voleur.',
   },
   Anarchy: {
@@ -89,7 +89,7 @@ const MODES_DATA_FR: Record<GameMode, ModeInfo> = {
     command: '/startholywar',
     atmosphere: 'Lumière divine contre Ténèbres',
     description:
-      "Affrontement sacré entre les protecteurs divins du Village et les forces ténébreuses du Culte et des Loups.",
+      'Affrontement sacré entre les protecteurs divins du Village et les forces ténébreuses du Culte et des Loups.',
     keyRoles: 'Prêtresse de Lumière, Ange Exterminateur, Ange Gardien, Sage Ancien.',
   },
   Assassins: {
@@ -98,7 +98,7 @@ const MODES_DATA_FR: Record<GameMode, ModeInfo> = {
     command: '/startassassins',
     atmosphere: 'Contrats secrets, filatures et exécutions',
     description:
-      "Chaque joueur reçoit une cible secrète ou un contrat à remplir. Qui éliminera sa cible en premier ?",
+      'Chaque joueur reçoit une cible secrète ou un contrat à remplir. Qui éliminera sa cible en premier ?',
     keyRoles: 'Assassin à Gages, Vengeur, Franc-Tireur, Détective, Chasseur de Cultistes.',
   },
 };
@@ -127,12 +127,12 @@ export function registerModesGuideCommands(bot: Bot): void {
       `📖 <b>Description :</b>\n${data.description}\n\n` +
       `🎭 <b>Rôles clés :</b>\n${data.keyRoles}`;
 
-    const keyboard = new InlineKeyboard()
-      .text('« Retour aux modes', 'mode_list_back')
-      .row();
+    const keyboard = new InlineKeyboard().text('« Retour aux modes', 'mode_list_back').row();
 
     await ctx.answerCallbackQuery();
-    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: keyboard }).catch(() => null);
+    await ctx
+      .editMessageText(text, { parse_mode: 'HTML', reply_markup: keyboard })
+      .catch(() => null);
   });
 
   bot.callbackQuery('mode_list_back', async (ctx: Context) => {
@@ -142,7 +142,9 @@ export function registerModesGuideCommands(bot: Bot): void {
       `Le bot propose <b>10 modes de jeu uniques</b> ! Cliquez sur un mode ci-dessous pour découvrir ses spécificités :`;
 
     await ctx.answerCallbackQuery();
-    await ctx.editMessageText(title, { parse_mode: 'HTML', reply_markup: keyboard }).catch(() => null);
+    await ctx
+      .editMessageText(title, { parse_mode: 'HTML', reply_markup: keyboard })
+      .catch(() => null);
   });
 }
 

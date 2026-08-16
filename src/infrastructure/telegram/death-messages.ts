@@ -103,14 +103,18 @@ export function deathFlavorKey(
     case 'FallGrave': {
       if (WOLF_ROLE_NAMES.has(role)) return { key: 'WolfFellPublic', includeRoleArg: true };
       const key = GRAVEDIGGER_FELL_ROLE_KEY[role];
-      return key ? { key, includeRoleArg: false } : { key: 'DefaultFellPublic', includeRoleArg: true };
+      return key
+        ? { key, includeRoleArg: false }
+        : { key: 'DefaultFellPublic', includeRoleArg: true };
     }
     case 'VisitBurning':
       return WOLF_ROLE_NAMES.has(role)
         ? { key: 'WolfVisitBurn', includeRoleArg: true }
         : { key: 'DefaultVisitBurn', includeRoleArg: true };
     case 'Chemistry':
-      return selfInflicted ? { key: 'ChemistFailPublic', includeRoleArg: false } : { key: 'ChemistSuccessPublic', includeRoleArg: true };
+      return selfInflicted
+        ? { key: 'ChemistFailPublic', includeRoleArg: false }
+        : { key: 'ChemistSuccessPublic', includeRoleArg: true };
     case 'VisitKiller': {
       const key = VISIT_KILLER_ROLE_KEY[role];
       return key ? { key, includeRoleArg: false } : null;

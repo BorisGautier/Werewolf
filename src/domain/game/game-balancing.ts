@@ -10,7 +10,14 @@
  */
 
 import { randomInt } from 'node:crypto';
-import { ROLE_NAMES, ROLE_BIT, type Role, type RoleFlags, getUniqueRoles, hasFlag } from '../roles/role.js';
+import {
+  ROLE_NAMES,
+  ROLE_BIT,
+  type Role,
+  type RoleFlags,
+  getUniqueRoles,
+  hasFlag,
+} from '../roles/role.js';
 import { shuffle } from '../shared/shuffle.js';
 import type { GameMode } from './game-mode.js';
 
@@ -157,7 +164,10 @@ export function balance(options: BalanceOptions): BalanceResult {
     }
 
     // Apprentice Seer without a Seer -> becomes a Seer.
-    if (includesRole(rolesToAssign, ROLE_BIT.ApprenticeSeer) && !includesRole(rolesToAssign, ROLE_BIT.Seer)) {
+    if (
+      includesRole(rolesToAssign, ROLE_BIT.ApprenticeSeer) &&
+      !includesRole(rolesToAssign, ROLE_BIT.Seer)
+    ) {
       const idx = rolesToAssign.indexOf(ROLE_BIT.ApprenticeSeer);
       rolesToAssign[idx] = ROLE_BIT.Seer;
     }
@@ -178,7 +188,10 @@ export function balance(options: BalanceOptions): BalanceResult {
     const villageCount = rolesToAssign.filter((r) => !NON_VILLAGE_ROLES.includes(r)).length;
     if (enemyCount >= villageCount) balanced = false;
 
-    if (includesRole(rolesToAssign, ROLE_BIT.SerialKiller) && includesRole(rolesToAssign, ROLE_BIT.Arsonist)) {
+    if (
+      includesRole(rolesToAssign, ROLE_BIT.SerialKiller) &&
+      includesRole(rolesToAssign, ROLE_BIT.Arsonist)
+    ) {
       balanced = balanced && burningOverkill;
     }
 
@@ -306,9 +319,7 @@ export function getStrength(role: Role, allRolesInGame: readonly Role[]): number
       return 6;
     case ROLE_BIT.Seer:
       return (
-        7 -
-        countOf(allRolesInGame, ROLE_BIT.Lycan) -
-        countOf(allRolesInGame, ROLE_BIT.WolfMan) * 2
+        7 - countOf(allRolesInGame, ROLE_BIT.Lycan) - countOf(allRolesInGame, ROLE_BIT.WolfMan) * 2
       );
     case ROLE_BIT.Traitor:
       return 0;
@@ -322,7 +333,8 @@ export function getStrength(role: Role, allRolesInGame: readonly Role[]): number
       return (
         1 -
         Math.floor(
-          allRolesInGame.filter((r) => WOLF_ROLES.includes(r) || r === ROLE_BIT.SnowWolf).length / 2,
+          allRolesInGame.filter((r) => WOLF_ROLES.includes(r) || r === ROLE_BIT.SnowWolf).length /
+            2,
         )
       );
     case ROLE_BIT.Gunner:

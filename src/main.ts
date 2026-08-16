@@ -16,7 +16,11 @@ import { createBot } from './infrastructure/telegram/bot.js';
 import { disconnectPrisma, getPrismaClient } from './infrastructure/persistence/prisma-client.js';
 import { startCronJobs } from './infrastructure/cron/scheduler.js';
 import { AlertService } from './infrastructure/monitoring/alert-service.js';
-import { startMetricsServer, stopMetricsServer, botUptime } from './infrastructure/monitoring/metrics.js';
+import {
+  startMetricsServer,
+  stopMetricsServer,
+  botUptime,
+} from './infrastructure/monitoring/metrics.js';
 import { AdminServer } from './infrastructure/web/admin-server.js';
 
 async function main(): Promise<void> {
@@ -42,7 +46,10 @@ async function main(): Promise<void> {
   const prisma = getPrismaClient();
   try {
     await prisma.$connect();
-    logger.info({ databaseUrl: env.databaseUrl.replace(/:[^:@]+@/, ':***@') }, 'Connected to database successfully');
+    logger.info(
+      { databaseUrl: env.databaseUrl.replace(/:[^:@]+@/, ':***@') },
+      'Connected to database successfully',
+    );
   } catch (err) {
     logger.error({ err }, 'Failed to connect to database — aborting startup');
     process.exit(1);
@@ -105,7 +112,7 @@ async function main(): Promise<void> {
   // ── Cron jobs ───────────────────────────────────────────────────────────────
   logger.info('Starting background cron jobs...');
   const runner = run(bot);
-  const stopCronJobs = startCronJobs(prisma, logger);
+  const stopCronJobs = startCronJobs(prisma, logger, env);
   logger.info('Background cron jobs started');
 
   // ── Uptime metric heartbeat ─────────────────────────────────────────────────

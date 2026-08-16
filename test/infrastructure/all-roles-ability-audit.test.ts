@@ -143,7 +143,12 @@ describe('ALL ROLES ABILITY COMPREHENSIVE AUDIT', () => {
     const target = createPlayer(2n, 'T', ROLE_BIT.Villager, 'Village');
     chemist.choice = target.id;
 
-    const events = resolveChemistNight([chemist, target], { players: [chemist, target], dayNumber: 2, thiefFull: false, random: () => 0 });
+    const events = resolveChemistNight([chemist, target], {
+      players: [chemist, target],
+      dayNumber: 2,
+      thiefFull: false,
+      random: () => 0,
+    });
 
     expect(target.isDead).toBe(true);
     expect(events.some((e) => e.type === 'PlayerDied' && e.method === 'Chemistry')).toBe(true);
@@ -154,7 +159,12 @@ describe('ALL ROLES ABILITY COMPREHENSIVE AUDIT', () => {
     const villager = createPlayer(2n, 'V', ROLE_BIT.Villager, 'Village');
     cultist.choice = villager.id;
 
-    const events = resolveCultNight([cultist, villager], initialNightState(), { players: [cultist, villager], dayNumber: 3, thiefFull: false, random: () => 0 });
+    const events = resolveCultNight([cultist, villager], initialNightState(), {
+      players: [cultist, villager],
+      dayNumber: 3,
+      thiefFull: false,
+      random: () => 0,
+    });
 
     expect(villager.role).toBe(ROLE_BIT.Cultist);
     expect(events.some((e) => e.type === 'PlayerConvertedToCult')).toBe(true);

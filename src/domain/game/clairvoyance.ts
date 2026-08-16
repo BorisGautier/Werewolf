@@ -53,7 +53,11 @@ export function seerSees(targetRole: Role, random: () => number = Math.random): 
  * `null` for "SorcererOther" (no magical threat detected).
  */
 export function sorcererDetects(targetRole: Role): Role | null {
-  if (targetRole === ROLE_BIT.AlphaWolf || targetRole === ROLE_BIT.Wolf || targetRole === ROLE_BIT.WolfCub) {
+  if (
+    targetRole === ROLE_BIT.AlphaWolf ||
+    targetRole === ROLE_BIT.Wolf ||
+    targetRole === ROLE_BIT.WolfCub
+  ) {
     return ROLE_BIT.Wolf;
   }
   if (targetRole === ROLE_BIT.Seer) return ROLE_BIT.Seer;
@@ -83,7 +87,11 @@ export function foolSeesRandomRole(players: readonly Player[], foolId: bigint): 
  * players that is *not* the target's own role (excluding the Oracle
  * itself). Returns `null` if there's no eligible role left.
  */
-export function oracleSeesRandomRole(players: readonly Player[], oracleId: bigint, targetRole: Role): Role | null {
+export function oracleSeesRandomRole(
+  players: readonly Player[],
+  oracleId: bigint,
+  targetRole: Role,
+): Role | null {
   const possibleRoles = players
     .filter((p) => !p.isDead && p.id !== oracleId && p.role !== targetRole)
     .map((p) => p.role);
@@ -102,9 +110,14 @@ export function oracleSeesRandomRole(players: readonly Player[], oracleId: bigin
  * to remember it. Returns `null` if every eligible role has already been
  * shown (mirrors "AugurSeesNothing").
  */
-export function augurSees(players: readonly Player[], augur: Player, possibleRoles: readonly Role[]): Role | null {
+export function augurSees(
+  players: readonly Player[],
+  augur: Player,
+  possibleRoles: readonly Role[],
+): Role | null {
   const isNotInGame = (role: Role): boolean =>
-    !augur.sawRoles.includes(role) && !players.some((p) => (!p.isDead || p.diedLastNight) && p.role === role);
+    !augur.sawRoles.includes(role) &&
+    !players.some((p) => (!p.isDead || p.diedLastNight) && p.role === role);
 
   const shuffled = [...possibleRoles];
   shuffle(shuffled);
@@ -113,7 +126,9 @@ export function augurSees(players: readonly Player[], augur: Player, possibleRol
 
   // If the Seer is about to be promoted from Apprentice Seer, show that instead - showing "Seer" as
   // gone from the game would be misleading if an Apprentice is standing by to take the name over.
-  const hasAliveApprenticeSeer = players.some((p) => !p.isDead && p.role === ROLE_BIT.ApprenticeSeer);
+  const hasAliveApprenticeSeer = players.some(
+    (p) => !p.isDead && p.role === ROLE_BIT.ApprenticeSeer,
+  );
   const hasAliveSeer = players.some((p) => !p.isDead && p.role === ROLE_BIT.Seer);
   if (roleToSee === ROLE_BIT.Seer && hasAliveApprenticeSeer && !hasAliveSeer) {
     roleToSee = ROLE_BIT.ApprenticeSeer;
@@ -142,7 +157,12 @@ export function resolveClairvoyanceNight(
     const target = players.find((p) => p.id === seer.choice);
     if (!target) continue;
     if (target.role === ROLE_BIT.WolfMan) target.trustworthy = true;
-    events.push({ type: 'SeerVision', playerId: seer.id, targetId: target.id, shownRole: seerSees(target.role, random) });
+    events.push({
+      type: 'SeerVision',
+      playerId: seer.id,
+      targetId: target.id,
+      shownRole: seerSees(target.role, random),
+    });
   }
 
   const sorcerer = players.find((p) => p.role === ROLE_BIT.Sorcerer && !p.isDead && !p.frozen);
@@ -164,9 +184,11 @@ export function resolveClairvoyanceNight(
     if (target) {
       const seen = foolSeesRandomRole(players, fool.id);
       if (seen !== null) {
-        const isCorrect = seen === target.role || (seen === ROLE_BIT.Wolf && WOLF_ROLES.includes(target.role));
+        const isCorrect =
+          seen === target.role || (seen === ROLE_BIT.Wolf && WOLF_ROLES.includes(target.role));
         if (isCorrect) fool.foolCorrectSeeCount++;
-        if (seen === ROLE_BIT.Beholder && target.role === ROLE_BIT.Beholder) fool.foolCorrectlySeenBH = true;
+        if (seen === ROLE_BIT.Beholder && target.role === ROLE_BIT.Beholder)
+          fool.foolCorrectlySeenBH = true;
         if (seen === ROLE_BIT.WolfMan || seen === ROLE_BIT.Traitor) fool.hasSeenImpossible = true;
       }
       events.push({ type: 'FoolVision', playerId: fool.id, targetId: target.id, shownRole: seen });
@@ -188,7 +210,11 @@ export function resolveClairvoyanceNight(
 
   const augur = players.find((p) => p.role === ROLE_BIT.Augur && !p.isDead && !p.frozen);
   if (augur) {
-    events.push({ type: 'AugurVision', playerId: augur.id, shownRole: augurSees(players, augur, possibleRoles) });
+    events.push({
+      type: 'AugurVision',
+      playerId: augur.id,
+      shownRole: augurSees(players, augur, possibleRoles),
+    });
   }
 
   return events;

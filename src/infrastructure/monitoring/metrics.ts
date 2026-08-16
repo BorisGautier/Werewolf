@@ -19,13 +19,7 @@
  */
 
 import { createServer } from 'node:http';
-import {
-  Counter,
-  Gauge,
-  Histogram,
-  Registry,
-  collectDefaultMetrics,
-} from 'prom-client';
+import { Counter, Gauge, Histogram, Registry, collectDefaultMetrics } from 'prom-client';
 import type { WinstonLogger } from '../logging/winston-logger.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -50,7 +44,12 @@ function gauge(name: string, help: string, labelNames: string[] = []): Gauge {
   return new Gauge({ name, help, labelNames, registers: [registry] });
 }
 
-function histogram(name: string, help: string, labelNames: string[] = [], buckets?: number[]): Histogram {
+function histogram(
+  name: string,
+  help: string,
+  labelNames: string[] = [],
+  buckets?: number[],
+): Histogram {
   return new Histogram({
     name,
     help,
@@ -65,16 +64,28 @@ function histogram(name: string, help: string, labelNames: string[] = [], bucket
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Number of games currently active (in any phase). */
-export const activeGames = gauge('werewolf_active_games_total', 'Number of games currently active', ['mode']);
+export const activeGames = gauge(
+  'werewolf_active_games_total',
+  'Number of games currently active',
+  ['mode'],
+);
 
 /** Total number of games started, by mode. */
-export const gamesStarted = counter('werewolf_games_started_total', 'Total games started', ['mode']);
+export const gamesStarted = counter('werewolf_games_started_total', 'Total games started', [
+  'mode',
+]);
 
 /** Total number of games ended, by mode and winning team. */
-export const gamesEnded = counter('werewolf_games_ended_total', 'Total games ended', ['mode', 'winning_team']);
+export const gamesEnded = counter('werewolf_games_ended_total', 'Total games ended', [
+  'mode',
+  'winning_team',
+]);
 
 /** Total number of games killed by an admin without completion. */
-export const gamesKilled = counter('werewolf_games_killed_total', 'Total games force-killed by admin');
+export const gamesKilled = counter(
+  'werewolf_games_killed_total',
+  'Total games force-killed by admin',
+);
 
 /** Total number of games abandoned (detected by stale purge cron). */
 export const gamesAbandoned = counter('werewolf_games_abandoned_total', 'Total stale games purged');
@@ -88,20 +99,33 @@ export const gameDurationSeconds = histogram(
 );
 
 /** Total number of complete game rounds (night+day+lynch cycles). */
-export const gameRoundsTotal = counter('werewolf_game_rounds_total', 'Total game rounds (day+night cycles) completed', ['mode']);
+export const gameRoundsTotal = counter(
+  'werewolf_game_rounds_total',
+  'Total game rounds (day+night cycles) completed',
+  ['mode'],
+);
 
 /** Total number of games that ended with no winner. */
-export const gameDrawsTotal = counter('werewolf_game_draws_total', 'Total games that ended with no winner');
+export const gameDrawsTotal = counter(
+  'werewolf_game_draws_total',
+  'Total games that ended with no winner',
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ② LOBBY & PLAYER METRICS
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Total players who joined a lobby. */
-export const playersJoined = counter('werewolf_players_joined_total', 'Total player joins across all game lobbies');
+export const playersJoined = counter(
+  'werewolf_players_joined_total',
+  'Total player joins across all game lobbies',
+);
 
 /** Total players who fled (left the lobby before the game started). */
-export const playersFled = counter('werewolf_players_fled_total', 'Total players who left a lobby before game start');
+export const playersFled = counter(
+  'werewolf_players_fled_total',
+  'Total players who left a lobby before game start',
+);
 
 /** Total players eliminated during the game, by method. */
 export const playersEliminated = counter(
@@ -111,7 +135,11 @@ export const playersEliminated = counter(
 );
 
 /** Total players who were bots during game sessions. */
-export const botPlayersAdded = counter('werewolf_bot_players_added_total', 'Total bot players added to games', ['mode']);
+export const botPlayersAdded = counter(
+  'werewolf_bot_players_added_total',
+  'Total bot players added to games',
+  ['mode'],
+);
 
 /** Distribution of player count at game start. */
 export const playerCountAtStart = histogram(
@@ -122,16 +150,28 @@ export const playerCountAtStart = histogram(
 );
 
 /** Total bot-only (100% bots) games started. */
-export const botOnlyGamesStarted = counter('werewolf_bot_only_games_started_total', 'Total bot-only games started');
+export const botOnlyGamesStarted = counter(
+  'werewolf_bot_only_games_started_total',
+  'Total bot-only games started',
+);
 
 /** Total times next-game notifications were triggered. */
-export const nextGameNotifications = counter('werewolf_next_game_notifications_total', 'Total next-game notification sends');
+export const nextGameNotifications = counter(
+  'werewolf_next_game_notifications_total',
+  'Total next-game notification sends',
+);
 
 /** Total force-starts by admins. */
-export const forceStarts = counter('werewolf_force_starts_total', 'Total game force-starts by admin');
+export const forceStarts = counter(
+  'werewolf_force_starts_total',
+  'Total game force-starts by admin',
+);
 
 /** Total lobby extend calls. */
-export const lobbyExtensions = counter('werewolf_lobby_extensions_total', 'Total lobby timer extensions');
+export const lobbyExtensions = counter(
+  'werewolf_lobby_extensions_total',
+  'Total lobby timer extensions',
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ③ NIGHT PHASE METRICS
@@ -141,10 +181,16 @@ export const lobbyExtensions = counter('werewolf_lobby_extensions_total', 'Total
 export const nightsStarted = counter('werewolf_nights_started_total', 'Total night phases started');
 
 /** Total night cycles resolved. */
-export const nightsResolved = counter('werewolf_nights_resolved_total', 'Total night phases resolved');
+export const nightsResolved = counter(
+  'werewolf_nights_resolved_total',
+  'Total night phases resolved',
+);
 
 /** Total wolf attacks (kill attempts). */
-export const wolfAttacksTotal = counter('werewolf_wolf_attacks_total', 'Total wolf pack kill attempts');
+export const wolfAttacksTotal = counter(
+  'werewolf_wolf_attacks_total',
+  'Total wolf pack kill attempts',
+);
 
 /** Total wolf attacks that were blocked (by GA, Witch save, etc.). */
 export const wolfAttacksBlocked = counter(
@@ -154,28 +200,52 @@ export const wolfAttacksBlocked = counter(
 );
 
 /** Total wolf attacks that resulted in a kill. */
-export const wolfKillsTotal = counter('werewolf_wolf_kills_total', 'Total successful wolf pack kills');
+export const wolfKillsTotal = counter(
+  'werewolf_wolf_kills_total',
+  'Total successful wolf pack kills',
+);
 
 /** Total snow wolf freeze attempts. */
-export const snowWolfFreezeAttempts = counter('werewolf_snow_wolf_freeze_attempts_total', 'Total Snow Wolf freeze attempts');
+export const snowWolfFreezeAttempts = counter(
+  'werewolf_snow_wolf_freeze_attempts_total',
+  'Total Snow Wolf freeze attempts',
+);
 
 /** Total snow wolf freezes that succeeded. */
-export const snowWolfFreezeSuccess = counter('werewolf_snow_wolf_freeze_success_total', 'Total successful Snow Wolf freezes');
+export const snowWolfFreezeSuccess = counter(
+  'werewolf_snow_wolf_freeze_success_total',
+  'Total successful Snow Wolf freezes',
+);
 
 /** Total serial killer strikes. */
-export const serialKillerStrikes = counter('werewolf_serial_killer_strikes_total', 'Total Serial Killer night kills');
+export const serialKillerStrikes = counter(
+  'werewolf_serial_killer_strikes_total',
+  'Total Serial Killer night kills',
+);
 
 /** Total serial killer strikes blocked. */
-export const serialKillerBlocked = counter('werewolf_serial_killer_blocked_total', 'Total Serial Killer kills blocked');
+export const serialKillerBlocked = counter(
+  'werewolf_serial_killer_blocked_total',
+  'Total Serial Killer kills blocked',
+);
 
 /** Total arsonist dousings (mark targets). */
-export const arsonistDousings = counter('werewolf_arsonist_dousings_total', 'Total Arsonist target dousings');
+export const arsonistDousings = counter(
+  'werewolf_arsonist_dousings_total',
+  'Total Arsonist target dousings',
+);
 
 /** Total arsonist burn-all activations. */
-export const arsonistBurns = counter('werewolf_arsonist_burns_total', 'Total Arsonist burn-all activations');
+export const arsonistBurns = counter(
+  'werewolf_arsonist_burns_total',
+  'Total Arsonist burn-all activations',
+);
 
 /** Total players killed by arsonist burns. */
-export const arsonistBurnKills = counter('werewolf_arsonist_burn_kills_total', 'Total players killed by Arsonist burning');
+export const arsonistBurnKills = counter(
+  'werewolf_arsonist_burn_kills_total',
+  'Total players killed by Arsonist burning',
+);
 
 /** Total Guardian Angel protections assigned. */
 export const guardianAngelProtections = counter(
@@ -194,19 +264,34 @@ export const guardianAngelSaves = counter(
 export const harlotVisits = counter('werewolf_harlot_visits_total', 'Total Harlot night visits');
 
 /** Total Harlot visits that resulted in Harlot death (visited a wolf). */
-export const harlotDeaths = counter('werewolf_harlot_deaths_total', 'Total Harlot deaths from visiting wolves');
+export const harlotDeaths = counter(
+  'werewolf_harlot_deaths_total',
+  'Total Harlot deaths from visiting wolves',
+);
 
 /** Total Seer clairvoyance checks. */
-export const seerChecks = counter('werewolf_seer_checks_total', 'Total Seer/Clairvoyant role checks');
+export const seerChecks = counter(
+  'werewolf_seer_checks_total',
+  'Total Seer/Clairvoyant role checks',
+);
 
 /** Total Seer checks that revealed a wolf. */
-export const seerWolfFinds = counter('werewolf_seer_wolf_finds_total', 'Total Seer checks that found a wolf');
+export const seerWolfFinds = counter(
+  'werewolf_seer_wolf_finds_total',
+  'Total Seer checks that found a wolf',
+);
 
 /** Total Witch potion usages (save). */
-export const witchSavePotions = counter('werewolf_witch_save_potions_total', 'Total Witch healing potion usages');
+export const witchSavePotions = counter(
+  'werewolf_witch_save_potions_total',
+  'Total Witch healing potion usages',
+);
 
 /** Total Witch poison usages (kill). */
-export const witchPoisonPotions = counter('werewolf_witch_poison_potions_total', 'Total Witch poison usages');
+export const witchPoisonPotions = counter(
+  'werewolf_witch_poison_potions_total',
+  'Total Witch poison usages',
+);
 
 /** Total Chemist drunk-applications. */
 export const chemistDrunkApplications = counter(
@@ -215,7 +300,10 @@ export const chemistDrunkApplications = counter(
 );
 
 /** Total Cult conversions. */
-export const cultConversions = counter('werewolf_cult_conversions_total', 'Total Cult recruitment conversions');
+export const cultConversions = counter(
+  'werewolf_cult_conversions_total',
+  'Total Cult recruitment conversions',
+);
 
 /** Total Cultist Hunter detections. */
 export const cultistHunterDetections = counter(
@@ -224,10 +312,16 @@ export const cultistHunterDetections = counter(
 );
 
 /** Total Thief role steals. */
-export const thiefRoleSteal = counter('werewolf_thief_role_steals_total', 'Total Thief role steals');
+export const thiefRoleSteal = counter(
+  'werewolf_thief_role_steals_total',
+  'Total Thief role steals',
+);
 
 /** Total Necromancer resurrections. */
-export const necromancerResurrections = counter('werewolf_necromancer_resurrections_total', 'Total Necromancer resurrections');
+export const necromancerResurrections = counter(
+  'werewolf_necromancer_resurrections_total',
+  'Total Necromancer resurrections',
+);
 
 /** Total Doppelganger role-model assignments. */
 export const doppelgangerAssignments = counter(
@@ -248,10 +342,16 @@ export const wildChildTransformations = counter(
 );
 
 /** Total Cupid lover pair linkages. */
-export const cupidLoverLinks = counter('werewolf_cupid_lover_links_total', 'Total Cupid lover pair creations');
+export const cupidLoverLinks = counter(
+  'werewolf_cupid_lover_links_total',
+  'Total Cupid lover pair creations',
+);
 
 /** Total Lovers deaths from partner elimination. */
-export const loversSuicides = counter('werewolf_lovers_suicides_total', 'Total lover suicides after partner death');
+export const loversSuicides = counter(
+  'werewolf_lovers_suicides_total',
+  'Total lover suicides after partner death',
+);
 
 /** Total Sandman sleep activations. */
 export const sandmanSleepActivations = counter(
@@ -266,19 +366,32 @@ export const blacksmithSilverSpreads = counter(
 );
 
 /** Total Spumpkin detonations. */
-export const spumpkinDetonations = counter('werewolf_spumpkin_detonations_total', 'Total Spumpkin bomb detonations');
+export const spumpkinDetonations = counter(
+  'werewolf_spumpkin_detonations_total',
+  'Total Spumpkin bomb detonations',
+);
 
 /** Total Archivist report deliveries. */
-export const archivistReports = counter('werewolf_archivist_reports_total', 'Total Archivist nightly reports delivered');
+export const archivistReports = counter(
+  'werewolf_archivist_reports_total',
+  'Total Archivist nightly reports delivered',
+);
 
 /** Total Mimic ability usages. */
-export const mimicUsages = counter('werewolf_mimic_usages_total', 'Total Mimic ability activations');
+export const mimicUsages = counter(
+  'werewolf_mimic_usages_total',
+  'Total Mimic ability activations',
+);
 
 /** Total Hitman contract kills. */
 export const hitmanKills = counter('werewolf_hitman_kills_total', 'Total Hitman contract kills');
 
 /** Total bot night actions taken. */
-export const botNightActions = counter('werewolf_bot_night_actions_total', 'Total automated bot night actions', ['role']);
+export const botNightActions = counter(
+  'werewolf_bot_night_actions_total',
+  'Total automated bot night actions',
+  ['role'],
+);
 
 /** Night phase duration in seconds. */
 export const nightPhaseDuration = histogram(
@@ -302,13 +415,22 @@ export const daysResolved = counter('werewolf_days_resolved_total', 'Total day p
 export const gunnerShots = counter('werewolf_gunner_shots_total', 'Total Gunner shots fired');
 
 /** Total Gunner shots that hit (killed the target). */
-export const gunnerHits = counter('werewolf_gunner_hits_total', 'Total Gunner shots that killed a wolf');
+export const gunnerHits = counter(
+  'werewolf_gunner_hits_total',
+  'Total Gunner shots that killed a wolf',
+);
 
 /** Total Gunner shots that backfired. */
-export const gunnerBackfires = counter('werewolf_gunner_backfires_total', 'Total Gunner shots that backfired');
+export const gunnerBackfires = counter(
+  'werewolf_gunner_backfires_total',
+  'Total Gunner shots that backfired',
+);
 
 /** Total Detective snoops. */
-export const detectiveSnoops = counter('werewolf_detective_snoops_total', 'Total Detective role reveals');
+export const detectiveSnoops = counter(
+  'werewolf_detective_snoops_total',
+  'Total Detective role reveals',
+);
 
 /** Day phase duration in seconds. */
 export const dayPhaseDuration = histogram(
@@ -323,28 +445,53 @@ export const dayPhaseDuration = histogram(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Total lynch cycles started. */
-export const lynchesStarted = counter('werewolf_lynches_started_total', 'Total lynch phases started');
+export const lynchesStarted = counter(
+  'werewolf_lynches_started_total',
+  'Total lynch phases started',
+);
 
 /** Total lynch cycles resolved, by outcome. */
-export const lynchesResolved = counter('werewolf_lynches_resolved_total', 'Total lynch resolutions', ['outcome']);
+export const lynchesResolved = counter(
+  'werewolf_lynches_resolved_total',
+  'Total lynch resolutions',
+  ['outcome'],
+);
 
 /** Total lynch votes cast (human players). */
-export const lynchVotesCast = counter('werewolf_lynch_votes_cast_total', 'Total lynch votes cast by human players');
+export const lynchVotesCast = counter(
+  'werewolf_lynch_votes_cast_total',
+  'Total lynch votes cast by human players',
+);
 
 /** Total lynch votes cast by bots. */
-export const lynchBotVotes = counter('werewolf_lynch_bot_votes_total', 'Total lynch votes cast by bot players');
+export const lynchBotVotes = counter(
+  'werewolf_lynch_bot_votes_total',
+  'Total lynch votes cast by bot players',
+);
 
 /** Total lynch ties (no majority). */
-export const lynchTies = counter('werewolf_lynch_ties_total', 'Total lynch votes that ended in a tie');
+export const lynchTies = counter(
+  'werewolf_lynch_ties_total',
+  'Total lynch votes that ended in a tie',
+);
 
 /** Total Judge pardons. */
-export const judgePardons = counter('werewolf_judge_pardons_total', 'Total Judge pardon activations');
+export const judgePardons = counter(
+  'werewolf_judge_pardons_total',
+  'Total Judge pardon activations',
+);
 
 /** Total Pacifist peace declarations. */
-export const pacifistPeaces = counter('werewolf_pacifist_peace_total', 'Total Pacifist peace declarations (lynch skipped)');
+export const pacifistPeaces = counter(
+  'werewolf_pacifist_peace_total',
+  'Total Pacifist peace declarations (lynch skipped)',
+);
 
 /** Total Mayor announcements. */
-export const mayorAnnouncements = counter('werewolf_mayor_announcements_total', 'Total Mayor public announcements');
+export const mayorAnnouncements = counter(
+  'werewolf_mayor_announcements_total',
+  'Total Mayor public announcements',
+);
 
 /** Total Troublemaker double-lynch activations. */
 export const troublemakerDoubleLynches = counter(
@@ -353,7 +500,10 @@ export const troublemakerDoubleLynches = counter(
 );
 
 /** Total players who abstained (voted ABSTAIN). */
-export const lynchAbstentions = counter('werewolf_lynch_abstentions_total', 'Total lynch abstain votes');
+export const lynchAbstentions = counter(
+  'werewolf_lynch_abstentions_total',
+  'Total lynch abstain votes',
+);
 
 /** Lynch phase duration in seconds. */
 export const lynchPhaseDuration = histogram(
@@ -419,7 +569,10 @@ export const telegramApiErrors = counter(
 );
 
 /** Total bot errors (unhandled rejections, uncaught exceptions). */
-export const botErrors = counter('werewolf_bot_errors_total', 'Total bot-level errors', ['source', 'type']);
+export const botErrors = counter('werewolf_bot_errors_total', 'Total bot-level errors', [
+  'source',
+  'type',
+]);
 
 /** Total transient network errors (ECONNRESET, ETIMEDOUT, etc.) */
 export const transientNetworkErrors = counter(
@@ -429,13 +582,21 @@ export const transientNetworkErrors = counter(
 );
 
 /** Total admin alerts sent. */
-export const adminAlertsSent = counter('werewolf_admin_alerts_sent_total', 'Total monitoring alerts sent to admin');
+export const adminAlertsSent = counter(
+  'werewolf_admin_alerts_sent_total',
+  'Total monitoring alerts sent to admin',
+);
 
 /** Total times a bot PM couldn't be sent (user hasn't started PM). */
-export const pmFailures = counter('werewolf_pm_failures_total', 'Total private message failures (user blocked bot)');
+export const pmFailures = counter(
+  'werewolf_pm_failures_total',
+  'Total private message failures (user blocked bot)',
+);
 
 /** Total GIF sends per category. */
-export const gifSends = counter('werewolf_gif_sends_total', 'Total animated GIF sends', ['category']);
+export const gifSends = counter('werewolf_gif_sends_total', 'Total animated GIF sends', [
+  'category',
+]);
 
 /** Telegram API call latency. */
 export const telegramApiLatency = histogram(
@@ -458,10 +619,16 @@ export const commandResponseTime = histogram(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Total database queries, by repository and operation. */
-export const dbQueries = counter('werewolf_db_queries_total', 'Total database queries', ['repository', 'operation']);
+export const dbQueries = counter('werewolf_db_queries_total', 'Total database queries', [
+  'repository',
+  'operation',
+]);
 
 /** Total database query errors. */
-export const dbErrors = counter('werewolf_db_errors_total', 'Total database query errors', ['repository', 'operation']);
+export const dbErrors = counter('werewolf_db_errors_total', 'Total database query errors', [
+  'repository',
+  'operation',
+]);
 
 /** Database query duration. */
 export const dbQueryDuration = histogram(
@@ -472,7 +639,10 @@ export const dbQueryDuration = histogram(
 );
 
 /** Total database automated & manual backups created. */
-export const dbBackupsTotal = counter('werewolf_db_backups_total', 'Total database backups created');
+export const dbBackupsTotal = counter(
+  'werewolf_db_backups_total',
+  'Total database backups created',
+);
 
 /** Total achievement unlocks, by code. */
 export const achievementUnlocks = counter(
@@ -482,26 +652,44 @@ export const achievementUnlocks = counter(
 );
 
 /** Total achievement seeds at startup. */
-export const achievementSeedOps = counter('werewolf_achievement_seed_ops_total', 'Total achievement catalog seed operations');
+export const achievementSeedOps = counter(
+  'werewolf_achievement_seed_ops_total',
+  'Total achievement catalog seed operations',
+);
 
 /** Total player upserts. */
-export const playerUpserts = counter('werewolf_player_upserts_total', 'Total player upsert operations');
+export const playerUpserts = counter(
+  'werewolf_player_upserts_total',
+  'Total player upsert operations',
+);
 
 /** Total game records saved. */
-export const gameRecordsSaved = counter('werewolf_game_records_saved_total', 'Total game records persisted to database');
+export const gameRecordsSaved = counter(
+  'werewolf_game_records_saved_total',
+  'Total game records persisted to database',
+);
 
 /** Total kill records saved. */
-export const killRecordsSaved = counter('werewolf_kill_records_saved_total', 'Total kill records persisted');
+export const killRecordsSaved = counter(
+  'werewolf_kill_records_saved_total',
+  'Total kill records persisted',
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ⑩ CRON JOB METRICS
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Total cron job executions, by job name. */
-export const cronJobRuns = counter('werewolf_cron_job_runs_total', 'Total cron job executions', ['job']);
+export const cronJobRuns = counter('werewolf_cron_job_runs_total', 'Total cron job executions', [
+  'job',
+]);
 
 /** Total cron job failures, by job name. */
-export const cronJobFailures = counter('werewolf_cron_job_failures_total', 'Total cron job failures', ['job']);
+export const cronJobFailures = counter(
+  'werewolf_cron_job_failures_total',
+  'Total cron job failures',
+  ['job'],
+);
 
 /** Cron job duration. */
 export const cronJobDuration = histogram(
@@ -511,10 +699,16 @@ export const cronJobDuration = histogram(
 );
 
 /** Total bans expired by cron. */
-export const bansExpired = counter('werewolf_bans_expired_total', 'Total bans lifted by expiry cron');
+export const bansExpired = counter(
+  'werewolf_bans_expired_total',
+  'Total bans lifted by expiry cron',
+);
 
 /** Total daily stats rotation runs. */
-export const dailyStatsRotations = counter('werewolf_daily_stats_rotations_total', 'Total daily stats rotation runs');
+export const dailyStatsRotations = counter(
+  'werewolf_daily_stats_rotations_total',
+  'Total daily stats rotation runs',
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ⑪ MODERATION METRICS
@@ -527,7 +721,10 @@ export const playerReports = counter('werewolf_player_reports_total', 'Total pla
 export const bansApplied = counter('werewolf_bans_applied_total', 'Total bans applied', ['type']);
 
 /** Total spam detections by SpamGuard. */
-export const spamDetections = counter('werewolf_spam_detections_total', 'Total spam events detected');
+export const spamDetections = counter(
+  'werewolf_spam_detections_total',
+  'Total spam events detected',
+);
 
 /** Total group bans. */
 export const groupBans = counter('werewolf_group_bans_total', 'Total groups banned');
@@ -536,7 +733,10 @@ export const groupBans = counter('werewolf_group_bans_total', 'Total groups bann
 export const smiteActions = counter('werewolf_smite_actions_total', 'Total admin smite actions');
 
 /** Total skip-vote admin actions. */
-export const skipVoteActions = counter('werewolf_skip_vote_actions_total', 'Total admin skip-vote actions');
+export const skipVoteActions = counter(
+  'werewolf_skip_vote_actions_total',
+  'Total admin skip-vote actions',
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ⑫ SYSTEM & HEALTH METRICS
@@ -546,16 +746,28 @@ export const skipVoteActions = counter('werewolf_skip_vote_actions_total', 'Tota
 export const botUptime = gauge('werewolf_bot_uptime_seconds', 'Bot process uptime in seconds');
 
 /** Number of active game lobbies currently open. */
-export const activeLobbies = gauge('werewolf_active_lobbies', 'Number of currently open game lobbies');
+export const activeLobbies = gauge(
+  'werewolf_active_lobbies',
+  'Number of currently open game lobbies',
+);
 
 /** Number of groups the bot is currently active in. */
-export const activeGroups = gauge('werewolf_active_groups', 'Number of groups with active sessions');
+export const activeGroups = gauge(
+  'werewolf_active_groups',
+  'Number of groups with active sessions',
+);
 
 /** Total unique groups that have ever started a game. */
-export const totalGroupsSeen = counter('werewolf_total_groups_seen', 'Total distinct groups that started a game');
+export const totalGroupsSeen = counter(
+  'werewolf_total_groups_seen',
+  'Total distinct groups that started a game',
+);
 
 /** Total unique players ever seen. */
-export const totalPlayersSeen = counter('werewolf_total_players_seen', 'Total distinct players ever seen');
+export const totalPlayersSeen = counter(
+  'werewolf_total_players_seen',
+  'Total distinct players ever seen',
+);
 
 /** i18n translation misses. */
 export const translationMisses = counter(
@@ -572,13 +784,22 @@ export const configMenuInteractions = counter(
 );
 
 /** Donation events. */
-export const donationEvents = counter('werewolf_donation_events_total', 'Total player donation events');
+export const donationEvents = counter(
+  'werewolf_donation_events_total',
+  'Total player donation events',
+);
 
 /** Donation stars total received. */
-export const donationStarsTotal = counter('werewolf_donation_stars_total', 'Total Telegram Stars donated');
+export const donationStarsTotal = counter(
+  'werewolf_donation_stars_total',
+  'Total Telegram Stars donated',
+);
 
 /** Gazette generation calls. */
-export const gazetteGenerations = counter('werewolf_gazette_generations_total', 'Total gazette (post-game summary) generations');
+export const gazetteGenerations = counter(
+  'werewolf_gazette_generations_total',
+  'Total gazette (post-game summary) generations',
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HTTP Metrics Server
@@ -605,7 +826,9 @@ export function startMetricsServer(logger: WinstonLogger, port = 9090): void {
       }
     } else if (req.url === '/health' && req.method === 'GET') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok', uptime: Math.floor((Date.now() - startTime) / 1000) }));
+      res.end(
+        JSON.stringify({ status: 'ok', uptime: Math.floor((Date.now() - startTime) / 1000) }),
+      );
     } else {
       res.writeHead(404);
       res.end('Not Found');
@@ -614,7 +837,10 @@ export function startMetricsServer(logger: WinstonLogger, port = 9090): void {
 
   server.on('error', (err: any) => {
     if (err.code === 'EADDRINUSE') {
-      logger.warn({ port }, `Prometheus metrics port ${port} is already in use. Metrics server disabled.`);
+      logger.warn(
+        { port },
+        `Prometheus metrics port ${port} is already in use. Metrics server disabled.`,
+      );
     } else {
       logger.error({ err }, 'Prometheus metrics server error');
     }

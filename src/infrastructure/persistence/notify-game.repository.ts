@@ -19,7 +19,9 @@ export class NotifyGameRepository {
 
   /** Returns false if this user wasn't on the waitlist to begin with. */
   async remove(userId: bigint, groupTelegramId: bigint): Promise<boolean> {
-    const result = await this.prisma.notifyGame.deleteMany({ where: { userId, groupId: groupTelegramId } });
+    const result = await this.prisma.notifyGame.deleteMany({
+      where: { userId, groupId: groupTelegramId },
+    });
     return result.count > 0;
   }
 

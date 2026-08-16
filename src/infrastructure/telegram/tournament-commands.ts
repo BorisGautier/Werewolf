@@ -14,9 +14,13 @@ export class TournamentCommandHandler {
   registerCommands(bot: any) {
     bot.command(['tournoi', 'tournament'], (ctx: Context) => this.handleTournoiMenu(ctx));
     bot.command('creerequipe', (ctx: CommandContext<Context>) => this.handleCreerEquipe(ctx));
-    bot.command('rejoindreequipe', (ctx: CommandContext<Context>) => this.handleRejoindreEquipe(ctx));
+    bot.command('rejoindreequipe', (ctx: CommandContext<Context>) =>
+      this.handleRejoindreEquipe(ctx),
+    );
     bot.command('monequipe', (ctx: Context) => this.handleMonEquipe(ctx));
-    bot.command('inscrirefournoi', (ctx: CommandContext<Context>) => this.handleInscrireTournoi(ctx));
+    bot.command('inscrirefournoi', (ctx: CommandContext<Context>) =>
+      this.handleInscrireTournoi(ctx),
+    );
   }
 
   private async handleTournoiMenu(ctx: Context): Promise<void> {
@@ -24,7 +28,7 @@ export class TournamentCommandHandler {
       const tournaments = await this.tournamentRepo.listTournaments();
       if (tournaments.length === 0) {
         await ctx.reply(
-          '🏆 *MODE TOURNOI & CHAMPIONNAT*\n\nAucun tournoi officiel n\'est en cours pour le moment.\n\nFormez votre équipe avec `/creerequipe <nom>` et préparez-vous pour la prochaine édition !',
+          "🏆 *MODE TOURNOI & CHAMPIONNAT*\n\nAucun tournoi officiel n'est en cours pour le moment.\n\nFormez votre équipe avec `/creerequipe <nom>` et préparez-vous pour la prochaine édition !",
           { parse_mode: 'Markdown' },
         );
         return;
@@ -52,16 +56,22 @@ export class TournamentCommandHandler {
 
     const teamName = ctx.match?.trim();
     if (!teamName) {
-      await ctx.reply('⚠️ Veuillez indiquer le nom de votre équipe. Exemple: `/creerequipe Les Alpha Wolves`', {
-        parse_mode: 'Markdown',
-      });
+      await ctx.reply(
+        '⚠️ Veuillez indiquer le nom de votre équipe. Exemple: `/creerequipe Les Alpha Wolves`',
+        {
+          parse_mode: 'Markdown',
+        },
+      );
       return;
     }
 
     try {
       // Ensure player exists in DB
       if (this.playerRepo) {
-        await this.playerRepo.upsert(userId, { username: ctx.from?.username ?? null, displayName: ctx.from?.first_name ?? null });
+        await this.playerRepo.upsert(userId, {
+          username: ctx.from?.username ?? null,
+          displayName: ctx.from?.first_name ?? null,
+        });
       }
 
       const randomCode = 'TAG' + Math.floor(1000 + Math.random() * 9000);
@@ -76,7 +86,7 @@ export class TournamentCommandHandler {
         { parse_mode: 'Markdown' },
       );
     } catch (err) {
-      await ctx.reply('⚠️ Erreur lors de la création de l\'équipe. Le nom ou le code existe déjà.');
+      await ctx.reply("⚠️ Erreur lors de la création de l'équipe. Le nom ou le code existe déjà.");
     }
   }
 
@@ -86,20 +96,26 @@ export class TournamentCommandHandler {
 
     const code = ctx.match?.trim().toUpperCase();
     if (!code) {
-      await ctx.reply('⚠️ Veuillez indiquer le code de l\'équipe. Exemple: `/rejoindreequipe TAG1234`', {
-        parse_mode: 'Markdown',
-      });
+      await ctx.reply(
+        "⚠️ Veuillez indiquer le code de l'équipe. Exemple: `/rejoindreequipe TAG1234`",
+        {
+          parse_mode: 'Markdown',
+        },
+      );
       return;
     }
 
     try {
       if (this.playerRepo) {
-        await this.playerRepo.upsert(userId, { username: ctx.from?.username ?? null, displayName: ctx.from?.first_name ?? null });
+        await this.playerRepo.upsert(userId, {
+          username: ctx.from?.username ?? null,
+          displayName: ctx.from?.first_name ?? null,
+        });
       }
 
       const team = await this.tournamentRepo.findTeamByCode(code);
       if (!team) {
-        await ctx.reply('❌ Code d\'équipe introuvable.');
+        await ctx.reply("❌ Code d'équipe introuvable.");
         return;
       }
 
@@ -115,11 +131,14 @@ export class TournamentCommandHandler {
       }
 
       await this.tournamentRepo.joinTeam(team.id, userId);
-      await ctx.reply(`✅ *Vous avez rejoint l'équipe "${team.name}" !* (${team.members.length + 1}/4 membres)`, {
-        parse_mode: 'Markdown',
-      });
+      await ctx.reply(
+        `✅ *Vous avez rejoint l'équipe "${team.name}" !* (${team.members.length + 1}/4 membres)`,
+        {
+          parse_mode: 'Markdown',
+        },
+      );
     } catch (err) {
-      await ctx.reply('⚠️ Erreur lors du recrutement dans l\'équipe.');
+      await ctx.reply("⚠️ Erreur lors du recrutement dans l'équipe.");
     }
   }
 
@@ -127,7 +146,9 @@ export class TournamentCommandHandler {
     const userId = ctx.from?.id ? BigInt(ctx.from.id) : null;
     if (!userId) return;
 
-    await ctx.reply('📋 Tapez `/tournoi` pour afficher vos tournois et le classement général de vos équipes.');
+    await ctx.reply(
+      '📋 Tapez `/tournoi` pour afficher vos tournois et le classement général de vos équipes.',
+    );
   }
 
   private async handleInscrireTournoi(ctx: CommandContext<Context>): Promise<void> {
@@ -137,10 +158,14 @@ export class TournamentCommandHandler {
     const tourneyIdStr = ctx.match?.trim();
     const tourneyId = parseInt(tourneyIdStr || '0', 10);
     if (!tourneyId) {
-      await ctx.reply('⚠️ Spécifiez l\'ID du tournoi. Exemple: `/inscrirefournoi 1`', { parse_mode: 'Markdown' });
+      await ctx.reply("⚠️ Spécifiez l'ID du tournoi. Exemple: `/inscrirefournoi 1`", {
+        parse_mode: 'Markdown',
+      });
       return;
     }
 
-    await ctx.reply(`✅ Votre inscription au tournoi #${tourneyId} a été transmise aux organisateurs !`);
+    await ctx.reply(
+      `✅ Votre inscription au tournoi #${tourneyId} a été transmise aux organisateurs !`,
+    );
   }
 }

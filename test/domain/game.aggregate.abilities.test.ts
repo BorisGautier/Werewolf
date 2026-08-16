@@ -12,7 +12,10 @@ import { Game } from '../../src/domain/game/game.aggregate.js';
  * - making assertions flaky. Tests override whichever players' roles
  * actually matter for their scenario after calling this helper.
  */
-function startedGame(roles: Array<[bigint, string]>, options: ConstructorParameters<typeof Game>[0] = { chatId: 1n, mode: 'Normal' }) {
+function startedGame(
+  roles: Array<[bigint, string]>,
+  options: ConstructorParameters<typeof Game>[0] = { chatId: 1n, mode: 'Normal' },
+) {
   const game = new Game({ ...options, minPlayers: roles.length });
   for (const [id, name] of roles) game.addPlayer(id, name);
   game.start();
@@ -41,7 +44,7 @@ describe('Game ability toggles', () => {
     expect(game.useMayorReveal(game.players[1]!.id)).toBe(false); // not a Mayor
   });
 
-  it("Pacifist peace cancels a pending Troublemaker double lynch", () => {
+  it('Pacifist peace cancels a pending Troublemaker double lynch', () => {
     const game = startedGame([
       [1n, 'Trouble'],
       [2n, 'Pacifist'],
@@ -366,8 +369,12 @@ describe('Game.enterNight / resolveNightActions', () => {
     game.resolveLynch();
     const events = game.startNight();
 
-    expect(events.some((e) => e.type === 'WolfPackHasDrunkMembers' && e.soberWolfIds.includes(sober.id))).toBe(true);
-    expect(events.some((e) => e.type === 'WolfPackHasDrunkMembers' && e.soberWolfIds.includes(drunk.id))).toBe(false);
+    expect(
+      events.some((e) => e.type === 'WolfPackHasDrunkMembers' && e.soberWolfIds.includes(sober.id)),
+    ).toBe(true);
+    expect(
+      events.some((e) => e.type === 'WolfPackHasDrunkMembers' && e.soberWolfIds.includes(drunk.id)),
+    ).toBe(false);
   });
 
   it('does not emit WolfPackHasDrunkMembers when nobody in the pack is drunk', () => {
@@ -431,7 +438,9 @@ describe('Game.enterNight / resolveNightActions', () => {
 
     expect(gd.dugGravesLastNight).toBe(1);
     expect(gd.choice).toBe(-1n);
-    expect(events.some((e) => e.type === 'GraveDug' && e.playerId === gd.id && e.graveCount === 1)).toBe(true);
+    expect(
+      events.some((e) => e.type === 'GraveDug' && e.playerId === gd.id && e.graveCount === 1),
+    ).toBe(true);
   });
 });
 

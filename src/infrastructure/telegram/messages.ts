@@ -60,7 +60,11 @@ const TEAM_WIN_KEY: Record<Team, string> = {
   Thief: 'GenericTeamWin',
 };
 
-function displayRole(role: bigint, t?: { translate: (lang: string, key: string, ...args: unknown[]) => string }, language = 'fr'): string {
+function displayRole(
+  role: bigint,
+  t?: { translate: (lang: string, key: string, ...args: unknown[]) => string },
+  language = 'fr',
+): string {
   const name = roleName(role);
   const localized = t ? t.translate(language, `Role_${name}`) : name;
   const displayName = localized.startsWith('Role_') ? name : localized;
@@ -89,7 +93,9 @@ export function describeEvent(
           {
             audience: 'group',
             key: showRolesOnDeath ? 'PlayerLynchedWithRole' : 'PlayerLynched',
-            args: showRolesOnDeath ? [name(event.playerId), role(event.playerId)] : [name(event.playerId)],
+            args: showRolesOnDeath
+              ? [name(event.playerId), role(event.playerId)]
+              : [name(event.playerId)],
           },
         ];
       }
@@ -101,21 +107,35 @@ export function describeEvent(
         // player's name, not a role reveal - doesn't fit deathFlavorKey's (key, includeRoleArg)
         // shape, so it's built directly here. `killerIds[0]` is the found victim's id (see
         // resolveHarlotNight's 'VisitVictim' call).
-        if (event.method === 'VisitVictim' && victim?.role === ROLE_BIT.Harlot && event.killerIds[0] !== undefined) {
-          const foundVictimRole = victim.killedByRole !== null ? roleName(victim.killedByRole) : null;
-          const key = foundVictimRole === 'SerialKiller' ? 'HarlotFuckedKilledPublic' : 'HarlotFuckedVictimPublic';
-          return [{ audience: 'group', key, args: [name(event.playerId), name(event.killerIds[0])] }];
+        if (
+          event.method === 'VisitVictim' &&
+          victim?.role === ROLE_BIT.Harlot &&
+          event.killerIds[0] !== undefined
+        ) {
+          const foundVictimRole =
+            victim.killedByRole !== null ? roleName(victim.killedByRole) : null;
+          const key =
+            foundVictimRole === 'SerialKiller'
+              ? 'HarlotFuckedKilledPublic'
+              : 'HarlotFuckedVictimPublic';
+          return [
+            { audience: 'group', key, args: [name(event.playerId), name(event.killerIds[0])] },
+          ];
         }
 
         const selfInflicted = event.killerIds.length === 1 && event.killerIds[0] === event.playerId;
         const killedByRole = victim?.killedByRole != null ? roleName(victim.killedByRole) : null;
-        const flavor = victim ? deathFlavorKey(event.method, roleName(victim.role), selfInflicted, killedByRole) : null;
+        const flavor = victim
+          ? deathFlavorKey(event.method, roleName(victim.role), selfInflicted, killedByRole)
+          : null;
         if (flavor) {
           return [
             {
               audience: 'group',
               key: flavor.key,
-              args: flavor.includeRoleArg ? [name(event.playerId), role(event.playerId)] : [name(event.playerId)],
+              args: flavor.includeRoleArg
+                ? [name(event.playerId), role(event.playerId)]
+                : [name(event.playerId)],
             },
           ];
         }
@@ -125,26 +145,46 @@ export function describeEvent(
         {
           audience: 'group',
           key: showRolesOnDeath ? 'PlayerFoundDeadWithRole' : 'PlayerFoundDead',
-          args: showRolesOnDeath ? [name(event.playerId), role(event.playerId)] : [name(event.playerId)],
+          args: showRolesOnDeath
+            ? [name(event.playerId), role(event.playerId)]
+            : [name(event.playerId)],
         },
       ];
     }
 
     case 'LoverDiedOfGrief':
-      return [{ audience: 'group', key: 'LoverDiedOfGrief', args: [name(event.playerId), name(event.originalVictimId)] }];
+      return [
+        {
+          audience: 'group',
+          key: 'LoverDiedOfGrief',
+          args: [name(event.playerId), name(event.originalVictimId)],
+        },
+      ];
 
     case 'GameEnded':
-      return [{ audience: 'group', key: TEAM_WIN_KEY[event.winningTeam], args: [event.winningTeam] }];
+      return [
+        { audience: 'group', key: TEAM_WIN_KEY[event.winningTeam], args: [event.winningTeam] },
+      ];
 
     case 'HunterCounterAttack':
-      return [{ audience: 'group', key: 'HunterCounterAttackMsg', args: [name(event.hunterId), name(event.shotWolfId)] }];
+      return [
+        {
+          audience: 'group',
+          key: 'HunterCounterAttackMsg',
+          args: [name(event.hunterId), name(event.shotWolfId)],
+        },
+      ];
 
     case 'GunnerPreventsWolfWin':
       return [{ audience: 'group', key: 'GunnerPreventsWolfWinMsg', args: [] }];
 
     case 'CultistHunterKilledCultist':
       return [
-        { audience: 'group', key: 'CultistHunterKilledCultistMsg', args: [name(event.cultistHunterId), name(event.cultistId)] },
+        {
+          audience: 'group',
+          key: 'CultistHunterKilledCultistMsg',
+          args: [name(event.cultistHunterId), name(event.cultistId)],
+        },
       ];
 
     case 'HunterKilledWolfInStandoff':
@@ -156,7 +196,11 @@ export function describeEvent(
     case 'RoleStolen':
       return [
         { audience: 'group', key: 'RoleStolenMsg', args: [] },
-        { audience: event.thiefId, key: 'RoleStolenPM', args: [name(event.targetId), displayRole(event.stolenRole)] },
+        {
+          audience: event.thiefId,
+          key: 'RoleStolenPM',
+          args: [name(event.targetId), displayRole(event.stolenRole)],
+        },
       ];
 
     case 'ThiefStealForced':
@@ -166,19 +210,37 @@ export function describeEvent(
       return [{ audience: event.playerId, key: 'PlayerBittenPM', args: [] }];
 
     case 'CursedTurnedWolf':
-      return [{ audience: event.playerId, key: 'CursedTurnedWolfMsg', args: [name(event.playerId)] }];
+      return [
+        { audience: event.playerId, key: 'CursedTurnedWolfMsg', args: [name(event.playerId)] },
+      ];
 
     case 'BittenPlayerTurnedWolf':
-      return [{ audience: event.playerId, key: 'BittenTurnedWolfMsg', args: [name(event.playerId)] }];
+      return [
+        { audience: event.playerId, key: 'BittenTurnedWolfMsg', args: [name(event.playerId)] },
+      ];
 
     case 'WildChildTurnedWolf':
-      return [{ audience: event.playerId, key: 'WildChildTurnedWolfMsg', args: [name(event.playerId)] }];
+      return [
+        { audience: event.playerId, key: 'WildChildTurnedWolfMsg', args: [name(event.playerId)] },
+      ];
 
     case 'DoppelgangerTransformed':
-      return [{ audience: event.playerId, key: 'DoppelgangerTransformedMsg', args: [name(event.playerId)] }];
+      return [
+        {
+          audience: event.playerId,
+          key: 'DoppelgangerTransformedMsg',
+          args: [name(event.playerId)],
+        },
+      ];
 
     case 'ApprenticeSeerPromoted':
-      return [{ audience: event.playerId, key: 'ApprenticeSeerPromotedMsg', args: [name(event.playerId)] }];
+      return [
+        {
+          audience: event.playerId,
+          key: 'ApprenticeSeerPromotedMsg',
+          args: [name(event.playerId)],
+        },
+      ];
 
     case 'SnowWolfBecameWolf':
       return [{ audience: event.playerId, key: 'SnowWolfBecameWolfMsg', args: [] }];
@@ -210,7 +272,9 @@ export function describeEvent(
     // `GuardianAngelSaved`/`GuardianAngelSavedTargetFromFire` (the original's `#region GA Night`
     // block runs after the attacker regions and is the *only* place the GA is ever messaged).
     case 'GuardianAngelBlockedFreeze':
-      return [{ audience: event.snowWolfId, key: 'GuardBlockedSnowWolf', args: [name(event.targetId)] }];
+      return [
+        { audience: event.snowWolfId, key: 'GuardBlockedSnowWolf', args: [name(event.targetId)] },
+      ];
 
     // Purely state-flagging (sets `wasSavedLastNight`) in the original too - no message fires here,
     // only later from the GA's own night-resolution block (see above).
@@ -254,17 +318,29 @@ export function describeEvent(
       ];
 
     case 'ChemistTargetAlreadyDead':
-      return [{ audience: event.chemistId, key: 'ChemistTargetDead', args: [name(event.targetId)] }];
+      return [
+        { audience: event.chemistId, key: 'ChemistTargetDead', args: [name(event.targetId)] },
+      ];
 
     case 'ChemistTargetEmpty':
-      return [{ audience: event.chemistId, key: 'ChemistTargetEmpty', args: [name(event.targetId)] }];
+      return [
+        { audience: event.chemistId, key: 'ChemistTargetEmpty', args: [name(event.targetId)] },
+      ];
 
     case 'ChemistDiedVisiting': {
       const target = findById(players, event.targetId);
       const dug = target?.role === ROLE_BIT.GraveDigger;
       return [
-        { audience: event.chemistId, key: dug ? 'ChemistFell' : 'ChemistSK', args: [name(event.targetId)] },
-        { audience: event.targetId, key: dug ? 'ChemistFellDigger' : 'ChemistVisitYouSK', args: [name(event.chemistId)] },
+        {
+          audience: event.chemistId,
+          key: dug ? 'ChemistFell' : 'ChemistSK',
+          args: [name(event.targetId)],
+        },
+        {
+          audience: event.targetId,
+          key: dug ? 'ChemistFellDigger' : 'ChemistVisitYouSK',
+          args: [name(event.chemistId)],
+        },
       ];
     }
 
@@ -320,21 +396,45 @@ export function describeEvent(
       return [];
 
     case 'SeerVision':
-      return [{ audience: event.playerId, key: 'SeerSees', args: [name(event.targetId), displayRole(event.shownRole)] }];
+      return [
+        {
+          audience: event.playerId,
+          key: 'SeerSees',
+          args: [name(event.targetId), displayRole(event.shownRole)],
+        },
+      ];
 
     case 'SorcererVision':
       return event.detectedRole !== null
-        ? [{ audience: event.playerId, key: 'SorcererDetects', args: [name(event.targetId), displayRole(event.detectedRole)] }]
+        ? [
+            {
+              audience: event.playerId,
+              key: 'SorcererDetects',
+              args: [name(event.targetId), displayRole(event.detectedRole)],
+            },
+          ]
         : [{ audience: event.playerId, key: 'SorcererNothing', args: [name(event.targetId)] }];
 
     case 'FoolVision':
       return event.shownRole !== null
-        ? [{ audience: event.playerId, key: 'FoolSees', args: [name(event.targetId), displayRole(event.shownRole)] }]
+        ? [
+            {
+              audience: event.playerId,
+              key: 'FoolSees',
+              args: [name(event.targetId), displayRole(event.shownRole)],
+            },
+          ]
         : [{ audience: event.playerId, key: 'FoolSeesNothing', args: [name(event.targetId)] }];
 
     case 'OracleVision':
       return event.shownRole !== null
-        ? [{ audience: event.playerId, key: 'OracleSees', args: [name(event.targetId), displayRole(event.shownRole)] }]
+        ? [
+            {
+              audience: event.playerId,
+              key: 'OracleSees',
+              args: [name(event.targetId), displayRole(event.shownRole)],
+            },
+          ]
         : [{ audience: event.playerId, key: 'OracleNothing', args: [name(event.targetId)] }];
 
     case 'AugurVision':
@@ -343,7 +443,13 @@ export function describeEvent(
         : [{ audience: event.playerId, key: 'AugurNothing', args: [] }];
 
     case 'DetectiveSnoop':
-      return [{ audience: event.playerId, key: 'DetectiveSnoop', args: [name(event.targetId), displayRole(event.targetRole)] }];
+      return [
+        {
+          audience: event.playerId,
+          key: 'DetectiveSnoop',
+          args: [name(event.targetId), displayRole(event.targetRole)],
+        },
+      ];
 
     case 'DetectiveCaught':
       return wolfPackPms(players, name(event.playerId), 'DetectiveCaught');
@@ -351,10 +457,19 @@ export function describeEvent(
 }
 
 /** PMs every wolf-pack member (Wolf/AlphaWolf/WolfCub/Lycan/SnowWolf) the same message. */
-function wolfPackPms(players: readonly Player[], detectiveName: string, key: string): OutgoingMessage[] {
+function wolfPackPms(
+  players: readonly Player[],
+  detectiveName: string,
+  key: string,
+): OutgoingMessage[] {
   const pack = players.filter((p) =>
-    [ROLE_BIT.Wolf, ROLE_BIT.AlphaWolf, ROLE_BIT.WolfCub, ROLE_BIT.Lycan, ROLE_BIT.SnowWolf].includes(p.role),
+    [
+      ROLE_BIT.Wolf,
+      ROLE_BIT.AlphaWolf,
+      ROLE_BIT.WolfCub,
+      ROLE_BIT.Lycan,
+      ROLE_BIT.SnowWolf,
+    ].includes(p.role),
   );
   return pack.map((w) => ({ audience: w.id, key, args: [detectiveName] }));
 }
-

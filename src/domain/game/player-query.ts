@@ -32,7 +32,9 @@ export function getPlayersForRoles(
   aliveOnly = true,
   exceptId?: bigint,
 ): Player[] {
-  return players.filter((p) => roles.includes(p.role) && (!aliveOnly || !p.isDead) && p.id !== exceptId);
+  return players.filter(
+    (p) => roles.includes(p.role) && (!aliveOnly || !p.isDead) && p.id !== exceptId,
+  );
 }
 
 export function getPlayersForTeam(

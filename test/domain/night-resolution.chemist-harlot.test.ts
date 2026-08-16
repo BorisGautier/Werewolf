@@ -18,14 +18,19 @@ describe('resolveChemistNight', () => {
     const target = createPlayer(2n, 'T', ROLE_BIT.Villager, 'Village');
     chemist.choice = target.id;
 
-    const events = resolveChemistNight([chemist, target], baseCtx([chemist, target], () => 0));
+    const events = resolveChemistNight(
+      [chemist, target],
+      baseCtx([chemist, target], () => 0),
+    );
 
     expect(target.isDead).toBe(true);
     expect(chemist.isDead).toBe(false);
     expect(chemist.hasUsedAbility).toBe(false);
-    expect(events.some((e) => e.type === 'PlayerDied' && e.method === 'Chemistry' && e.playerId === target.id)).toBe(
-      true,
-    );
+    expect(
+      events.some(
+        (e) => e.type === 'PlayerDied' && e.method === 'Chemistry' && e.playerId === target.id,
+      ),
+    ).toBe(true);
   });
 
   it('demotes the Chemist to Villager when their potion kills the Wise Elder', () => {
@@ -33,13 +38,18 @@ describe('resolveChemistNight', () => {
     const target = createPlayer(2n, 'T', ROLE_BIT.WiseElder, 'Village');
     chemist.choice = target.id;
 
-    const events = resolveChemistNight([chemist, target], baseCtx([chemist, target], () => 0));
+    const events = resolveChemistNight(
+      [chemist, target],
+      baseCtx([chemist, target], () => 0),
+    );
 
     expect(target.isDead).toBe(true);
     expect(chemist.role).toBe(ROLE_BIT.Villager);
     expect(chemist.team).toBe('Village');
     expect(chemist.changedRolesCount).toBe(1);
-    expect(events.some((e) => e.type === 'ChemistLostPowerToWiseElder' && e.playerId === chemist.id)).toBe(true);
+    expect(
+      events.some((e) => e.type === 'ChemistLostPowerToWiseElder' && e.playerId === chemist.id),
+    ).toBe(true);
   });
 
   it('kills the Chemist themselves on a failed roll', () => {
@@ -47,13 +57,20 @@ describe('resolveChemistNight', () => {
     const target = createPlayer(2n, 'T', ROLE_BIT.Villager, 'Village');
     chemist.choice = target.id;
 
-    const events = resolveChemistNight([chemist, target], baseCtx([chemist, target], () => 0.99));
+    const events = resolveChemistNight(
+      [chemist, target],
+      baseCtx([chemist, target], () => 0.99),
+    );
 
     expect(chemist.isDead).toBe(true);
     expect(target.isDead).toBe(false);
     expect(
       events.some(
-        (e) => e.type === 'PlayerDied' && e.method === 'Chemistry' && e.playerId === chemist.id && e.killerIds[0] === chemist.id,
+        (e) =>
+          e.type === 'PlayerDied' &&
+          e.method === 'Chemistry' &&
+          e.playerId === chemist.id &&
+          e.killerIds[0] === chemist.id,
       ),
     ).toBe(true);
   });
@@ -63,10 +80,16 @@ describe('resolveChemistNight', () => {
     const target = createPlayer(2n, 'T', ROLE_BIT.Villager, 'Village');
     chemist.choice = target.id;
 
-    const events = resolveChemistNight([chemist, target], baseCtx([chemist, target], () => 0));
+    const events = resolveChemistNight(
+      [chemist, target],
+      baseCtx([chemist, target], () => 0),
+    );
 
     expect(
-      events.some((e) => e.type === 'ChemistPoisoned' && e.chemistId === chemist.id && e.targetId === target.id),
+      events.some(
+        (e) =>
+          e.type === 'ChemistPoisoned' && e.chemistId === chemist.id && e.targetId === target.id,
+      ),
     ).toBe(true);
   });
 
@@ -80,7 +103,10 @@ describe('resolveChemistNight', () => {
 
     expect(
       events.some(
-        (e) => e.type === 'ChemistTargetAlreadyDead' && e.chemistId === chemist.id && e.targetId === target.id,
+        (e) =>
+          e.type === 'ChemistTargetAlreadyDead' &&
+          e.chemistId === chemist.id &&
+          e.targetId === target.id,
       ),
     ).toBe(true);
   });
@@ -94,7 +120,10 @@ describe('resolveChemistNight', () => {
     const events = resolveChemistNight([chemist, harlot], baseCtx([chemist, harlot]));
 
     expect(
-      events.some((e) => e.type === 'ChemistTargetEmpty' && e.chemistId === chemist.id && e.targetId === harlot.id),
+      events.some(
+        (e) =>
+          e.type === 'ChemistTargetEmpty' && e.chemistId === chemist.id && e.targetId === harlot.id,
+      ),
     ).toBe(true);
   });
 
@@ -104,11 +133,17 @@ describe('resolveChemistNight', () => {
     sk.choice = 99n; // SK must have committed to a target for the visit to be able to succeed
     chemist.choice = sk.id;
 
-    const events = resolveChemistNight([chemist, sk], baseCtx([chemist, sk], () => 0));
+    const events = resolveChemistNight(
+      [chemist, sk],
+      baseCtx([chemist, sk], () => 0),
+    );
 
     expect(chemist.isDead).toBe(true);
     expect(
-      events.some((e) => e.type === 'ChemistDiedVisiting' && e.chemistId === chemist.id && e.targetId === sk.id),
+      events.some(
+        (e) =>
+          e.type === 'ChemistDiedVisiting' && e.chemistId === chemist.id && e.targetId === sk.id,
+      ),
     ).toBe(true);
   });
 });
@@ -133,9 +168,11 @@ describe('resolveHarlotNight', () => {
 
     expect(harlot.isDead).toBe(true);
     expect(harlot.killedByRole).toBe(ROLE_BIT.Wolf);
-    expect(events.some((e) => e.type === 'PlayerDied' && e.method === 'VisitVictim' && e.playerId === harlot.id)).toBe(
-      true,
-    );
+    expect(
+      events.some(
+        (e) => e.type === 'PlayerDied' && e.method === 'VisitVictim' && e.playerId === harlot.id,
+      ),
+    ).toBe(true);
   });
 
   it('dies visiting someone freshly killed by the Serial Killer that same night', () => {
@@ -200,9 +237,11 @@ describe('resolveHarlotNight', () => {
 
     expect(harlot.playersVisited.has(target.id)).toBe(true);
     expect(harlot.hasStayedHome).toBe(false);
-    expect(events.some((e) => e.type === 'HarlotVisited' && e.harlotId === harlot.id && e.targetId === target.id)).toBe(
-      true,
-    );
+    expect(
+      events.some(
+        (e) => e.type === 'HarlotVisited' && e.harlotId === harlot.id && e.targetId === target.id,
+      ),
+    ).toBe(true);
   });
 
   it('marks hasStayedHome when the Harlot picks no target', () => {
@@ -234,11 +273,17 @@ describe('resolveChemistNight - ChemistBackfired', () => {
     const target = createPlayer(2n, 'T', ROLE_BIT.Villager, 'Village');
     chemist.choice = target.id;
 
-    const events = resolveChemistNight([chemist, target], baseCtx([chemist, target], () => 0.99));
-
-    expect(events.some((e) => e.type === 'ChemistBackfired' && e.chemistId === chemist.id && e.targetId === target.id)).toBe(
-      true,
+    const events = resolveChemistNight(
+      [chemist, target],
+      baseCtx([chemist, target], () => 0.99),
     );
+
+    expect(
+      events.some(
+        (e) =>
+          e.type === 'ChemistBackfired' && e.chemistId === chemist.id && e.targetId === target.id,
+      ),
+    ).toBe(true);
     expect(target.isDead).toBe(false);
   });
 
@@ -247,7 +292,10 @@ describe('resolveChemistNight - ChemistBackfired', () => {
     const target = createPlayer(2n, 'T', ROLE_BIT.Villager, 'Village');
     chemist.choice = target.id;
 
-    const events = resolveChemistNight([chemist, target], baseCtx([chemist, target], () => 0));
+    const events = resolveChemistNight(
+      [chemist, target],
+      baseCtx([chemist, target], () => 0),
+    );
 
     expect(events.some((e) => e.type === 'ChemistBackfired')).toBe(false);
   });

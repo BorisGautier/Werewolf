@@ -42,7 +42,11 @@ export const NIGHT_TARGET_ROLES: readonly Role[] = [
 ];
 
 /** Roles offered a plain "pick a living player" day menu (the lynch vote itself is handled separately). */
-export const DAY_TARGET_ROLES: readonly Role[] = [ROLE_BIT.Gunner, ROLE_BIT.Spumpkin, ROLE_BIT.Detective];
+export const DAY_TARGET_ROLES: readonly Role[] = [
+  ROLE_BIT.Gunner,
+  ROLE_BIT.Spumpkin,
+  ROLE_BIT.Detective,
+];
 
 /** The five single-button "click to activate" day abilities. */
 export const DAY_ABILITY_ROLES: readonly Role[] = [

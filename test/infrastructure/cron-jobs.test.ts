@@ -1,8 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
-import { expireBans, purgeStaleGames, rotateDailyStats } from '../../src/infrastructure/cron/jobs.js';
+import {
+  expireBans,
+  purgeStaleGames,
+  rotateDailyStats,
+} from '../../src/infrastructure/cron/jobs.js';
 
 function fakeLogger() {
-  return { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as import('../../src/infrastructure/logging/logger.js').Logger;
+  return {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  } as unknown as import('../../src/infrastructure/logging/logger.js').Logger;
 }
 
 describe('rotateDailyStats', () => {
@@ -28,7 +37,9 @@ describe('rotateDailyStats', () => {
     await rotateDailyStats(prisma, fakeLogger());
 
     expect(prisma.dailyStat.create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ groupId: null, gamesPlayed: 3, playersSeen: 3 }) }),
+      expect.objectContaining({
+        data: expect.objectContaining({ groupId: null, gamesPlayed: 3, playersSeen: 3 }),
+      }),
     );
     expect(prisma.dailyStat.upsert).toHaveBeenCalledWith(
       expect.objectContaining({

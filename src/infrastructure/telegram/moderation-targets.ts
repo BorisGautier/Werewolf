@@ -14,7 +14,10 @@ export interface ModTarget {
  * plain `@mention` only gives a username, so it needs a DB lookup (and is silently dropped if
  * that player has never interacted with the bot, same as the original's `?? 0` / null checks).
  */
-export async function resolveEntityTargets(ctx: Context, players: PlayerRepository): Promise<ModTarget[]> {
+export async function resolveEntityTargets(
+  ctx: Context,
+  players: PlayerRepository,
+): Promise<ModTarget[]> {
   const text = ctx.message?.text ?? '';
   const targets: ModTarget[] = [];
   for (const entity of ctx.message?.entities ?? []) {
@@ -58,7 +61,10 @@ export function nonNumericWords(argText: string | undefined): string {
  * Port of `Helpers.GetGroup()`: resolves a `/leavegroup`/`/getroles` argument that may be a raw
  * Telegram chat id, an `@username`, or an invite link (matched by its trailing hash).
  */
-export async function resolveGroupArg(groups: GroupRepository, arg: string): Promise<GroupWithConfig | null> {
+export async function resolveGroupArg(
+  groups: GroupRepository,
+  arg: string,
+): Promise<GroupWithConfig | null> {
   const trimmed = arg.trim();
   if (/^-?\d+$/.test(trimmed)) return groups.findByTelegramId(BigInt(trimmed));
   if (trimmed.startsWith('@')) return groups.findByUsername(trimmed.slice(1));

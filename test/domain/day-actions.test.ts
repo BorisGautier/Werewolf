@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { ROLE_BIT } from '../../src/domain/roles/role.js';
 import { createPlayer } from '../../src/domain/game/player.js';
-import { resolveDetectiveSnoop, resolveGunnerShot, resolveSpumpkinDetonate } from '../../src/domain/game/day-actions.js';
+import {
+  resolveDetectiveSnoop,
+  resolveGunnerShot,
+  resolveSpumpkinDetonate,
+} from '../../src/domain/game/day-actions.js';
 
 describe('resolveGunnerShot', () => {
   it('does nothing without an acting Gunner', () => {
@@ -18,9 +22,11 @@ describe('resolveGunnerShot', () => {
     expect(gunner.bullet).toBe(1);
     expect(gunner.hasUsedAbility).toBe(true);
     expect(target.isDead).toBe(true);
-    expect(events.some((e) => e.type === 'PlayerDied' && e.method === 'Shoot' && e.playerId === target.id)).toBe(
-      true,
-    );
+    expect(
+      events.some(
+        (e) => e.type === 'PlayerDied' && e.method === 'Shoot' && e.playerId === target.id,
+      ),
+    ).toBe(true);
   });
 
   it('counts a shot against a wolf/SK/cultist/arsonist toward bulletHitBaddies, but not a shot against a villager', () => {
@@ -62,9 +68,11 @@ describe('resolveSpumpkinDetonate', () => {
 
     expect(spumpkin.isDead).toBe(true);
     expect(target.isDead).toBe(true);
-    expect(events.some((e) => e.type === 'PlayerDied' && e.method === 'None' && e.playerId === spumpkin.id)).toBe(
-      true,
-    );
+    expect(
+      events.some(
+        (e) => e.type === 'PlayerDied' && e.method === 'None' && e.playerId === spumpkin.id,
+      ),
+    ).toBe(true);
   });
 
   it('does nothing on a failed roll', () => {
@@ -91,7 +99,14 @@ describe('resolveDetectiveSnoop', () => {
 
     const events = resolveDetectiveSnoop([detective, wolfMan], () => 0.99); // >= 40% roll: not caught
 
-    expect(events).toEqual([{ type: 'DetectiveSnoop', playerId: detective.id, targetId: wolfMan.id, targetRole: ROLE_BIT.WolfMan }]);
+    expect(events).toEqual([
+      {
+        type: 'DetectiveSnoop',
+        playerId: detective.id,
+        targetId: wolfMan.id,
+        targetRole: ROLE_BIT.WolfMan,
+      },
+    ]);
   });
 
   it('tips off the wolf pack on a successful roll (< 40%)', () => {
@@ -101,7 +116,9 @@ describe('resolveDetectiveSnoop', () => {
 
     const events = resolveDetectiveSnoop([detective, target], () => 0);
 
-    expect(events.some((e) => e.type === 'DetectiveCaught' && e.playerId === detective.id)).toBe(true);
+    expect(events.some((e) => e.type === 'DetectiveCaught' && e.playerId === detective.id)).toBe(
+      true,
+    );
   });
 
   it('builds a streak on repeated *different* threats, unlocking streetwise at 4', () => {

@@ -31,7 +31,11 @@ export interface VisitOutcome {
   events: GameEvent[];
 }
 
-export function visitPlayer(ctx: VisitContext, visitor: Player, visited: Player | undefined): VisitOutcome {
+export function visitPlayer(
+  ctx: VisitContext,
+  visitor: Player,
+  visited: Player | undefined,
+): VisitOutcome {
   const { players, dayNumber, thiefFull } = ctx;
   const random = ctx.random ?? Math.random;
   const events: GameEvent[] = [];
@@ -64,8 +68,15 @@ export function visitPlayer(ctx: VisitContext, visitor: Player, visited: Player 
 
   // If the visited person is a Serial Killer, say goodbye to your lives - unless you're a wolf and very lucky.
   if (visited.role === ROLE_BIT.SerialKiller) {
-    const isWolfTeamVisitor = WOLF_ROLES.includes(visitor.role) || visitor.role === ROLE_BIT.SnowWolf;
-    if (!isWolfTeamVisitor || visited.choice === null || visited.choice === ABSTAIN || visited.frozen || roll() < 80) {
+    const isWolfTeamVisitor =
+      WOLF_ROLES.includes(visitor.role) || visitor.role === ROLE_BIT.SnowWolf;
+    if (
+      !isWolfTeamVisitor ||
+      visited.choice === null ||
+      visited.choice === ABSTAIN ||
+      visited.frozen ||
+      roll() < 80
+    ) {
       events.push(
         ...killPlayer(players, visitor.id, 'VisitKiller', {
           killerIds: [visited.id],

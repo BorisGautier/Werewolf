@@ -9,7 +9,11 @@
  */
 
 import { ROLE_BIT, roleName, type Role } from '../roles/role.js';
-import { loversSuicides, playersEliminated, roleDeaths } from '../../infrastructure/monitoring/metrics.js';
+import {
+  loversSuicides,
+  playersEliminated,
+  roleDeaths,
+} from '../../infrastructure/monitoring/metrics.js';
 import type { GameEvent } from './game-event.js';
 import type { KillMethod } from './kill-method.js';
 import type { Player } from './player.js';
@@ -71,7 +75,13 @@ export function killPlayer(
   victim.isDead = true;
 
   if (killerIds.length > 0) {
-    events.push({ type: 'PlayerDied', playerId: victim.id, method, killerIds: [...killerIds], isNight });
+    events.push({
+      type: 'PlayerDied',
+      playerId: victim.id,
+      method,
+      killerIds: [...killerIds],
+      isNight,
+    });
     if (isNight) {
       for (const killerId of killerIds) {
         findPlayer(players, killerId).killedLastNight++;

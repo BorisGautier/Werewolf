@@ -3,7 +3,10 @@ import { ROLE_BIT } from '../../src/domain/roles/role.js';
 import { ABSTAIN, createPlayer } from '../../src/domain/game/player.js';
 import { visitPlayer } from '../../src/domain/game/night-visit.js';
 
-function ctx(players: ReturnType<typeof createPlayer>[], overrides: Partial<{ thiefFull: boolean; dayNumber: number; random: () => number }> = {}) {
+function ctx(
+  players: ReturnType<typeof createPlayer>[],
+  overrides: Partial<{ thiefFull: boolean; dayNumber: number; random: () => number }> = {},
+) {
   return {
     players,
     dayNumber: overrides.dayNumber ?? 1,
@@ -42,7 +45,11 @@ describe('visitPlayer', () => {
     const { result, events } = visitPlayer(ctx([wolf, burning, arsonist]), wolf, burning);
     expect(result).toBe('VisitorDied');
     expect(wolf.isDead).toBe(true);
-    expect(events.some((e) => e.type === 'PlayerDied' && e.method === 'VisitBurning' && e.killerIds.includes(3n))).toBe(true);
+    expect(
+      events.some(
+        (e) => e.type === 'PlayerDied' && e.method === 'VisitBurning' && e.killerIds.includes(3n),
+      ),
+    ).toBe(true);
   });
 
   it('kills a wolf-team visitor of the Serial Killer 80% of the time (guarded roll)', () => {

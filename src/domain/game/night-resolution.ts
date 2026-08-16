@@ -93,14 +93,21 @@ export function initialNightState(
   lastGraveDigAt: Date | null = null,
   secondLastGraveDigAt: Date | null = null,
 ): NightState {
-  return { guardianAngel: null, lastGraveDigAt, secondLastGraveDigAt, wolvesThatActed: [], silverSpread: false };
+  return {
+    guardianAngel: null,
+    lastGraveDigAt,
+    secondLastGraveDigAt,
+    wolvesThatActed: [],
+    silverSpread: false,
+  };
 }
 
 /** Mirrors the original's `var ga = Players.FirstOrDefault(x => x.PlayerRole == IRole.GuardianAngel & !x.IsDead && x.Choice != 0 && x.Choice != -1);` */
 export function findActingGuardianAngel(players: readonly Player[]): Player | null {
   return (
     players.find(
-      (p) => p.role === ROLE_BIT.GuardianAngel && !p.isDead && p.choice !== null && p.choice !== ABSTAIN,
+      (p) =>
+        p.role === ROLE_BIT.GuardianAngel && !p.isDead && p.choice !== null && p.choice !== ABSTAIN,
     ) ?? null
   );
 }
@@ -127,13 +134,23 @@ export function resolveSnowWolfNight(
   if (target.role === ROLE_BIT.SerialKiller) {
     target.frozen = true;
     snowWolfFreezeSuccess.inc();
-    events.push({ type: 'PlayerFrozen', playerId: target.id, cause: 'SnowWolf', snowWolfId: snowWolf.id, flavor: 'SerialKiller' });
+    events.push({
+      type: 'PlayerFrozen',
+      playerId: target.id,
+      cause: 'SnowWolf',
+      snowWolfId: snowWolf.id,
+      flavor: 'SerialKiller',
+    });
     return events;
   }
 
   if (state.guardianAngel && state.guardianAngel.choice === target.id) {
     target.wasSavedLastNight = true;
-    events.push({ type: 'GuardianAngelBlockedFreeze', targetId: target.id, snowWolfId: snowWolf.id });
+    events.push({
+      type: 'GuardianAngelBlockedFreeze',
+      targetId: target.id,
+      snowWolfId: snowWolf.id,
+    });
     return events;
   }
 
@@ -142,7 +159,13 @@ export function resolveSnowWolfNight(
       target.frozen = true;
       snowWolfFreezeSuccess.inc();
       // Mirrors the original sending the generic `DefaultFrozen` text here, not a Hunter-specific one.
-      events.push({ type: 'PlayerFrozen', playerId: target.id, cause: 'SnowWolf', snowWolfId: snowWolf.id, flavor: 'Default' });
+      events.push({
+        type: 'PlayerFrozen',
+        playerId: target.id,
+        cause: 'SnowWolf',
+        snowWolfId: snowWolf.id,
+        flavor: 'Default',
+      });
     } else {
       events.push(
         ...killPlayer(players, snowWolf.id, 'HunterShot', {
@@ -200,7 +223,13 @@ export function resolveSnowWolfNight(
     default:
       flavor = 'Default';
   }
-  events.push({ type: 'PlayerFrozen', playerId: target.id, cause: 'SnowWolf', snowWolfId: snowWolf.id, flavor });
+  events.push({
+    type: 'PlayerFrozen',
+    playerId: target.id,
+    cause: 'SnowWolf',
+    snowWolfId: snowWolf.id,
+    flavor,
+  });
   return events;
 }
 
@@ -287,7 +316,12 @@ function resolveWolfVictim(
             diedByVisitingKiller: true,
           }),
         );
-        events.push({ type: 'HunterCounterAttack', hunterId: target.id, shotWolfId: shotWolf.id, hunterAlsoDied });
+        events.push({
+          type: 'HunterCounterAttack',
+          hunterId: target.id,
+          shotWolfId: shotWolf.id,
+          hunterAlsoDied,
+        });
         return events;
       }
       return defaultBiteOrEat(players, target, voteWolves, bitten, alphaId);
@@ -295,7 +329,8 @@ function resolveWolfVictim(
 
     case ROLE_BIT.WiseElder:
       if (bitten) return bitePlayer(target, alphaId);
-      if (target.hasUsedAbility) return defaultBiteOrEat(players, target, voteWolves, false, alphaId);
+      if (target.hasUsedAbility)
+        return defaultBiteOrEat(players, target, voteWolves, false, alphaId);
       target.hasUsedAbility = true; // survives their first attack, once
       return [{ type: 'WiseElderSurvivedFirstAttack', playerId: target.id }];
 
@@ -340,7 +375,11 @@ function tallyMostVoted(
 }
 
 /** Port of the `#region Wolf Night - Non-snow wolves` block. */
-export function resolveWolfNight(players: Player[], state: NightState, visitCtx: VisitContext): GameEvent[] {
+export function resolveWolfNight(
+  players: Player[],
+  state: NightState,
+  visitCtx: VisitContext,
+): GameEvent[] {
   const events: GameEvent[] = [];
   if (state.silverSpread) return events;
   const random = visitCtx.random ?? Math.random;
@@ -352,7 +391,8 @@ export function resolveWolfNight(players: Player[], state: NightState, visitCtx:
   if (voteWolves.length === 0) return events;
 
   const actedWolves = voteWolves.filter(
-    (w) => (w.choice !== null && w.choice !== ABSTAIN) || (w.choice2 !== null && w.choice2 !== ABSTAIN),
+    (w) =>
+      (w.choice !== null && w.choice !== ABSTAIN) || (w.choice2 !== null && w.choice2 !== ABSTAIN),
   );
 
   const firstChoiceId = tallyMostVoted(players, actedWolves, (w) => w.choice, null);
@@ -384,13 +424,17 @@ export function resolveWolfNight(players: Player[], state: NightState, visitCtx:
         const alpha = voteWolves.find((w) => w.role === ROLE_BIT.AlphaWolf) ?? null;
         lastAlphaId = alpha?.id ?? lastAlphaId;
         const bitten = alpha !== null && Math.floor(random() * 100) < 20; // Settings.AlphaWolfConversionChance
-        events.push(...resolveWolfVictim(players, target, voteWolves, bitten, alpha?.id ?? null, random));
+        events.push(
+          ...resolveWolfVictim(players, target, voteWolves, bitten, alpha?.id ?? null, random),
+        );
       }
     }
 
     // Independent of what just happened to the main target: give the pack a chance to spot a Grave
     // Digger who dug at least one grave tonight.
-    const gd = players.find((p) => p.role === ROLE_BIT.GraveDigger && !p.isDead && p.dugGravesLastNight > 0);
+    const gd = players.find(
+      (p) => p.role === ROLE_BIT.GraveDigger && !p.isDead && p.dugGravesLastNight > 0,
+    );
     if (gd) {
       const spotChance = graveDiggerDetectionChance(gd.dugGravesLastNight) / 2;
       if (Math.floor(random() * 100) < spotChance) {
@@ -418,7 +462,11 @@ export function resolveWolfNight(players: Player[], state: NightState, visitCtx:
  * entirely ("fire beats ice") - there is no frozen-check here, matching the
  * original exactly.
  */
-export function resolveArsonistNight(players: Player[], state: NightState, visitCtx: VisitContext): GameEvent[] {
+export function resolveArsonistNight(
+  players: Player[],
+  state: NightState,
+  visitCtx: VisitContext,
+): GameEvent[] {
   const events: GameEvent[] = [];
 
   const arsonist = players.find((p) => p.role === ROLE_BIT.Arsonist && !p.isDead);
@@ -482,13 +530,21 @@ export function resolveSerialKillerNight(
   events.push(...visitEvents);
 
   if (result === 'Success' && skilled) {
-    if (sk.stumbledGrave > 0 && sk.stumbledGrave + 1 === visitCtx.dayNumber && Math.floor(random() * 100) < 50) {
+    if (
+      sk.stumbledGrave > 0 &&
+      sk.stumbledGrave + 1 === visitCtx.dayNumber &&
+      Math.floor(random() * 100) < 50
+    ) {
       const originalTarget = skilled;
       const eligible = players.filter((p) => p.role !== ROLE_BIT.SerialKiller && !p.isDead);
       const newTarget = eligible[Math.floor(random() * eligible.length)]!;
       events.push(...visitPlayer(visitCtx, sk, newTarget).events);
       skilled = newTarget;
-      events.push({ type: 'SerialKillerRandomKill', originalTargetId: originalTarget.id, newTargetId: newTarget.id });
+      events.push({
+        type: 'SerialKillerRandomKill',
+        originalTargetId: originalTarget.id,
+        newTargetId: newTarget.id,
+      });
     }
 
     if (state.guardianAngel?.choice === skilled.id && skilled.role !== ROLE_BIT.Harlot) {
@@ -501,11 +557,18 @@ export function resolveSerialKillerNight(
     }
   }
 
-  const gd = players.find((p) => p.role === ROLE_BIT.GraveDigger && !p.isDead && p.dugGravesLastNight > 0);
+  const gd = players.find(
+    (p) => p.role === ROLE_BIT.GraveDigger && !p.isDead && p.dugGravesLastNight > 0,
+  );
   if (gd) {
     const spotChance = graveDiggerDetectionChance(gd.dugGravesLastNight) / 2;
     if (Math.floor(random() * 100) < spotChance) {
-      events.push(...killPlayer(players, gd.id, 'Spotted', { killerIds: [sk.id], diedByVisitingKiller: true }));
+      events.push(
+        ...killPlayer(players, gd.id, 'Spotted', {
+          killerIds: [sk.id],
+          diedByVisitingKiller: true,
+        }),
+      );
     }
   }
 
@@ -552,7 +615,12 @@ const CULT_CONVERSION_CHANCE = new Map<Role, number>([
 ]);
 
 /** Port of `ConvertToCult`. */
-function convertToCult(target: Player, chance: number, dayNumber: number, random: () => number): GameEvent[] {
+function convertToCult(
+  target: Player,
+  chance: number,
+  dayNumber: number,
+  random: () => number,
+): GameEvent[] {
   if (Math.floor(random() * 100) < chance) {
     promoteToCultist(target, dayNumber);
     cultConversions.inc();
@@ -583,20 +651,28 @@ function resolveCultVictim(
       }
       if (Math.floor(random() * 100) < 50) {
         // Settings.HunterKillCultChance
-        return killPlayer(players, newbie.id, 'HunterCult', { killerIds: [target.id], diedByVisitingKiller: true });
+        return killPlayer(players, newbie.id, 'HunterCult', {
+          killerIds: [target.id],
+          diedByVisitingKiller: true,
+        });
       }
       return [{ type: 'CultConversionFailed', targetId: target.id }];
     }
 
     case ROLE_BIT.CultistHunter:
-      return killPlayer(players, newbie.id, 'Hunt', { killerIds: [target.id], diedByVisitingKiller: true });
+      return killPlayer(players, newbie.id, 'Hunt', {
+        killerIds: [target.id],
+        diedByVisitingKiller: true,
+      });
 
     case ROLE_BIT.Wolf:
     case ROLE_BIT.AlphaWolf:
     case ROLE_BIT.WolfCub:
     case ROLE_BIT.Lycan: {
       const wolvesWentHunting = state.wolvesThatActed.some(
-        (w) => (w.choice !== null && w.choice !== ABSTAIN) || (w.choice2 !== null && w.choice2 !== ABSTAIN),
+        (w) =>
+          (w.choice !== null && w.choice !== ABSTAIN) ||
+          (w.choice2 !== null && w.choice2 !== ABSTAIN),
       );
       if (wolvesWentHunting) return [];
       return killPlayer(players, newbie.id, 'VisitWolf', {
@@ -630,7 +706,11 @@ function resolveCultVictim(
 }
 
 /** Port of the `#region Cult Night` block. */
-export function resolveCultNight(players: Player[], state: NightState, visitCtx: VisitContext): GameEvent[] {
+export function resolveCultNight(
+  players: Player[],
+  state: NightState,
+  visitCtx: VisitContext,
+): GameEvent[] {
   const events: GameEvent[] = [];
   const random = visitCtx.random ?? Math.random;
 
@@ -718,7 +798,11 @@ export function resolveChemistNight(players: Player[], visitCtx: VisitContext): 
     events.push({ type: 'ChemistTargetAlreadyDead', chemistId: chemist.id, targetId: target.id });
   } else if (result === 'Fail' && target) {
     events.push({ type: 'ChemistTargetEmpty', chemistId: chemist.id, targetId: target.id });
-  } else if (result === 'VisitorDied' && target && (target.role === ROLE_BIT.SerialKiller || target.role === ROLE_BIT.GraveDigger)) {
+  } else if (
+    result === 'VisitorDied' &&
+    target &&
+    (target.role === ROLE_BIT.SerialKiller || target.role === ROLE_BIT.GraveDigger)
+  ) {
     events.push({ type: 'ChemistDiedVisiting', chemistId: chemist.id, targetId: target.id });
   }
 
@@ -747,8 +831,14 @@ export function resolveHarlotNight(players: Player[], visitCtx: VisitContext): G
   if (result === 'AlreadyDead' && target) {
     const killerRole = target.killedByRole;
     const diedToWolfOrSerialKiller =
-      killerRole !== null && (WOLF_ROLES.includes(killerRole) || killerRole === ROLE_BIT.SerialKiller);
-    if (target.diedLastNight && diedToWolfOrSerialKiller && !target.diedByVisitingKiller && !target.diedByVisitingVictim) {
+      killerRole !== null &&
+      (WOLF_ROLES.includes(killerRole) || killerRole === ROLE_BIT.SerialKiller);
+    if (
+      target.diedLastNight &&
+      diedToWolfOrSerialKiller &&
+      !target.diedByVisitingKiller &&
+      !target.diedByVisitingVictim
+    ) {
       harlotDeaths.inc();
       events.push(
         ...killPlayer(players, harlot.id, 'VisitVictim', {

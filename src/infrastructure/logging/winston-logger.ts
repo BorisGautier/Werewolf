@@ -246,7 +246,10 @@ export function createWinstonLogger(options: WinstonLoggerOptions = {}): PinoCom
   return adapter;
 }
 
-export function childLogger(parent: PinoCompatibleLogger, meta: Record<string, unknown>): PinoCompatibleLogger {
+export function childLogger(
+  parent: PinoCompatibleLogger,
+  meta: Record<string, unknown>,
+): PinoCompatibleLogger {
   return parent.child(meta);
 }
 

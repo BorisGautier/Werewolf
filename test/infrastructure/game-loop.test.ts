@@ -10,7 +10,10 @@ import { GameLoop } from '../../src/infrastructure/telegram/game-loop.js';
 import { LocalGifPack } from '../../src/infrastructure/telegram/local-gif-pack.js';
 import { getDefaultLocale, loadLocales } from '../../src/infrastructure/i18n/locale-loader.js';
 import { Translator } from '../../src/infrastructure/i18n/translator.js';
-import type { GroupRepository, GroupWithConfig } from '../../src/infrastructure/persistence/group.repository.js';
+import type {
+  GroupRepository,
+  GroupWithConfig,
+} from '../../src/infrastructure/persistence/group.repository.js';
 import type { GameRepository } from '../../src/infrastructure/persistence/game.repository.js';
 
 let translator: Translator;
@@ -69,11 +72,13 @@ function fakeGroup(overrides: Partial<GroupWithConfig> = {}): GroupWithConfig {
   };
 }
 
-function createHarness(options: {
-  gifPacks?: import('../../src/infrastructure/persistence/gif-pack.repository.js').GifPackRepository;
-  players?: import('../../src/infrastructure/persistence/player.repository.js').PlayerRepository;
-  localGifPack?: import('../../src/infrastructure/telegram/local-gif-pack.js').LocalGifPack;
-} = {}) {
+function createHarness(
+  options: {
+    gifPacks?: import('../../src/infrastructure/persistence/gif-pack.repository.js').GifPackRepository;
+    players?: import('../../src/infrastructure/persistence/player.repository.js').PlayerRepository;
+    localGifPack?: import('../../src/infrastructure/telegram/local-gif-pack.js').LocalGifPack;
+  } = {},
+) {
   const sendMessage = vi.fn().mockResolvedValue({ message_id: 1 });
   const sendAnimation = vi.fn().mockResolvedValue({ message_id: 1 });
   const bot = { api: { sendMessage, sendAnimation } } as unknown as Bot;
@@ -98,17 +103,56 @@ function createHarness(options: {
     recordGameResult: vi.fn(async () => new Map()),
   } as unknown as import('../../src/infrastructure/persistence/achievement.repository.js').AchievementRepository;
 
-  const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as import('../../src/infrastructure/logging/logger.js').Logger;
+  const logger = {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  } as unknown as import('../../src/infrastructure/logging/logger.js').Logger;
 
   const players =
     options.players ??
-    ({ findByTelegramId: vi.fn(async () => null) } as unknown as import('../../src/infrastructure/persistence/player.repository.js').PlayerRepository);
+    ({
+      findByTelegramId: vi.fn(async () => null),
+    } as unknown as import('../../src/infrastructure/persistence/player.repository.js').PlayerRepository);
 
   const loop = options.localGifPack
-    ? new GameLoop(bot, gameManager, groups, gameRepo, achievements, translator, logger, players, options.gifPacks, options.localGifPack)
-    : new GameLoop(bot, gameManager, groups, gameRepo, achievements, translator, logger, players, options.gifPacks);
+    ? new GameLoop(
+        bot,
+        gameManager,
+        groups,
+        gameRepo,
+        achievements,
+        translator,
+        logger,
+        players,
+        options.gifPacks,
+        options.localGifPack,
+      )
+    : new GameLoop(
+        bot,
+        gameManager,
+        groups,
+        gameRepo,
+        achievements,
+        translator,
+        logger,
+        players,
+        options.gifPacks,
+      );
 
-  return { loop, bot, sendMessage, sendAnimation, gameManager, groups, gameRepo, achievements, group, logger, players };
+  return {
+    loop,
+    bot,
+    sendMessage,
+    sendAnimation,
+    gameManager,
+    groups,
+    gameRepo,
+    achievements,
+    group,
+    logger,
+    players,
+  };
 }
 
 /** A 5-player game (1 Wolf, 4 Villagers) already dealt and in Night 1, matching what
@@ -153,7 +197,9 @@ describe('GameLoop', () => {
 
   it("sends the dying player's approved gif alongside the night-kill announcement, when a gif pack repository is wired in", async () => {
     const getApprovedFileId = vi.fn(async () => 'FILE_ID_123');
-    const gifPacks = { getApprovedFileId } as unknown as import('../../src/infrastructure/persistence/gif-pack.repository.js').GifPackRepository;
+    const gifPacks = {
+      getApprovedFileId,
+    } as unknown as import('../../src/infrastructure/persistence/gif-pack.repository.js').GifPackRepository;
     const { loop, gameManager, sendAnimation } = createHarness({ gifPacks });
     const game = dealtGame(gameManager);
     const wolf = game.players[0]!;
@@ -173,7 +219,9 @@ describe('GameLoop', () => {
   it('skips the gif send entirely when no gif pack repository is wired in (default behavior)', async () => {
     const dir = await mkdtemp(path.join(tmpdir(), 'werewolf-gifs-empty-'));
     try {
-      const { loop, gameManager, sendAnimation } = createHarness({ localGifPack: new LocalGifPack(dir) });
+      const { loop, gameManager, sendAnimation } = createHarness({
+        localGifPack: new LocalGifPack(dir),
+      });
       const game = dealtGame(gameManager);
       const wolf = game.players[0]!;
       const victim = game.players[1]!;
@@ -222,7 +270,9 @@ describe('GameLoop', () => {
       await writeFile(path.join(dir, 'VillagerDie.mp4'), 'fake-mp4-bytes');
       const localGifPack = new LocalGifPack(dir);
       const getApprovedFileId = vi.fn(async () => 'FILE_ID_123');
-      const gifPacks = { getApprovedFileId } as unknown as import('../../src/infrastructure/persistence/gif-pack.repository.js').GifPackRepository;
+      const gifPacks = {
+        getApprovedFileId,
+      } as unknown as import('../../src/infrastructure/persistence/gif-pack.repository.js').GifPackRepository;
       const { loop, gameManager, sendAnimation } = createHarness({ gifPacks, localGifPack });
       const game = dealtGame(gameManager);
       const wolf = game.players[0]!;
@@ -271,14 +321,22 @@ describe('GameLoop', () => {
 
     const villagers = game.players.filter((p) => p.id !== wolf.id);
     for (const voter of villagers) {
-      const confirmation = await loop.handleCallback(voter.id, game.chatId, `vote:${wolf.id.toString()}`);
+      const confirmation = await loop.handleCallback(
+        voter.id,
+        game.chatId,
+        `vote:${wolf.id.toString()}`,
+      );
       expect(confirmation).toBeTruthy();
     }
 
     await vi.advanceTimersByTimeAsync(5000); // lynch resolves
 
     expect(wolf.isDead).toBe(true);
-    expect(sendMessage.mock.calls.some((call) => typeof call[1] === 'string' && call[1].includes('lynched'))).toBe(true);
+    expect(
+      sendMessage.mock.calls.some(
+        (call) => typeof call[1] === 'string' && call[1].includes('lynched'),
+      ),
+    ).toBe(true);
   });
 
   it('finalizes and removes the game from the registry once it ends, without creating a second DB row', async () => {
@@ -336,9 +394,11 @@ describe('GameLoop', () => {
     expect(summaryText).toContain('Game Length:');
   });
 
-  it("end-of-game recap includes a donor badge for a player above the first donation tier", async () => {
+  it('end-of-game recap includes a donor badge for a player above the first donation tier', async () => {
     const players = {
-      findByTelegramId: vi.fn(async (telegramId: bigint) => (telegramId === 1n ? { donationLevel: 2 } : null)),
+      findByTelegramId: vi.fn(async (telegramId: bigint) =>
+        telegramId === 1n ? { donationLevel: 2 } : null,
+      ),
     } as unknown as import('../../src/infrastructure/persistence/player.repository.js').PlayerRepository;
     const { loop, gameManager, sendMessage } = createHarness({ players });
     const game = dealtGame(gameManager);
@@ -436,7 +496,7 @@ describe('GameLoop', () => {
     expect(result).toBeNull();
   });
 
-  it("a lynched Hunter still gets their final shot, even though applyChoice() would normally reject a dead actor", async () => {
+  it('a lynched Hunter still gets their final shot, even though applyChoice() would normally reject a dead actor', async () => {
     const { loop, gameManager } = createHarness();
     const game = gameManager.create(1n, { mode: 'Normal', minPlayers: 6 });
     game.addPlayer(1n, 'Hunty');
@@ -476,7 +536,11 @@ describe('GameLoop', () => {
     expect(hunter.pendingHunterShot).not.toBeNull();
 
     // A "dead player" callback like applyChoice() would normally reject must still work here.
-    const confirmation = await loop.handleCallback(hunter.id, hunter.id, `shoot:${finalTarget.id.toString()}`);
+    const confirmation = await loop.handleCallback(
+      hunter.id,
+      hunter.id,
+      `shoot:${finalTarget.id.toString()}`,
+    );
     expect(confirmation).toBeTruthy();
 
     await vi.advanceTimersByTimeAsync(5000); // the shot window
@@ -553,7 +617,8 @@ describe('GameLoop', () => {
 
     expect(
       sendMessage.mock.calls.some(
-        (call) => typeof call[1] === 'string' && call[1] === `${voter.name} voted to lynch ${wolf.name}.`,
+        (call) =>
+          typeof call[1] === 'string' && call[1] === `${voter.name} voted to lynch ${wolf.name}.`,
       ),
     ).toBe(true);
   });
@@ -573,12 +638,16 @@ describe('GameLoop', () => {
 
     await loop.handleCallback(voter.id, game.chatId, `vote:${wolf.id.toString()}`);
 
-    expect(sendMessage.mock.calls.some((call) => typeof call[1] === 'string' && call[1] === '1/5 players have voted.')).toBe(
-      true,
-    );
-    expect(sendMessage.mock.calls.some((call) => typeof call[1] === 'string' && call[1].includes('voted to lynch'))).toBe(
-      false,
-    );
+    expect(
+      sendMessage.mock.calls.some(
+        (call) => typeof call[1] === 'string' && call[1] === '1/5 players have voted.',
+      ),
+    ).toBe(true);
+    expect(
+      sendMessage.mock.calls.some(
+        (call) => typeof call[1] === 'string' && call[1].includes('voted to lynch'),
+      ),
+    ).toBe(false);
   });
 
   it('reveals a full voter-by-voter breakdown after resolution when secretLynchShowVoters is on', async () => {
@@ -637,7 +706,9 @@ describe('GameLoop', () => {
     expect(
       sendMessage.mock.calls.some(
         (call) =>
-          typeof call[1] === 'string' && call[1].includes(`${villagers.length} vote(s) - ${wolf.name}`) && !call[1].includes('voted by'),
+          typeof call[1] === 'string' &&
+          call[1].includes(`${villagers.length} vote(s) - ${wolf.name}`) &&
+          !call[1].includes('voted by'),
       ),
     ).toBe(true);
   });
@@ -662,9 +733,11 @@ describe('GameLoop', () => {
 
     await vi.advanceTimersByTimeAsync(5000);
 
-    expect(sendMessage.mock.calls.some((call) => typeof call[1] === 'string' && call[1].includes('Secret lynch results'))).toBe(
-      false,
-    );
+    expect(
+      sendMessage.mock.calls.some(
+        (call) => typeof call[1] === 'string' && call[1].includes('Secret lynch results'),
+      ),
+    ).toBe(false);
   });
 
   it('skipVote() resolves the current night immediately, without waiting out the timer', async () => {
@@ -710,7 +783,9 @@ describe('GameLoop', () => {
     // No resolution happened: the wolf's pending kill never landed, and the game never announced
     // a new day (which a normal night resolution would have).
     expect(victim.isDead).toBe(false);
-    expect(sendMessage.mock.calls.some((call) => typeof call[1] === 'string' && call[1].includes('Day'))).toBe(false);
+    expect(
+      sendMessage.mock.calls.some((call) => typeof call[1] === 'string' && call[1].includes('Day')),
+    ).toBe(false);
   });
 
   it('killGame() returns false when no game is running in that chat', () => {
@@ -718,7 +793,7 @@ describe('GameLoop', () => {
     expect(loop.killGame(999n)).toBe(false);
   });
 
-  it("killGame() lets a brand new game start in the same chat right away", async () => {
+  it('killGame() lets a brand new game start in the same chat right away', async () => {
     const { loop, gameManager } = createHarness();
     const game = dealtGame(gameManager);
     loop.start(game, 42);

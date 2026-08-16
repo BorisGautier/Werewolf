@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { ROLE_BIT } from '../../src/domain/roles/role.js';
 import { createPlayer } from '../../src/domain/game/player.js';
-import { checkRoleChanges, validateSpecialRoleChoices } from '../../src/domain/game/role-changes.js';
+import {
+  checkRoleChanges,
+  validateSpecialRoleChoices,
+} from '../../src/domain/game/role-changes.js';
 
 describe('checkRoleChanges', () => {
   it('promotes the Apprentice Seer to Seer once the Seer dies', () => {
@@ -48,7 +51,7 @@ describe('checkRoleChanges', () => {
     expect(events.some((e) => e.type === 'WildChildTurnedWolf')).toBe(true);
   });
 
-  it("does not turn the Wild Child while their role model is alive", () => {
+  it('does not turn the Wild Child while their role model is alive', () => {
     const wc = createPlayer(1n, 'WC', ROLE_BIT.WildChild, 'Village');
     const model = createPlayer(2n, 'Model', ROLE_BIT.Villager, 'Village');
     wc.roleModel = model.id;
@@ -58,7 +61,7 @@ describe('checkRoleChanges', () => {
     expect(wc.role).toBe(ROLE_BIT.WildChild);
   });
 
-  it('transforms the Doppelganger into their dead role model\'s exact role', () => {
+  it("transforms the Doppelganger into their dead role model's exact role", () => {
     const dg = createPlayer(1n, 'DG', ROLE_BIT.Doppelganger, 'Thief');
     const model = createPlayer(2n, 'Model', ROLE_BIT.Seer, 'Village');
     dg.roleModel = model.id;
@@ -69,7 +72,9 @@ describe('checkRoleChanges', () => {
     expect(dg.role).toBe(ROLE_BIT.Seer);
     expect(dg.team).toBe('Village');
     expect(dg.hasUsedAbility).toBe(false);
-    expect(events.some((e) => e.type === 'DoppelgangerTransformed' && e.newRole === ROLE_BIT.Seer)).toBe(true);
+    expect(
+      events.some((e) => e.type === 'DoppelgangerTransformed' && e.newRole === ROLE_BIT.Seer),
+    ).toBe(true);
   });
 
   it('restores a full 2-bullet count when the Doppelganger copies a Gunner or Spumpkin', () => {

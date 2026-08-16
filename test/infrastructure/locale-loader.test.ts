@@ -36,10 +36,19 @@ describe('loadLocales (language packs, temp directory)', () => {
 
   it('loads a pack alongside its base language, keyed by its own code', async () => {
     dir = await mkdtemp(path.join(tmpdir(), 'werewolf-locales-'));
-    await writeFile(path.join(dir, 'en.json'), JSON.stringify({ code: 'en', name: 'English', isDefault: true, strings: {} }));
+    await writeFile(
+      path.join(dir, 'en.json'),
+      JSON.stringify({ code: 'en', name: 'English', isDefault: true, strings: {} }),
+    );
     await writeFile(
       path.join(dir, 'en-spooky.json'),
-      JSON.stringify({ code: 'en-spooky', name: 'English (Spooky)', base: 'en', isPack: true, strings: {} }),
+      JSON.stringify({
+        code: 'en-spooky',
+        name: 'English (Spooky)',
+        base: 'en',
+        isPack: true,
+        strings: {},
+      }),
     );
 
     const locales = await loadLocales(dir);
@@ -50,7 +59,10 @@ describe('loadLocales (language packs, temp directory)', () => {
 
   it("rejects a pack whose base isn't among the loaded locales", async () => {
     dir = await mkdtemp(path.join(tmpdir(), 'werewolf-locales-'));
-    await writeFile(path.join(dir, 'en.json'), JSON.stringify({ code: 'en', name: 'English', isDefault: true, strings: {} }));
+    await writeFile(
+      path.join(dir, 'en.json'),
+      JSON.stringify({ code: 'en', name: 'English', isDefault: true, strings: {} }),
+    );
     await writeFile(
       path.join(dir, 'orphan.json'),
       JSON.stringify({ code: 'orphan', name: 'Orphan Pack', base: 'nonexistent', strings: {} }),

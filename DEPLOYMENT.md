@@ -204,6 +204,83 @@ que la restauration se fait avant que le bot ne commence à écrire).
   [`TESTING.md`](./TESTING.md) pour développer/tester en local avant de
   redéployer.
 
+## 9. Configuration Web Server Apache2 & Nginx (`epicwolf.borisgauty.com`)
+
+Pour accéder au Control Center Admin et à Grafana sous le même nom de domaine :
+- **Admin App** : `https://epicwolf.borisgauty.com/admin`
+- **Grafana** : `https://epicwolf.borisgauty.com/grafana`
+
+### Option A : Serveur Web Apache2 (Recommandé avec Certbot)
+
+1. Activer les modules Apache nécessaires :
+   ```bash
+   sudo a2enmod proxy proxy_http headers rewrite ssl
+   ```
+2. Créer le VirtualHost `/etc/apache2/sites-available/epicwolf.borisgauty.com.conf` :
+   ```apache
+   <VirtualHost *:80>
+       ServerName epicwolf.borisgauty.com
+
+       ProxyPreserveHost On
+       ProxyRequests Off
+
+       # Admin Control Center Web
+       ProxyPass /admin http://127.0.0.1:4000/admin
+       ProxyPassReverse /admin http://127.0.0.1:4000/admin
+
+       ProxyPass /api/admin http://127.0.0.1:4000/api/admin
+       ProxyPassReverse /api/admin http://127.0.0.1:4000/api/admin
+
+       # Grafana Dashboards
+       ProxyPass /grafana/ http://127.0.0.1:3000/
+       ProxyPassReverse /grafana/ http://127.0.0.1:3000/
+   </VirtualHost>
+   ```
+3. Activer le site et générer le certificat SSL Let's Encrypt avec Certbot :
+   ```bash
+   sudo a2ensite epicwolf.borisgauty.com.conf
+   sudo systemctl reload apache2
+   sudo certbot --apache -d epicwolf.borisgauty.com
+   ```
+
+### Option B : Serveur Web Nginx
+
+```nginx
+server {
+    listen 80;
+    server_name epicwolf.borisgauty.com;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name epicwolf.borisgauty.com;
+
+    ssl_certificate /etc/letsencrypt/live/epicwolf.borisgauty.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/epicwolf.borisgauty.com/privkey.pem;
+
+    location /admin {
+        proxy_pass http://localhost:4000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /api/admin/ {
+        proxy_pass http://localhost:4000/api/admin/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    location /grafana/ {
+        proxy_pass http://localhost:3000/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+```
+
 ## 10. Ajouter des GIFs de mort/victoire
 
 ### Il n'y a rien à « récupérer » du projet original

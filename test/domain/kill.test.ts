@@ -15,7 +15,13 @@ describe('killPlayer', () => {
     expect(victim.diedLastNight).toBe(true);
     expect(victim.killedByRole).toBe(ROLE_BIT.Wolf);
     expect(wolf.killedLastNight).toBe(1);
-    expect(events).toContainEqual({ type: 'PlayerDied', playerId: 2n, method: 'Eat', killerIds: [1n], isNight: true });
+    expect(events).toContainEqual({
+      type: 'PlayerDied',
+      playerId: 2n,
+      method: 'Eat',
+      killerIds: [1n],
+      isNight: true,
+    });
   });
 
   it('kills the surviving lover too, and skips it for idle/flee deaths', () => {

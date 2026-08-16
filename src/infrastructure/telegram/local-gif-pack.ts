@@ -25,7 +25,10 @@ import { fileURLToPath } from 'node:url';
 import { InputFile } from 'grammy';
 import type { GifCategory } from '../persistence/gif-pack.repository.js';
 
-const DEFAULT_GIFS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../assets/gifs');
+const DEFAULT_GIFS_DIR = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../../../assets/gifs',
+);
 
 /** Telegram accepts either for `sendAnimation` - tried in this order per category (first match wins). */
 const EXTENSIONS = ['.mp4', '.gif', '.webm'];

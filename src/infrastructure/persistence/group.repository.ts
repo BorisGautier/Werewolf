@@ -9,7 +9,11 @@ export type GroupWithConfig = Group & { disabledRoles: GroupDisabledRole[] };
 export class GroupRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  async getOrCreate(telegramId: bigint, title?: string | null, username?: string | null): Promise<GroupWithConfig> {
+  async getOrCreate(
+    telegramId: bigint,
+    title?: string | null,
+    username?: string | null,
+  ): Promise<GroupWithConfig> {
     const titleValue = title ?? null;
     const usernameValue = username ?? null;
     totalGroupsSeen.inc();
@@ -27,24 +31,37 @@ export class GroupRepository {
 
   async findByTelegramId(telegramId: bigint): Promise<GroupWithConfig | null> {
     activeGroups.inc();
-    return this.prisma.group.findUnique({ where: { telegramId }, include: { disabledRoles: true } });
+    return this.prisma.group.findUnique({
+      where: { telegramId },
+      include: { disabledRoles: true },
+    });
   }
 
   /** Resolves the `@groupname` argument some DM commands (e.g. `/stopwaiting`) accept. */
   async findByUsername(username: string): Promise<GroupWithConfig | null> {
-    return this.prisma.group.findFirst({ where: { username: { equals: username, mode: 'insensitive' } }, include: { disabledRoles: true } });
+    return this.prisma.group.findFirst({
+      where: { username: { equals: username, mode: 'insensitive' } },
+      include: { disabledRoles: true },
+    });
   }
 
   /** Resolves an invite-link argument (e.g. `/leavegroup`) by matching its trailing hash. */
   async findByInviteLinkSuffix(hash: string): Promise<GroupWithConfig | null> {
-    return this.prisma.group.findFirst({ where: { inviteLink: { endsWith: hash } }, include: { disabledRoles: true } });
+    return this.prisma.group.findFirst({
+      where: { inviteLink: { endsWith: hash } },
+      include: { disabledRoles: true },
+    });
   }
 
   async updateConfig(telegramId: bigint, data: Partial<Group>): Promise<void> {
     await this.prisma.group.update({ where: { telegramId }, data });
   }
 
-  async setRoleDisabled(groupId: number, role: GroupDisabledRole['role'], disabled: boolean): Promise<void> {
+  async setRoleDisabled(
+    groupId: number,
+    role: GroupDisabledRole['role'],
+    disabled: boolean,
+  ): Promise<void> {
     if (disabled) {
       await this.prisma.groupDisabledRole.upsert({
         where: { groupId_role: { groupId, role } },
@@ -66,11 +83,17 @@ export class GroupRepository {
 
   /** `/usegifpack`: opts (or un-opts, via `null`) this group into an approved custom gif pack. */
   async setDefaultGifPack(telegramId: bigint, gifPackId: number | null): Promise<void> {
-    await this.prisma.group.update({ where: { telegramId }, data: { defaultGifPackId: gifPackId } });
+    await this.prisma.group.update({
+      where: { telegramId },
+      data: { defaultGifPackId: gifPackId },
+    });
   }
 
   /** Captures/registers any user who speaks or joins in this group. */
-  async registerMember(telegramGroupId: bigint, user: { telegramId: bigint; username?: string | null; displayName?: string | null }): Promise<void> {
+  async registerMember(
+    telegramGroupId: bigint,
+    user: { telegramId: bigint; username?: string | null; displayName?: string | null },
+  ): Promise<void> {
     const group = await this.getOrCreate(telegramGroupId);
     await this.prisma.groupMember.upsert({
       where: { groupId_telegramId: { groupId: group.id, telegramId: user.telegramId } },
@@ -131,7 +154,10 @@ export function groupToGameOptions(group: GroupWithConfig): GroupGameOptions {
  * modes.FirstOrDefault(...))`. `commandMode` is whichever of /startgame or /startchaos was used;
  * it's only consulted when the group hasn't forced a mode via /config (PLAYER_CHOICE, the default).
  */
-export function resolveGameMode(group: Pick<Group, 'mode' | 'randomMode'>, commandMode: GameMode): GameMode {
+export function resolveGameMode(
+  group: Pick<Group, 'mode' | 'randomMode'>,
+  commandMode: GameMode,
+): GameMode {
   if (group.randomMode) return Math.random() < 0.5 ? 'Normal' : 'Chaos';
   if (group.mode === 'NORMAL') return 'Normal';
   if (group.mode === 'CHAOS') return 'Chaos';

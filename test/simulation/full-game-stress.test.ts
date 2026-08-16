@@ -46,7 +46,10 @@ import { GAME_MODES } from '../../src/domain/game/game-mode.js';
 import { GameLoop } from '../../src/infrastructure/telegram/game-loop.js';
 import { getDefaultLocale, loadLocales } from '../../src/infrastructure/i18n/locale-loader.js';
 import { Translator } from '../../src/infrastructure/i18n/translator.js';
-import type { GroupRepository, GroupWithConfig } from '../../src/infrastructure/persistence/group.repository.js';
+import type {
+  GroupRepository,
+  GroupWithConfig,
+} from '../../src/infrastructure/persistence/group.repository.js';
 import type { GameRepository } from '../../src/infrastructure/persistence/game.repository.js';
 import type { AchievementRepository } from '../../src/infrastructure/persistence/achievement.repository.js';
 import type { Logger } from '../../src/infrastructure/logging/logger.js';
@@ -58,11 +61,27 @@ const TIMER_SECONDS = 3;
 
 /** Every `winningTeam` the domain layer can ever produce - see `win-condition.ts`'s `end(...)`
  * calls and `lynch.ts`'s direct `declareWinner(players, 'Tanner')`. */
-const ALL_WIN_TEAMS = ['Village', 'Wolf', 'Tanner', 'Cult', 'SerialKiller', 'Arsonist', 'Lovers', 'NoOne', 'SKHunter'] as const;
+const ALL_WIN_TEAMS = [
+  'Village',
+  'Wolf',
+  'Tanner',
+  'Cult',
+  'SerialKiller',
+  'Arsonist',
+  'Lovers',
+  'NoOne',
+  'SKHunter',
+] as const;
 /** Every `LynchResolution['outcome']` from `lynch.ts`. `Lynched` isn't separately tracked here -
  * it's the overwhelmingly common case every `concentrate`-biased game produces, so its coverage
  * is implicit in "thousands of concentrate-campaign games didn't crash". */
-const TRACKED_LYNCH_OUTCOMES = ['Tied', 'NoVotes', 'PacifistPeace', 'PrinceSurvived', 'TannerWinByLynch'] as const;
+const TRACKED_LYNCH_OUTCOMES = [
+  'Tied',
+  'NoVotes',
+  'PacifistPeace',
+  'PrinceSurvived',
+  'TannerWinByLynch',
+] as const;
 const LYNCH_OUTCOME_KEY: Record<(typeof TRACKED_LYNCH_OUTCOMES)[number], string> = {
   Tied: 'LynchTied',
   NoVotes: 'NoOneCastLynch',
@@ -168,7 +187,8 @@ interface SimResult {
 
 /** Flattens a grammy `InlineKeyboard`-shaped `reply_markup` into its buttons. */
 function buttonsOf(replyMarkup: unknown): { text: string; callback_data: string }[] {
-  const kb = replyMarkup as { inline_keyboard?: { text: string; callback_data: string }[][] } | undefined;
+  const kb = replyMarkup as
+    { inline_keyboard?: { text: string; callback_data: string }[][] } | undefined;
   return kb?.inline_keyboard?.flat() ?? [];
 }
 
@@ -236,13 +256,17 @@ async function runOneGame(
     minPlayers: 5,
     maxPlayers: 35,
     burningOverkill: true,
-    ...(runOpts.randomLynchOnTie !== undefined ? { randomLynchOnTie: runOpts.randomLynchOnTie } : {}),
+    ...(runOpts.randomLynchOnTie !== undefined
+      ? { randomLynchOnTie: runOpts.randomLynchOnTie }
+      : {}),
   });
   for (let i = 1; i <= playerCount; i++) {
     game.addPlayer(BigInt(i), `Player${i}`);
   }
 
-  function chooseLynchVotes(buttons: { text: string; callback_data: string }[]): Map<bigint, string> {
+  function chooseLynchVotes(
+    buttons: { text: string; callback_data: string }[],
+  ): Map<bigint, string> {
     const alive = alivePlayers(game.players);
     const nonAbstain = buttons.filter((b) => !b.callback_data.endsWith(':abstain'));
     const votes = new Map<bigint, string>();
@@ -270,7 +294,9 @@ async function runOneGame(
       }
       case 'targetRole': {
         const target = alive.find((p) => roleName(p.role) === bias.role);
-        const btn = target ? buttons.find((b) => b.callback_data === `vote:${target.id.toString()}`) : undefined;
+        const btn = target
+          ? buttons.find((b) => b.callback_data === `vote:${target.id.toString()}`)
+          : undefined;
         if (btn) {
           for (const p of alive) votes.set(p.id, btn.callback_data);
         } else {
@@ -287,24 +313,32 @@ async function runOneGame(
 
   // `sendMessage` closes over `loop` below by reference - safe even though it's declared
   // afterward, since `sendMessage` itself is only ever invoked once `loop` is assigned.
-  const sendMessage = vi.fn(async (recipientChatId: number, _text: string, options?: { reply_markup?: unknown }) => {
-    const buttons = buttonsOf(options?.reply_markup);
-    if (buttons.length === 0) return { message_id: 1 };
+  const sendMessage = vi.fn(
+    async (recipientChatId: number, _text: string, options?: { reply_markup?: unknown }) => {
+      const buttons = buttonsOf(options?.reply_markup);
+      if (buttons.length === 0) return { message_id: 1 };
 
-    if (BigInt(recipientChatId) === chatId) {
-      // Sent to the group chat: this is the lynch-vote menu everyone sees.
-      for (const [playerId, data] of chooseLynchVotes(buttons)) {
-        await loop.handleCallback(playerId, chatId, data);
+      if (BigInt(recipientChatId) === chatId) {
+        // Sent to the group chat: this is the lynch-vote menu everyone sees.
+        for (const [playerId, data] of chooseLynchVotes(buttons)) {
+          await loop.handleCallback(playerId, chatId, data);
+        }
+      } else {
+        // A PM: the recipient chat id *is* the player's telegram id. Night/day/ability menus
+        // always get an independent random valid choice, regardless of the lynch `bias`.
+        const pick = buttons[randomInt(buttons.length)]!;
+        await loop.handleCallback(
+          BigInt(recipientChatId),
+          BigInt(recipientChatId),
+          pick.callback_data,
+        );
       }
-    } else {
-      // A PM: the recipient chat id *is* the player's telegram id. Night/day/ability menus
-      // always get an independent random valid choice, regardless of the lynch `bias`.
-      const pick = buttons[randomInt(buttons.length)]!;
-      await loop.handleCallback(BigInt(recipientChatId), BigInt(recipientChatId), pick.callback_data);
-    }
-    return { message_id: 1 };
-  });
-  const bot = { api: { sendMessage, sendAnimation: vi.fn(async () => ({ message_id: 1 })) } } as unknown as Bot;
+      return { message_id: 1 };
+    },
+  );
+  const bot = {
+    api: { sendMessage, sendAnimation: vi.fn(async () => ({ message_id: 1 })) },
+  } as unknown as Bot;
 
   const loop = new GameLoop(bot, gameManager, groups, gameRepo, achievements, translator, logger);
 
@@ -390,7 +424,11 @@ function buildCampaigns(): Campaign[] {
     let remaining = campaign.count;
     for (let shard = 1; shard <= shardCount; shard++) {
       const count = Math.min(MAX_GAMES_PER_TEST, remaining);
-      sharded.push({ name: `${campaign.name} [${shard}/${shardCount}]`, count, bias: campaign.bias });
+      sharded.push({
+        name: `${campaign.name} [${shard}/${shardCount}]`,
+        count,
+        bias: campaign.bias,
+      });
       remaining -= count;
     }
   }
@@ -412,102 +450,114 @@ describe('full game stress simulation', () => {
   // `afterEach` cycle between separate `it()`s resets), so splitting keeps each test in the fast,
   // roughly-linear regime instead of degrading super-linearly across the whole campaign.
   for (const campaign of campaigns) {
-    it(
-      `campaign "${campaign.name}": plays ${campaign.count} games`,
-      async () => {
-        for (let i = 0; i < campaign.count; i++) {
-          const playerCount = 5 + (gameIndex % 31); // cycle 5..35 (the production max) for broad size coverage
-          const chaos = gameIndex % 3 === 0;
-          const result = await runOneGame(BigInt(1_000_000 + gameIndex), playerCount, chaos, campaign.bias);
-          results.push(result);
-          for (const r of result.roles) seenRoles.add(r);
-          gameIndex++;
-        }
-        const campaignResults = results.slice(-campaign.count);
-        const campaignCrashes = campaignResults.filter((r) => r.crashed);
-        expect(
-          campaignCrashes,
-          campaignCrashes,
-          `${campaignCrashes.length} game(s) crashed in campaign "${campaign.name}"`,
-        ).toHaveLength(0);
-      },
-      // A few thousand simulated games can take a while even with fake timers (lots of microtask
-      // churn) - give each campaign a lot more headroom than vitest's 5s default.
-      600_000,
-    );
+    it(`campaign "${campaign.name}": plays ${campaign.count} games`, async () => {
+      for (let i = 0; i < campaign.count; i++) {
+        const playerCount = 5 + (gameIndex % 31); // cycle 5..35 (the production max) for broad size coverage
+        const chaos = gameIndex % 3 === 0;
+        const result = await runOneGame(
+          BigInt(1_000_000 + gameIndex),
+          playerCount,
+          chaos,
+          campaign.bias,
+        );
+        results.push(result);
+        for (const r of result.roles) seenRoles.add(r);
+        gameIndex++;
+      }
+      const campaignResults = results.slice(-campaign.count);
+      const campaignCrashes = campaignResults.filter((r) => r.crashed);
+      expect(
+        campaignCrashes,
+        campaignCrashes,
+        `${campaignCrashes.length} game(s) crashed in campaign "${campaign.name}"`,
+      ).toHaveLength(0);
+    }, 600_000); // churn) - give each campaign a lot more headroom than vitest's 5s default. // A few thousand simulated games can take a while even with fake timers (lots of microtask
   }
 
-  it(
-    `summary: ${totalGames} games across ${campaigns.length} voting strategies played with no crash, no stall, and a winner every time`,
-    () => {
-      const crashes = results.filter((r) => r.crashed);
-      const stalls = results.filter((r) => r.stalled);
-      const noWinner = results.filter((r) => !r.crashed && !r.stalled && !r.winningTeam);
-      const missingRoles = ROLE_NAMES.filter((name) => !seenRoles.has(name));
+  it(`summary: ${totalGames} games across ${campaigns.length} voting strategies played with no crash, no stall, and a winner every time`, () => {
+    const crashes = results.filter((r) => r.crashed);
+    const stalls = results.filter((r) => r.stalled);
+    const noWinner = results.filter((r) => !r.crashed && !r.stalled && !r.winningTeam);
+    const missingRoles = ROLE_NAMES.filter((name) => !seenRoles.has(name));
 
-      const winTeamCounts = new Map<string, number>();
-      for (const r of results) {
-        if (!r.winningTeam) continue;
-        winTeamCounts.set(r.winningTeam, (winTeamCounts.get(r.winningTeam) ?? 0) + 1);
+    const winTeamCounts = new Map<string, number>();
+    for (const r of results) {
+      if (!r.winningTeam) continue;
+      winTeamCounts.set(r.winningTeam, (winTeamCounts.get(r.winningTeam) ?? 0) + 1);
+    }
+    const missingWinTeams = ALL_WIN_TEAMS.filter((team) => !winTeamCounts.has(team));
+
+    const lynchOutcomeCounts = new Map<string, number>();
+    for (const r of results) {
+      for (const outcome of r.lynchOutcomesSeen) {
+        lynchOutcomeCounts.set(outcome, (lynchOutcomeCounts.get(outcome) ?? 0) + 1);
       }
-      const missingWinTeams = ALL_WIN_TEAMS.filter((team) => !winTeamCounts.has(team));
+    }
+    const missingLynchOutcomes = TRACKED_LYNCH_OUTCOMES.filter(
+      (outcome) => !lynchOutcomeCounts.has(outcome),
+    );
 
-      const lynchOutcomeCounts = new Map<string, number>();
-      for (const r of results) {
-        for (const outcome of r.lynchOutcomesSeen) {
-          lynchOutcomeCounts.set(outcome, (lynchOutcomeCounts.get(outcome) ?? 0) + 1);
-        }
-      }
-      const missingLynchOutcomes = TRACKED_LYNCH_OUTCOMES.filter((outcome) => !lynchOutcomeCounts.has(outcome));
+    // eslint-disable-next-line no-console
+    console.log(
+      [
+        `Simulated ${results.length} games across campaigns: ${campaigns.map((c) => `${c.name}=${c.count}`).join(', ')} (sizes 5-35).`,
+        `Crashes: ${crashes.length}. Stalls: ${stalls.length}. Ended with no winningTeam: ${noWinner.length}.`,
+        `Roles dealt: ${seenRoles.size}/${ROLE_NAMES.length}${missingRoles.length ? ` (never dealt: ${missingRoles.join(', ')} - see REQUIREMENTS.md, expected for Spumpkin)` : ''}.`,
+        `Winning teams: ${[...winTeamCounts.entries()].map(([team, n]) => `${team}=${n}`).join(', ')}${missingWinTeams.length ? ` (never seen: ${missingWinTeams.join(', ')})` : ''}.`,
+        `Lynch outcomes: ${[...lynchOutcomeCounts.entries()].map(([o, n]) => `${o}=${n}`).join(', ')}${missingLynchOutcomes.length ? ` (never seen: ${missingLynchOutcomes.join(', ')})` : ''}.`,
+        ...crashes.map((c) => {
+          const errObj = (c.errors[0] as { err?: unknown })?.err ?? c.errors[0];
+          const stack = errObj instanceof Error ? errObj.stack : String(errObj);
+          return `  CRASH bias=${c.bias} size=${c.playerCount} chaos=${c.chaos} roles=[${c.roles.join(',')}]:\n${stack}`;
+        }),
+        ...stalls.map(
+          (c) =>
+            `  STALL bias=${c.bias} size=${c.playerCount} chaos=${c.chaos} roles=[${c.roles.join(',')}]`,
+        ),
+        ...noWinner.map(
+          (c) =>
+            `  NO WINNER bias=${c.bias} size=${c.playerCount} chaos=${c.chaos} finalPhase=${c.finalPhase} alive=${c.aliveCount} day=${c.dayNumber} roles=[${c.roles.join(',')}]`,
+        ),
+      ].join('\n'),
+    );
 
-      // eslint-disable-next-line no-console
-      console.log(
-        [
-          `Simulated ${results.length} games across campaigns: ${campaigns.map((c) => `${c.name}=${c.count}`).join(', ')} (sizes 5-35).`,
-          `Crashes: ${crashes.length}. Stalls: ${stalls.length}. Ended with no winningTeam: ${noWinner.length}.`,
-          `Roles dealt: ${seenRoles.size}/${ROLE_NAMES.length}${missingRoles.length ? ` (never dealt: ${missingRoles.join(', ')} - see REQUIREMENTS.md, expected for Spumpkin)` : ''}.`,
-          `Winning teams: ${[...winTeamCounts.entries()].map(([team, n]) => `${team}=${n}`).join(', ')}${missingWinTeams.length ? ` (never seen: ${missingWinTeams.join(', ')})` : ''}.`,
-          `Lynch outcomes: ${[...lynchOutcomeCounts.entries()].map(([o, n]) => `${o}=${n}`).join(', ')}${missingLynchOutcomes.length ? ` (never seen: ${missingLynchOutcomes.join(', ')})` : ''}.`,
-          ...crashes.map((c) => {
-            const errObj = (c.errors[0] as { err?: unknown })?.err ?? c.errors[0];
-            const stack = errObj instanceof Error ? errObj.stack : String(errObj);
-            return `  CRASH bias=${c.bias} size=${c.playerCount} chaos=${c.chaos} roles=[${c.roles.join(',')}]:\n${stack}`;
-          }),
-          ...stalls.map((c) => `  STALL bias=${c.bias} size=${c.playerCount} chaos=${c.chaos} roles=[${c.roles.join(',')}]`),
-          ...noWinner.map(
-            (c) =>
-              `  NO WINNER bias=${c.bias} size=${c.playerCount} chaos=${c.chaos} finalPhase=${c.finalPhase} alive=${c.aliveCount} day=${c.dayNumber} roles=[${c.roles.join(',')}]`,
-          ),
-        ].join('\n'),
-      );
+    expect(
+      crashes,
+      `${crashes.length} game(s) crashed - see console output above for role compositions`,
+    ).toHaveLength(0);
+    expect(
+      stalls,
+      `${stalls.length} game(s) never reached a resolution - see console output above`,
+    ).toHaveLength(0);
+    expect(noWinner, `${noWinner.length} game(s) ended without a winning team`).toHaveLength(0);
 
-      expect(crashes, `${crashes.length} game(s) crashed - see console output above for role compositions`).toHaveLength(0);
-      expect(stalls, `${stalls.length} game(s) never reached a resolution - see console output above`).toHaveLength(0);
-      expect(noWinner, `${noWinner.length} game(s) ended without a winning team`).toHaveLength(0);
+    // `Tanner`/`TannerWinByLynch` and `Tied` are proven separately by the dedicated scenario
+    // tests below instead of relied on here: a live Pacifist always declares peace the moment
+    // it's offered (this harness always uses every day-ability the instant it's available),
+    // which eats the very first lynch of any game that deals one, and `randomLynchOnTie`
+    // defaults to `true` (matching real production groups unless an admin opts out via
+    // `/config`) so a genuine `Tied` almost never survives as `Tied` in the general campaign.
+    // Neither is a campaign design flaw worth "fixing" by scaling further - it's just not
+    // where those two outcomes are reliably reachable, so they get their own targeted test.
+    const expectedElsewhere = new Set(['Tanner']);
+    const campaignMissingWinTeams = missingWinTeams.filter((t) => !expectedElsewhere.has(t));
+    const campaignMissingLynchOutcomes = missingLynchOutcomes.filter(
+      (o) => o !== 'Tied' && o !== 'TannerWinByLynch',
+    );
 
-      // `Tanner`/`TannerWinByLynch` and `Tied` are proven separately by the dedicated scenario
-      // tests below instead of relied on here: a live Pacifist always declares peace the moment
-      // it's offered (this harness always uses every day-ability the instant it's available),
-      // which eats the very first lynch of any game that deals one, and `randomLynchOnTie`
-      // defaults to `true` (matching real production groups unless an admin opts out via
-      // `/config`) so a genuine `Tied` almost never survives as `Tied` in the general campaign.
-      // Neither is a campaign design flaw worth "fixing" by scaling further - it's just not
-      // where those two outcomes are reliably reachable, so they get their own targeted test.
-      const expectedElsewhere = new Set(['Tanner']);
-      const campaignMissingWinTeams = missingWinTeams.filter((t) => !expectedElsewhere.has(t));
-      const campaignMissingLynchOutcomes = missingLynchOutcomes.filter((o) => o !== 'Tied' && o !== 'TannerWinByLynch');
-
-      // Only enforced at real scale (SIM_SCALE >= 20 or so) - at the tiny default CI count these
-      // rare outcomes aren't guaranteed to land even with biasing.
-      if (SCALE >= 20) {
-        expect(campaignMissingWinTeams, `winning teams never observed: ${campaignMissingWinTeams.join(', ')}`).toHaveLength(0);
-        expect(
-          campaignMissingLynchOutcomes,
-          `lynch outcomes never observed: ${campaignMissingLynchOutcomes.join(', ')}`,
-        ).toHaveLength(0);
-      }
-    },
-  );
+    // Only enforced at real scale (SIM_SCALE >= 20 or so) - at the tiny default CI count these
+    // rare outcomes aren't guaranteed to land even with biasing.
+    if (SCALE >= 20) {
+      expect(
+        campaignMissingWinTeams,
+        `winning teams never observed: ${campaignMissingWinTeams.join(', ')}`,
+      ).toHaveLength(0);
+      expect(
+        campaignMissingLynchOutcomes,
+        `lynch outcomes never observed: ${campaignMissingLynchOutcomes.join(', ')}`,
+      ).toHaveLength(0);
+    }
+  });
 
   // The two outcomes above structurally can't be relied on from the general campaign (see the
   // comment there) - proven directly instead, with a hand-picked role set and repeated attempts
@@ -520,13 +570,19 @@ describe('full game stress simulation', () => {
         6,
         false,
         { kind: 'split' },
-        { randomLynchOnTie: false, forceRoles: ['Villager', 'Villager', 'Villager', 'Villager', 'Villager', 'Wolf'] },
+        {
+          randomLynchOnTie: false,
+          forceRoles: ['Villager', 'Villager', 'Villager', 'Villager', 'Villager', 'Wolf'],
+        },
       );
       expect(result.crashed, `game crashed: ${JSON.stringify(result.errors[0])}`).toBe(false);
       expect(result.stalled).toBe(false);
       if (result.lynchOutcomesSeen.has('Tied')) sawTied = true;
     }
-    expect(sawTied, 'a 3-3 split lynch with randomLynchOnTie:false never resolved as Tied across 15 attempts').toBe(true);
+    expect(
+      sawTied,
+      'a 3-3 split lynch with randomLynchOnTie:false never resolved as Tied across 15 attempts',
+    ).toBe(true);
   });
 
   it('resolves TannerWinByLynch when the group votes the Tanner out', async () => {

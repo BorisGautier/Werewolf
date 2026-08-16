@@ -23,7 +23,11 @@ describe('resolveSerialKillerNight', () => {
     const victim = createPlayer(2n, 'V', ROLE_BIT.Villager, 'Village');
     sk.choice = victim.id;
 
-    const events = resolveSerialKillerNight([sk, victim], initialNightState(), baseCtx([sk, victim]));
+    const events = resolveSerialKillerNight(
+      [sk, victim],
+      initialNightState(),
+      baseCtx([sk, victim]),
+    );
 
     expect(victim.isDead).toBe(true);
     expect(events.some((e) => e.type === 'PlayerDied' && e.method === 'SerialKilled')).toBe(true);
@@ -89,7 +93,11 @@ describe('resolveSerialKillerNight', () => {
     sk.choice = intended.id;
 
     // dayNumber 6 != stumbledGrave(4) + 1 -> no redirect regardless of roll.
-    resolveSerialKillerNight([sk, intended], initialNightState(), baseCtx([sk, intended], 6, () => 0));
+    resolveSerialKillerNight(
+      [sk, intended],
+      initialNightState(),
+      baseCtx([sk, intended], 6, () => 0),
+    );
     expect(intended.isDead).toBe(true);
   });
 
@@ -99,12 +107,16 @@ describe('resolveSerialKillerNight', () => {
     gd.dugGravesLastNight = 5;
     // sk.choice left unset - no main target, but the grave-digger-spotting check still runs.
 
-    const events = resolveSerialKillerNight([sk, gd], initialNightState(), baseCtx([sk, gd], 1, () => 0));
+    const events = resolveSerialKillerNight(
+      [sk, gd],
+      initialNightState(),
+      baseCtx([sk, gd], 1, () => 0),
+    );
 
     expect(gd.isDead).toBe(true);
-    expect(events.some((e) => e.type === 'PlayerDied' && e.method === 'Spotted' && e.playerId === gd.id)).toBe(
-      true,
-    );
+    expect(
+      events.some((e) => e.type === 'PlayerDied' && e.method === 'Spotted' && e.playerId === gd.id),
+    ).toBe(true);
   });
 });
 
@@ -121,9 +133,11 @@ describe('resolveCultistHunterNight', () => {
     const events = resolveCultistHunterNight([hunter, cultist], baseCtx([hunter, cultist]));
 
     expect(cultist.isDead).toBe(true);
-    expect(events.some((e) => e.type === 'PlayerDied' && e.method === 'Hunt' && e.playerId === cultist.id)).toBe(
-      true,
-    );
+    expect(
+      events.some(
+        (e) => e.type === 'PlayerDied' && e.method === 'Hunt' && e.playerId === cultist.id,
+      ),
+    ).toBe(true);
   });
 
   it('does nothing to a target who is not actually a Cultist', () => {

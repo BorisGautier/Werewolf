@@ -13,6 +13,8 @@
 
 import type { PrismaClient } from '@prisma/client';
 import type { Logger } from '../logging/logger.js';
+import type { Env } from '../config/env.js';
+import { DailySummaryNotifier } from '../notifications/daily-summary.js';
 import { DatabaseBackupManager } from '../persistence/db-backup.js';
 import {
   bansExpired,
@@ -28,7 +30,11 @@ import {
  * (plus one group-less row for the whole-bot total), mirroring the
  * original's daily counts. Idempotent - safe to re-run for the same day.
  */
-export async function rotateDailyStats(prisma: PrismaClient, logger: Logger): Promise<void> {
+export async function rotateDailyStats(
+  prisma: PrismaClient,
+  logger: Logger,
+  env?: Env,
+): Promise<void> {
   const jobName = 'rotateDailyStats';
   const startTime = Date.now();
   cronJobRuns.labels(jobName).inc();
@@ -59,7 +65,9 @@ export async function rotateDailyStats(prisma: PrismaClient, logger: Logger): Pr
       byGroup.set(game.groupId, bucket);
     }
 
-    const existingOverall = await prisma.dailyStat.findFirst({ where: { date: dayStart, groupId: null } });
+    const existingOverall = await prisma.dailyStat.findFirst({
+      where: { date: dayStart, groupId: null },
+    });
     if (existingOverall) {
       await prisma.dailyStat.update({
         where: { id: existingOverall.id },
@@ -67,14 +75,24 @@ export async function rotateDailyStats(prisma: PrismaClient, logger: Logger): Pr
       });
     } else {
       await prisma.dailyStat.create({
-        data: { date: dayStart, groupId: null, gamesPlayed: overall.games, playersSeen: overall.players.size },
+        data: {
+          date: dayStart,
+          groupId: null,
+          gamesPlayed: overall.games,
+          playersSeen: overall.players.size,
+        },
       });
     }
 
     for (const [groupId, bucket] of byGroup) {
       await prisma.dailyStat.upsert({
         where: { date_groupId: { date: dayStart, groupId } },
-        create: { date: dayStart, groupId, gamesPlayed: bucket.games, playersSeen: bucket.players.size },
+        create: {
+          date: dayStart,
+          groupId,
+          gamesPlayed: bucket.games,
+          playersSeen: bucket.players.size,
+        },
         update: { gamesPlayed: bucket.games, playersSeen: bucket.players.size },
       });
     }
@@ -82,6 +100,13 @@ export async function rotateDailyStats(prisma: PrismaClient, logger: Logger): Pr
     const elapsed = Date.now() - startTime;
     cronJobDuration.labels(jobName).observe(elapsed / 1000);
     dailyStatsRotations.inc();
+
+    if (env) {
+      const summaryNotifier = new DailySummaryNotifier(prisma, env, logger);
+      void summaryNotifier.generateAndSendDailySummary().catch((err) => {
+        logger.error({ err }, 'Failed to dispatch daily summary notification');
+      });
+    }
 
     logger.info(
       {
@@ -121,7 +146,10 @@ export async function expireBans(prisma: PrismaClient, logger: Logger): Promise<
     });
 
     if (expired.length > 0) {
-      logger.debug({ job: jobName, candidates: expired.length }, 'Checking expired bans for candidates');
+      logger.debug(
+        { job: jobName, candidates: expired.length },
+        'Checking expired bans for candidates',
+      );
     }
 
     let lifted = 0;
@@ -138,7 +166,10 @@ export async function expireBans(prisma: PrismaClient, logger: Logger): Promise<
       lifted += result.count;
 
       if (result.count > 0) {
-        logger.info({ telegramId: telegramId.toString(), job: jobName }, 'Player ban lifted after expiry');
+        logger.info(
+          { telegramId: telegramId.toString(), job: jobName },
+          'Player ban lifted after expiry',
+        );
       }
     }
 
@@ -147,9 +178,15 @@ export async function expireBans(prisma: PrismaClient, logger: Logger): Promise<
 
     if (lifted > 0) {
       bansExpired.inc(lifted);
-      logger.info({ lifted, job: jobName, elapsedMs: elapsed }, 'Cron job: expired bans lifted successfully');
+      logger.info(
+        { lifted, job: jobName, elapsedMs: elapsed },
+        'Cron job: expired bans lifted successfully',
+      );
     } else {
-      logger.debug({ job: jobName, elapsedMs: elapsed, candidates: expired.length }, 'Cron job: no bans to lift');
+      logger.debug(
+        { job: jobName, elapsedMs: elapsed, candidates: expired.length },
+        'Cron job: no bans to lift',
+      );
     }
   } catch (err) {
     const elapsed = Date.now() - startTime;
@@ -165,7 +202,11 @@ export async function expireBans(prisma: PrismaClient, logger: Logger): Promise<
  * them crashed or was redeployed mid-game) - "purge dead games" from the original task list. Only
  * touches rows old enough that they couldn't possibly still be a legitimately long-running game.
  */
-export async function purgeStaleGames(prisma: PrismaClient, logger: Logger, maxAgeHours = 12): Promise<void> {
+export async function purgeStaleGames(
+  prisma: PrismaClient,
+  logger: Logger,
+  maxAgeHours = 12,
+): Promise<void> {
   const jobName = 'purgeStaleGames';
   const startTime = Date.now();
   cronJobRuns.labels(jobName).inc();
@@ -195,7 +236,10 @@ export async function purgeStaleGames(prisma: PrismaClient, logger: Logger, maxA
         'Cron job: stale abandoned games purged — these games likely crashed mid-session',
       );
     } else {
-      logger.debug({ job: jobName, maxAgeHours, elapsedMs: elapsed }, 'Cron job: no stale games found');
+      logger.debug(
+        { job: jobName, maxAgeHours, elapsedMs: elapsed },
+        'Cron job: no stale games found',
+      );
     }
   } catch (err) {
     const elapsed = Date.now() - startTime;
@@ -228,6 +272,9 @@ export async function runDailyDatabaseBackup(logger: Logger): Promise<void> {
     const elapsed = Date.now() - startTime;
     cronJobFailures.labels(jobName).inc();
     cronJobDuration.labels(jobName).observe(elapsed / 1000);
-    logger.error({ err, job: jobName, elapsedMs: elapsed }, 'Cron job failed: runDailyDatabaseBackup');
+    logger.error(
+      { err, job: jobName, elapsedMs: elapsed },
+      'Cron job failed: runDailyDatabaseBackup',
+    );
   }
 }

@@ -18,7 +18,11 @@ describe('resolveArsonistNight', () => {
     const target = createPlayer(2n, 'T', ROLE_BIT.Villager, 'Village');
     arsonist.choice = target.id;
 
-    const events = resolveArsonistNight([arsonist, target], initialNightState(), baseCtx([arsonist, target]));
+    const events = resolveArsonistNight(
+      [arsonist, target],
+      initialNightState(),
+      baseCtx([arsonist, target]),
+    );
 
     expect(target.doused).toBe(true);
     expect(events.some((e) => e.type === 'PlayerDoused' && e.playerId === target.id)).toBe(true);
@@ -41,7 +45,11 @@ describe('resolveArsonistNight', () => {
     deadVillager.isDead = true;
     arsonist.choice = deadVillager.id;
 
-    resolveArsonistNight([arsonist, deadVillager], initialNightState(), baseCtx([arsonist, deadVillager]));
+    resolveArsonistNight(
+      [arsonist, deadVillager],
+      initialNightState(),
+      baseCtx([arsonist, deadVillager]),
+    );
 
     expect(deadVillager.doused).toBe(false);
   });
@@ -103,7 +111,9 @@ describe('resolveArsonistNight', () => {
     expect(saved.wasSavedLastNight).toBe(true);
     expect(saved.doused).toBe(true); // GA saved them from burning tonight, they're still doused
     expect(burned.isDead).toBe(true);
-    expect(events.some((e) => e.type === 'GuardianAngelSavedFromBurning' && e.playerId === saved.id)).toBe(true);
+    expect(
+      events.some((e) => e.type === 'GuardianAngelSavedFromBurning' && e.playerId === saved.id),
+    ).toBe(true);
   });
 
   it('does not kill the lover of a burning victim who is burning simultaneously', () => {

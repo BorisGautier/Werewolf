@@ -185,7 +185,10 @@ export class GifPackRepository {
   async setNsfw(telegramId: bigint, nsfw: boolean): Promise<boolean> {
     const player = await this.prisma.player.findUnique({ where: { telegramId } });
     if (!player) return false;
-    const updated = await this.prisma.customGifPack.updateMany({ where: { ownerId: player.id }, data: { nsfw } });
+    const updated = await this.prisma.customGifPack.updateMany({
+      where: { ownerId: player.id },
+      data: { nsfw },
+    });
     return updated.count > 0;
   }
 
@@ -210,13 +213,19 @@ export class GifPackRepository {
   }
 
   async findOwnPack(telegramId: bigint): Promise<GifPackSummary | null> {
-    const player = await this.prisma.player.findUnique({ where: { telegramId }, include: { gifPack: true } });
+    const player = await this.prisma.player.findUnique({
+      where: { telegramId },
+      include: { gifPack: true },
+    });
     return player?.gifPack ? toSummary(player.telegramId, player.gifPack) : null;
   }
 
   /** The pack's DB id, if `telegramId` owns one and it's approved - for `/usegifpack`. */
   async findApprovedPackId(telegramId: bigint): Promise<number | null> {
-    const player = await this.prisma.player.findUnique({ where: { telegramId }, include: { gifPack: true } });
+    const player = await this.prisma.player.findUnique({
+      where: { telegramId },
+      include: { gifPack: true },
+    });
     return player?.gifPack?.approved ? player.gifPack.id : null;
   }
 
@@ -242,8 +251,13 @@ export class GifPackRepository {
     playerTelegramId?: bigint,
   ): Promise<string | null> {
     if (playerTelegramId !== undefined) {
-      const player = await this.prisma.player.findUnique({ where: { telegramId: playerTelegramId }, include: { gifPack: true } });
-      const fromPlayer = player?.gifPack?.approved ? (player.gifPack as unknown as Record<string, string | null>)[column(category)] : null;
+      const player = await this.prisma.player.findUnique({
+        where: { telegramId: playerTelegramId },
+        include: { gifPack: true },
+      });
+      const fromPlayer = player?.gifPack?.approved
+        ? (player.gifPack as unknown as Record<string, string | null>)[column(category)]
+        : null;
       if (fromPlayer) return fromPlayer;
     }
     if (groupDefaultPackId === null) return null;

@@ -62,7 +62,14 @@ function checkDoppelganger(players: Player[], checkBitten: boolean): GameEvent[]
     if (roleModel.role === ROLE_BIT.Spumpkin || roleModel.role === ROLE_BIT.Gunner) {
       dg.bullet = 2;
     }
-    return [{ type: 'DoppelgangerTransformed', playerId: dg.id, newRole: roleModel.role, roleModelId: roleModel.id }];
+    return [
+      {
+        type: 'DoppelgangerTransformed',
+        playerId: dg.id,
+        newRole: roleModel.role,
+        roleModelId: roleModel.id,
+      },
+    ];
   }
   return [];
 }
@@ -87,7 +94,11 @@ export function checkRoleChanges(players: Player[], checkBitten = false): GameEv
   return events;
 }
 
-function addLover(players: readonly Player[], existingId: bigint | null, random: () => number): Player | null {
+function addLover(
+  players: readonly Player[],
+  existingId: bigint | null,
+  random: () => number,
+): Player | null {
   const loverId = chooseRandomPlayerId(players, existingId, false, random);
   const lover = players.find((p) => p.id === loverId);
   if (!lover) return null;
@@ -137,7 +148,11 @@ function notifyLovers(players: Player[], random: () => number): GameEvent[] {
   return [];
 }
 
-export function validateSpecialRoleChoices(players: Player[], dayNumber: number, random: () => number): GameEvent[] {
+export function validateSpecialRoleChoices(
+  players: Player[],
+  dayNumber: number,
+  random: () => number,
+): GameEvent[] {
   const events: GameEvent[] = [];
   if (dayNumber !== 1) return events;
 

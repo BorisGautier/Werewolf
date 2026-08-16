@@ -10,7 +10,11 @@ import {
 import type { PlayerRepository } from '../../src/infrastructure/persistence/player.repository.js';
 import type { GroupRepository } from '../../src/infrastructure/persistence/group.repository.js';
 
-function fakeCtx(overrides: { text?: string; entities?: unknown[]; replyFrom?: { id: number; first_name: string } }): Context {
+function fakeCtx(overrides: {
+  text?: string;
+  entities?: unknown[];
+  replyFrom?: { id: number; first_name: string };
+}): Context {
   return {
     message: {
       text: overrides.text,
