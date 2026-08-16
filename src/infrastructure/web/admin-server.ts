@@ -532,7 +532,6 @@ export class AdminServer {
 
   private handleGetLogs(res: ServerResponse): void {
     const logFilePath = path.join(process.cwd(), 'logs', 'werewolf-combined.log');
-    let logsText = 'No logs recorded yet.';
     if (fs.existsSync(logFilePath)) {
       const stats = fs.statSync(logFilePath);
       const readStream = fs.createReadStream(logFilePath, {
@@ -545,7 +544,7 @@ export class AdminServer {
       });
       return;
     }
-    this.sendJson(res, 200, { success: true, logs: logsText });
+    this.sendJson(res, 200, { success: true, logs: 'No logs recorded yet.' });
   }
 
   private serveDashboardHtml(res: ServerResponse): void {

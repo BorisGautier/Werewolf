@@ -15,7 +15,14 @@ module.exports = {
     node: true,
     es2022: true,
   },
-  ignorePatterns: ['dist', 'node_modules', 'prisma/generated', 'legacy-csharp'],
+  ignorePatterns: [
+    'dist',
+    'node_modules',
+    'prisma/generated',
+    'legacy-csharp',
+    'scratch',
+    'scripts',
+  ],
   rules: {
     '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
     '@typescript-eslint/explicit-function-return-type': 'off',

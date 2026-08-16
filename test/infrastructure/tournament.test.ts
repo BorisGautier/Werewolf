@@ -76,7 +76,7 @@ describe('Tournament Mode System', () => {
       reply: vi.fn(),
     };
 
-    // @ts-ignore
+    // @ts-expect-error - testing private handleTournoiMenu method
     await handler['handleTournoiMenu'](mockCtx);
     expect(mockCtx.reply).toHaveBeenCalled();
     const replyText = mockCtx.reply.mock.calls[0][0];
