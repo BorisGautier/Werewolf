@@ -1,0 +1,10 @@
+-- Migration: add equippedTitle, stats columns to players and isApproved to groups
+ALTER TABLE "players" ADD COLUMN IF NOT EXISTS "equippedTitle" TEXT;
+ALTER TABLE "players" ADD COLUMN IF NOT EXISTS "guardianAngelSaves" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "players" ADD COLUMN IF NOT EXISTS "firstLynchStreak" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "players" ADD COLUMN IF NOT EXISTS "totalDonatedStars" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "players" ADD COLUMN IF NOT EXISTS "donationLevel" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "players" ADD COLUMN IF NOT EXISTS "isFounder" BOOLEAN NOT NULL DEFAULT false;
+
+ALTER TABLE "groups" ADD COLUMN IF NOT EXISTS "isApproved" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "groups" ADD COLUMN IF NOT EXISTS "tagAllOnStart" BOOLEAN NOT NULL DEFAULT false;
