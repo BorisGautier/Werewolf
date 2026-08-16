@@ -263,6 +263,7 @@ node_modules/
 dist/
 .env
 .env.local
+.env.prod
 *.log
 coverage/
 .DS_Store

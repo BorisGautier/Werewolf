@@ -26,7 +26,7 @@ services:
       timeout: 5s
       retries: 10
     ports:
-      - "5432:5432"
+      - "5905:5432"
     deploy:
       resources:
         limits:
@@ -37,6 +37,7 @@ services:
           memory: 256M
 
   app:
+    image: ${APP_IMAGE:-ghcr.io/borisgautier/werewolf:latest}
     build:
       context: .
       dockerfile: Dockerfile
@@ -59,8 +60,7 @@ services:
       MAILGUN_TO_EMAIL: ${MAILGUN_TO_EMAIL:-}
       LOKI_HOST: http://loki:3100
     ports:
-      - "9090:9090"
-      - "4000:4000"
+      - "5900:4000"
     deploy:
       resources:
         limits:
@@ -84,7 +84,7 @@ services:
       - '--web.console.libraries=/usr/share/prometheus/console_libraries'
       - '--web.console.templates=/usr/share/prometheus/consoles'
     ports:
-      - "9091:9090"
+      - "5902:9090"
     deploy:
       resources:
         limits:
@@ -103,7 +103,7 @@ services:
       - '--config.file=/etc/alertmanager/alertmanager.yml'
       - '--storage.path=/alertmanager'
     ports:
-      - "9093:9093"
+      - "5904:9093"
     deploy:
       resources:
         limits:
@@ -121,7 +121,7 @@ services:
       - loki-data:/tmp/loki
     command: -config.file=/etc/loki/local-config.yaml
     ports:
-      - "3100:3100"
+      - "5903:3100"
     deploy:
       resources:
         limits:
@@ -144,7 +144,7 @@ services:
       - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
       - grafana-data:/var/lib/grafana
     ports:
-      - "3000:3000"
+      - "5901:3000"
     deploy:
       resources:
         limits:
