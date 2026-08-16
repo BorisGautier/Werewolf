@@ -17,11 +17,19 @@ describe('AdminServer REST API & Dashboard', () => {
     await server.stop();
   });
 
-  it('serves dashboard HTML page on root GET request', async () => {
+  it('serves landing HTML page on root GET request', async () => {
     const res = await fetch('http://localhost:4099/');
     expect(res.status).toBe(200);
     const html = await res.text();
-    expect(html).toContain('WEREWOLF ADMIN PRO');
+    expect(html).toContain('EpicWolf Game');
+    expect(html).toContain('Loup-Garou Telegram');
+  });
+
+  it('serves admin dashboard HTML page on /admin GET request', async () => {
+    const res = await fetch('http://localhost:4099/admin');
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('Admin Control Center');
   });
 
   it('rejects invalid login credentials', async () => {
