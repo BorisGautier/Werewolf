@@ -15,7 +15,7 @@ describe('ALL ROLES ABILITY COMPREHENSIVE AUDIT', () => {
     const gameManager = new GameManager();
     const game = gameManager.create(100n, { mode: 'Normal', minPlayers: 6 });
     for (let i = 1; i <= 6; i++) {
-      game.addPlayer(BigInt(i), `Player${i}`, `player${i}`);
+      game.addPlayer(BigInt(i), `Player${i}`);
     }
     game.start();
     for (const p of game.players) {

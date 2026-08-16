@@ -53,10 +53,12 @@ function fakeGroup(overrides: Partial<GroupWithConfig> = {}): GroupWithConfig {
     inviteLink: null,
     defaultGifPackId: null,
     createdAt: new Date(),
-    updatedAt: new Date(),
+    pmLynchVote: false,
+    isApproved: true,
+    tagAllOnStart: true,
     disabledRoles: [],
     ...overrides,
-  };
+  } as any as GroupWithConfig;
 }
 
 function createHarness() {

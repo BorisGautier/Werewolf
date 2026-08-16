@@ -151,7 +151,7 @@ function fakeGroup(overrides: Partial<GroupWithConfig> = {}): GroupWithConfig {
     updatedAt: new Date(),
     disabledRoles: [],
     ...overrides,
-  };
+  } as any as GroupWithConfig;
 }
 
 /** How the simulated group votes on a lynch. Night/day menus always get an independent random
@@ -467,7 +467,6 @@ describe('full game stress simulation', () => {
       const campaignResults = results.slice(-campaign.count);
       const campaignCrashes = campaignResults.filter((r) => r.crashed);
       expect(
-        campaignCrashes,
         campaignCrashes,
         `${campaignCrashes.length} game(s) crashed in campaign "${campaign.name}"`,
       ).toHaveLength(0);

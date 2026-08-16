@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { PlayerRepository } from '../../src/infrastructure/persistence/player.repository.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

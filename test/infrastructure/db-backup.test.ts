@@ -20,7 +20,7 @@ describe('DatabaseBackupManager', () => {
   });
 
   it('creates backup file directory if not exists', () => {
-    const manager = new DatabaseBackupManager({ backupDir: testDir });
+    new DatabaseBackupManager({ backupDir: testDir });
     expect(fs.existsSync(testDir)).toBe(true);
   });
 

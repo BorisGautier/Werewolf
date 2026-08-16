@@ -68,7 +68,7 @@ function fakeGroup(
     updatedAt: new Date(),
     disabledRoles: [],
     ...overrides,
-  };
+  } as any as GroupWithConfig;
 }
 
 function createHarness(joinTimeSeconds = 5) {
