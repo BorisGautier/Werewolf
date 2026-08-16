@@ -20,6 +20,7 @@ import { GameLobbyManager } from './game-lobby.js';
 import { GameLoop } from './game-loop.js';
 import { AlertService } from '../monitoring/alert-service.js';
 import { registerModesGuideCommands } from './modes-guide.js';
+import { GroupChatListener } from './group-chat-listener.js';
 import { ConfigMenu } from './config-menu.js';
 import { runWithTraceContext } from '../monitoring/tracing.js';
 import {
@@ -229,6 +230,9 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
   // call next()) so its own `stopwaiting:...` callback data actually gets a chance to match.
   registerWaitlistCommands(bot, deps);
   registerModesGuideCommands(bot, lobby);
+
+  const groupChatListener = new GroupChatListener(env.geminiApiKey);
+  groupChatListener.register(bot, gameLoop);
 
   const alertService = new AlertService(bot, env, logger);
 

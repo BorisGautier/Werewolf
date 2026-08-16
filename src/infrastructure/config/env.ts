@@ -24,6 +24,7 @@ const envSchema = z.object({
   MAILGUN_DOMAIN: z.string().optional(),
   MAILGUN_TO_EMAIL: z.string().optional(),
   LOKI_HOST: z.string().optional(),
+  GEMINI_API_KEY: z.string().optional(),
 });
 
 export type Env = Readonly<{
@@ -38,6 +39,7 @@ export type Env = Readonly<{
   mailgunDomain?: string;
   mailgunToEmail?: string;
   lokiHost?: string;
+  geminiApiKey?: string;
 }>;
 
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
@@ -62,5 +64,6 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     ...(data.MAILGUN_DOMAIN ? { mailgunDomain: data.MAILGUN_DOMAIN } : {}),
     ...(data.MAILGUN_TO_EMAIL ? { mailgunToEmail: data.MAILGUN_TO_EMAIL } : {}),
     ...(data.LOKI_HOST ? { lokiHost: data.LOKI_HOST } : {}),
+    ...(data.GEMINI_API_KEY ? { geminiApiKey: data.GEMINI_API_KEY } : {}),
   };
 }
