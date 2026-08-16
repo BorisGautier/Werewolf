@@ -201,7 +201,8 @@ jobs:
               if [ -n "$PREV_IMAGE" ]; then
                 echo "⏪ Restauration de l'image précédente: $PREV_IMAGE"
                 docker compose stop app
-                docker tag "$PREV_IMAGE" ghcr.io/${{ github.repository }}:latest
+                REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+                docker tag "$PREV_IMAGE" "ghcr.io/${REPO_LOWER}:latest"
                 docker compose up -d app
                 echo "⚠️ Rollback effectué avec succès. L'ancienne version stable a été restaurée !"
               else

@@ -25,6 +25,7 @@ RUN npx prisma generate
 
 # ---- runtime: minimal final image
 FROM base AS runtime
+RUN apk add --no-cache openssl
 ENV NODE_ENV=production
 RUN addgroup -S werewolf && adduser -S werewolf -G werewolf
 
@@ -35,7 +36,7 @@ COPY locales ./locales
 COPY assets ./assets
 COPY package.json ./
 COPY docker-entrypoint.sh ./
-RUN chmod +x ./docker-entrypoint.sh
+RUN chmod +x ./docker-entrypoint.sh && chown -R werewolf:werewolf /app
 
 EXPOSE 4000
 
