@@ -986,7 +986,7 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
  * `GameLobbyManager` deliver the actual notification and cleanup - see `notifyWaitingPlayers`).
  */
 function registerWaitlistCommands(bot: Bot, deps: BotDependencies): void {
-  bot.command('nextgame', async (ctx) => {
+  bot.command(['nextgame', 'next', 'waitlist'], async (ctx) => {
     if (!ctx.chat || ctx.chat.type === 'private' || !ctx.from) return;
     const group = await deps.groupRepository.getOrCreate(
       BigInt(ctx.chat.id),
