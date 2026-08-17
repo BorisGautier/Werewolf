@@ -94,8 +94,21 @@ export class AdminServer {
   }
 
   private async handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    // CORS headers
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    // CORS: the dashboard is served same-origin by this very server (see serveDashboardHtml), so
+    // its own fetch() calls never need a CORS grant at all - browsers only consult these headers
+    // for cross-origin requests. Only reflect Access-Control-Allow-Origin when the caller's Origin
+    // matches an explicit allowlist (ADMIN_ALLOWED_ORIGINS, comma-separated); otherwise omit the
+    // header entirely so a third-party page embedding fetch() against this API gets blocked by the
+    // browser instead of a wildcard '*' silently allowing any origin to read admin API responses.
+    const allowedOrigins = (process.env.ADMIN_ALLOWED_ORIGINS ?? '')
+      .split(',')
+      .map((o) => o.trim())
+      .filter(Boolean);
+    const requestOrigin = req.headers.origin;
+    if (requestOrigin && allowedOrigins.includes(requestOrigin)) {
+      res.setHeader('Access-Control-Allow-Origin', requestOrigin);
+      res.setHeader('Vary', 'Origin');
+    }
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
@@ -123,18 +136,6 @@ export class AdminServer {
           maintenance: Boolean(this.maintenance?.on),
           uptimeSeconds: Math.floor(process.uptime()),
         });
-        return;
-      }
-
-      if (
-        (pathname === '/api/maintenance' || pathname === '/api/admin/maintenance') &&
-        req.method === 'POST'
-      ) {
-        const body = await this.readJsonBody(req);
-        if (this.maintenance) {
-          this.maintenance.on = typeof body.enabled === 'boolean' ? body.enabled : true;
-        }
-        this.sendJson(res, 200, { success: true, maintenance: Boolean(this.maintenance?.on) });
         return;
       }
 
@@ -197,7 +198,16 @@ export class AdminServer {
       }
 
       // API Router
-      if (pathname === '/api/admin/stats' && req.method === 'GET') {
+      if (
+        (pathname === '/api/maintenance' || pathname === '/api/admin/maintenance') &&
+        req.method === 'POST'
+      ) {
+        const body = await this.readJsonBody(req);
+        if (this.maintenance) {
+          this.maintenance.on = typeof body.enabled === 'boolean' ? body.enabled : true;
+        }
+        this.sendJson(res, 200, { success: true, maintenance: Boolean(this.maintenance?.on) });
+      } else if (pathname === '/api/admin/stats' && req.method === 'GET') {
         await this.handleGetStats(res);
       } else if (pathname === '/api/admin/games' && req.method === 'GET') {
         this.handleGetGames(res);
@@ -267,8 +277,11 @@ export class AdminServer {
         this.sendJson(res, 404, { success: false, error: 'Endpoint not found' });
       }
     } catch (err) {
+      // Log the real error server-side only - the response body is reachable by anyone with a
+      // valid (or forged, pre-V1-fix) token, and exception messages can leak internal details
+      // (file paths, query fragments, stack info) that help an attacker refine further attempts.
       this.logger?.error({ err }, '[AdminServer] Request handling error');
-      this.sendJson(res, 500, { success: false, error: (err as Error).message });
+      this.sendJson(res, 500, { success: false, error: 'Internal server error' });
     }
   }
 
@@ -766,6 +779,15 @@ export class AdminServer {
     let token = localStorage.getItem('admin_token') || '';
     let currentTab = 'overview';
 
+    // Every field below can originate from a Telegram display name, group title, or
+    // player-chosen team/tournament name - never trust it as HTML before this renders it via
+    // innerHTML. Numeric ids interpolated elsewhere (groupId, telegramId, chatId) are safe as-is.
+    function esc(value) {
+      return String(value ?? '').replace(/[&<>"']/g, (c) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+      }[c]));
+    }
+
     function showToast(message, type = 'success') {
       const toasts = document.getElementById('toasts');
       const toast = document.createElement('div');
@@ -930,9 +952,9 @@ export class AdminServer {
         const playersList = (data && Array.isArray(data.players)) ? data.players : [];
         let rows = playersList.map(p => \`
           <tr>
-            <td><strong>\${p.username ? '@' + p.username : (p.displayName || 'Joueur #' + p.telegramId)}</strong><br><small style="color:var(--text-muted);">ID: \${p.telegramId}</small></td>
+            <td><strong>\${p.username ? '@' + esc(p.username) : esc(p.displayName || 'Joueur #' + p.telegramId)}</strong><br><small style="color:var(--text-muted);">ID: \${p.telegramId}</small></td>
             <td>\${p.isBanned ? '<span class="badge badge-rose">BANNIS</span>' : '<span class="badge badge-emerald">ACTIF</span>'}</td>
-            <td>\${p.banReason || '—'}</td>
+            <td>\${esc(p.banReason) || '—'}</td>
             <td>
               <button class="btn \${p.isBanned ? 'btn-primary' : 'btn-danger'}" onclick="togglePlayerBan('\${p.telegramId}', \${!p.isBanned})">
                 <i class="fa-solid \${p.isBanned ? 'fa-user-check' : 'fa-user-slash'}"></i> \${p.isBanned ? 'Débannir' : 'Bannir'}
@@ -957,7 +979,7 @@ export class AdminServer {
         const groupsList = (data && Array.isArray(data.groups)) ? data.groups : [];
         let rows = groupsList.map(g => \`
           <tr>
-            <td><strong>\${g.title || (g.username ? '@' + g.username : 'Groupe #' + g.chatId)}</strong><br><small style="color:var(--text-muted);">ID: \${g.chatId}</small></td>
+            <td><strong>\${esc(g.title) || (g.username ? '@' + esc(g.username) : 'Groupe #' + g.chatId)}</strong><br><small style="color:var(--text-muted);">ID: \${g.chatId}</small></td>
             <td><span class="badge badge-purple">\${g.gameMode}</span></td>
             <td>\${g.isApproved ? '<span class="badge badge-emerald">APPROUVÉ</span>' : '<span class="badge badge-amber">EN ATTENTE</span>'}</td>
             <td>\${g.isBanned ? '<span class="badge badge-rose">BLOQUÉ</span>' : '<span class="badge badge-emerald">AUTORISÉ</span>'}</td>
@@ -988,7 +1010,7 @@ export class AdminServer {
         const backupsList = (data && Array.isArray(data.backups)) ? data.backups : [];
         let rows = backupsList.map(b => \`
           <tr>
-            <td><strong>\${b.filename}</strong></td>
+            <td><strong>\${esc(b.filename)}</strong></td>
             <td>\${(b.sizeBytes / 1024).toFixed(1)} KB</td>
             <td>\${new Date(b.createdAt).toLocaleString('fr-FR')}</td>
             <td>
@@ -1027,14 +1049,14 @@ export class AdminServer {
             <h1 class="page-title">🪵 Logs Système Winston (Dernières Lignes)</h1>
             <button class="btn btn-secondary" onclick="loadTab('logs')"><i class="fa-solid fa-rotate-right"></i> Rafraîchir Logs</button>
           </div>
-          <div class="log-box">\${data.logs || 'Aucun log enregistré'}</div>
+          <div class="log-box">\${esc(data.logs) || 'Aucun log enregistré'}</div>
         \`;
       } else if (tab === 'tournaments') {
         const data = await apiFetch('/api/admin/tournaments');
         let tourneyCards = (data.tournaments || []).map(t => \`
           <div class="stat-card" style="flex-direction:column; align-items:flex-start; gap:12px;">
             <div style="display:flex; justify-content:space-between; width:100%; align-items:center;">
-              <h3 style="font-size:1.1rem; font-weight:800;"><i class="fa-solid fa-trophy" style="color:var(--accent-amber);"></i> \${t.name}</h3>
+              <h3 style="font-size:1.1rem; font-weight:800;"><i class="fa-solid fa-trophy" style="color:var(--accent-amber);"></i> \${esc(t.name)}</h3>
               <span class="badge \${t.status === 'COMPLETED' ? 'badge-emerald' : t.status === 'IN_PROGRESS' ? 'badge-purple' : 'badge-amber'}">\${t.status}</span>
             </div>
             <p style="font-size:0.85rem; color:var(--text-muted);">
@@ -1083,8 +1105,8 @@ export class AdminServer {
 
         let playersRows = (game.players || []).map(p => \`
           <tr>
-            <td><strong>\${p.name || ('Joueur #' + p.id)}</strong><br><small style="color:var(--text-muted);">ID: \${p.id}</small></td>
-            <td><span class="badge badge-purple">\${p.role || 'Inconnu'}</span></td>
+            <td><strong>\${esc(p.name) || ('Joueur #' + p.id)}</strong><br><small style="color:var(--text-muted);">ID: \${p.id}</small></td>
+            <td><span class="badge badge-purple">\${esc(p.role) || 'Inconnu'}</span></td>
             <td>\${p.isAlive ? '<span class="badge badge-emerald">VIVANT</span>' : '<span class="badge badge-rose">MORT</span>'}</td>
             <td>\${p.isBot ? '🤖 Bot' : '👤 Joueur'}</td>
           </tr>

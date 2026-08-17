@@ -25,7 +25,7 @@ import { ABSTAIN, SPARK, alivePlayers, type Player } from '../../domain/game/pla
 import type { GameEvent } from '../../domain/game/game-event.js';
 import type { Team } from '../../domain/game/team.js';
 import { WEATHER_DETAILS } from '../../domain/game/village-weather.js';
-import { generateGazette, LAST_GAZETTES_BY_CHAT } from '../../domain/gazette/gazette-generator.js';
+import { generateGazette, type GazetteStory } from '../../domain/gazette/gazette-generator.js';
 import {
   evaluateGameAchievements,
   firstLynchVictimId,
@@ -40,6 +40,7 @@ import { donorBadge, type PlayerRepository } from '../persistence/player.reposit
 import { Translator, MissingLocaleStringError } from '../i18n/translator.js';
 import type { Logger } from '../logging/logger.js';
 import { describeEvent } from './messages.js';
+import { mentionOrPlain } from './mention.js';
 import { LocalGifPack } from './local-gif-pack.js';
 import {
   dayOneTargets,
@@ -102,6 +103,12 @@ export class GameLoop {
    * announcing/recursing into the next phase. */
   private readonly killedChats = new Set<bigint>();
   private readonly mutedPlayers = new Map<bigint, Set<bigint>>();
+  /** Each chat's most recent end-of-game "Gazette du Village" story, read back by `/gazette`
+   * (see `getLastGazette()`) - owned here instead of a module-level singleton so it's scoped to
+   * this `GameLoop` instance's lifetime like every other per-chat map above, rather than living
+   * forever at the module level regardless of how many `GameLoop`s a test (or a future multi-bot
+   * setup) creates. */
+  private readonly lastGazettes = new Map<bigint, GazetteStory>();
 
   constructor(
     private readonly bot: Bot,
@@ -118,6 +125,11 @@ export class GameLoop {
 
   getGame(chatId: bigint): Game | undefined {
     return this.games.get(chatId);
+  }
+
+  /** The chat's most recent end-of-game gazette, if any game has finished here yet - powers `/gazette`. */
+  getLastGazette(chatId: bigint): GazetteStory | undefined {
+    return this.lastGazettes.get(chatId);
   }
 
   /**
@@ -485,10 +497,11 @@ export class GameLoop {
             .row()
             .text(group.language === 'fr' ? '❌ Laisser exécuter' : '❌ Let Execute', 'judge_skip');
 
+          const condemnedMention = mentionOrPlain(condemned.id, condemned.name, condemned.isBot);
           const promptMsg =
             group.language === 'fr'
-              ? `⚖️ <b>DROIT DE GRÂCE DU JUGE !</b>\n\nLe village vient de condamner <b>${condemned.name}</b> au gibet avec ${condemned.votes} vote(s) !\n\nVoulez-vous exercer votre Droit de Grâce (unique) pour annuler cette exécution ?`
-              : `⚖️ <b>JUDGE'S PARDON!</b>\n\nThe village has condemned <b>${condemned.name}</b> to the gallows with ${condemned.votes} vote(s)!\n\nDo you want to use your unique Right of Pardon to save them?`;
+              ? `⚖️ <b>DROIT DE GRÂCE DU JUGE !</b>\n\nLe village vient de condamner <b>${condemnedMention}</b> au gibet avec ${condemned.votes} vote(s) !\n\nVoulez-vous exercer votre Droit de Grâce (unique) pour annuler cette exécution ?`
+              : `⚖️ <b>JUDGE'S PARDON!</b>\n\nThe village has condemned <b>${condemnedMention}</b> to the gallows with ${condemned.votes} vote(s)!\n\nDo you want to use your unique Right of Pardon to save them?`;
 
           await this.bot.api
             .sendMessage(chatNumber(judge.id), promptMsg, {
@@ -640,7 +653,13 @@ export class GameLoop {
       if (!target || target.isDead) continue;
 
       const killEvents = game.killPlayer(targetId, shot.method, { killerIds: [hunter.id] });
-      await this.send(game.chatId, group.language, 'HunterShotFired', hunter.name, target.name);
+      await this.send(
+        game.chatId,
+        group.language,
+        'HunterShotFired',
+        mentionOrPlain(hunter.id, hunter.name, hunter.isBot),
+        mentionOrPlain(target.id, target.name, target.isBot),
+      );
       await this.broadcast(game, group, killEvents, phase);
 
       // Mirrors `CheckForGameEnd()` right after the original's `HunterFinalShot` resolves - the
@@ -760,7 +779,7 @@ export class GameLoop {
 
       try {
         const gazette = generateGazette(game, batches, group.language);
-        LAST_GAZETTES_BY_CHAT.set(game.chatId.toString(), gazette);
+        this.lastGazettes.set(game.chatId, gazette);
         const gazetteMsg = `${gazette.title}\n\n${gazette.lines.join('\n')}`;
         await this.sendRaw(game.chatId, gazetteMsg);
         gazetteGenerations.inc();
@@ -1008,11 +1027,22 @@ export class GameLoop {
         alivePlayers(game.players).length,
       );
     } else if (rawTarget === 'abstain') {
-      await this.send(game.chatId, group.language, 'PlayerVotedLynchAbstain', voter.name);
+      await this.send(
+        game.chatId,
+        group.language,
+        'PlayerVotedLynchAbstain',
+        mentionOrPlain(voter.id, voter.name, voter.isBot),
+      );
     } else {
       const target = game.players.find((p) => p.id === BigInt(rawTarget));
       if (target)
-        await this.send(game.chatId, group.language, 'PlayerVotedLynch', voter.name, target.name);
+        await this.send(
+          game.chatId,
+          group.language,
+          'PlayerVotedLynch',
+          mentionOrPlain(voter.id, voter.name, voter.isBot),
+          mentionOrPlain(target.id, target.name, target.isBot),
+        );
     }
 
     const alive = alivePlayers(game.players);
@@ -1040,11 +1070,12 @@ export class GameLoop {
     if (voted.length === 0) return;
 
     const lines = voted.map((p) => {
+      const pMention = mentionOrPlain(p.id, p.name, p.isBot);
       if (group.secretLynchShowVoters) {
         const voters = [...p.votedBy].map((id) => findName(game.players, id)).join(', ');
-        return this.t.translate(group.language, 'SecretLynchResultEach', p.votes, p.name, voters);
+        return this.t.translate(group.language, 'SecretLynchResultEach', p.votes, pMention, voters);
       }
-      return this.t.translate(group.language, 'SecretLynchResultNumber', p.votes, p.name);
+      return this.t.translate(group.language, 'SecretLynchResultNumber', p.votes, pMention);
     });
     await this.send(game.chatId, group.language, 'SecretLynchResultFull', lines.join('\n'));
   }
@@ -1054,34 +1085,36 @@ export class GameLoop {
     if (!player || roleName(player.role) !== role) return null;
     const group = await this.groups.getOrCreate(game.chatId, null, null);
 
+    const playerMention = mentionOrPlain(player.id, player.name, player.isBot);
+
     switch (role) {
       case 'Mayor': {
         if (!game.useMayorReveal(playerId)) return 'AbilityAlreadyUsed';
-        await this.send(game.chatId, group.language, 'MayorRevealedMsg', player.name);
+        await this.send(game.chatId, group.language, 'MayorRevealedMsg', playerMention);
         return 'MayorRevealedMsg';
       }
       case 'Pacifist': {
         if (!game.usePacifistPeace(playerId)) return 'AbilityAlreadyUsed';
-        await this.send(game.chatId, group.language, 'PacifistDeclaredMsg', player.name);
+        await this.send(game.chatId, group.language, 'PacifistDeclaredMsg', playerMention);
         return 'PacifistDeclaredMsg';
       }
       case 'Blacksmith': {
         const events = game.useBlacksmithSpreadSilver(playerId);
         if (events.length === 0) return 'AbilityAlreadyUsed';
         this.logEvents(game.chatId, events);
-        await this.send(game.chatId, group.language, 'BlacksmithSpreadMsg', player.name);
+        await this.send(game.chatId, group.language, 'BlacksmithSpreadMsg', playerMention);
         return 'BlacksmithSpreadMsg';
       }
       case 'Sandman': {
         const events = game.useSandmanSleep(playerId);
         if (events.length === 0) return 'AbilityAlreadyUsed';
         this.logEvents(game.chatId, events);
-        await this.send(game.chatId, group.language, 'SandmanUsedMsg', player.name);
+        await this.send(game.chatId, group.language, 'SandmanUsedMsg', playerMention);
         return 'SandmanUsedMsg';
       }
       case 'Troublemaker': {
         if (!game.useTroublemakerDoubleLynch(playerId)) return 'AbilityAlreadyUsed';
-        await this.send(game.chatId, group.language, 'TroubleDoubleLynchNow', player.name);
+        await this.send(game.chatId, group.language, 'TroubleDoubleLynchNow', playerMention);
         return 'TroubleDoubleLynchNow';
       }
       default:
@@ -1392,7 +1425,9 @@ export class GameLoop {
     ...args: unknown[]
   ): Promise<void> {
     try {
-      await this.bot.api.sendMessage(chatNumber(chatId), this.t.translate(language, key, ...args));
+      await this.bot.api.sendMessage(chatNumber(chatId), this.t.translate(language, key, ...args), {
+        parse_mode: 'HTML',
+      });
     } catch (err) {
       if (err instanceof GrammyError) return;
       throw err;
@@ -1515,7 +1550,9 @@ const ABILITY_BUTTON_KEY: Partial<Record<RoleName, string>> = {
 };
 
 function findName(players: readonly Player[], id: bigint): string {
-  return players.find((p) => p.id === id)?.name ?? '???';
+  const player = players.find((p) => p.id === id);
+  if (!player) return '???';
+  return mentionOrPlain(player.id, player.name, player.isBot);
 }
 
 function chatNumber(id: bigint): number {

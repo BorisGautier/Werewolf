@@ -205,7 +205,9 @@ describe('GameLobbyManager', () => {
 
     sendMessage.mockClear();
     await lobby.startGame(chatId, 'Group', { id: 99n, name: 'Late' }, 'Normal');
-    expect(sendMessage).toHaveBeenCalledWith(101, expect.stringContaining('already running'));
+    expect(sendMessage).toHaveBeenCalledWith(101, expect.stringContaining('already running'), {
+      parse_mode: 'HTML',
+    });
   });
 
   it("refuses to start a game and leaves a group that's been /bangroup'd, even without creating a game", async () => {
@@ -256,7 +258,9 @@ describe('GameLobbyManager', () => {
 
     await vi.advanceTimersByTimeAsync(1000);
 
-    expect(sendMessage).toHaveBeenCalledWith(104, expect.stringContaining('cancelled'));
+    expect(sendMessage).toHaveBeenCalledWith(104, expect.stringContaining('cancelled'), {
+      parse_mode: 'HTML',
+    });
     expect(gameManager.has(chatId)).toBe(false);
   });
 
@@ -292,10 +296,13 @@ describe('GameLobbyManager', () => {
     await lobby.startGame(chatId, 'Group', { id: 1n, name: 'Starter' }, 'Normal');
 
     // The starter (1n) is on the waitlist too but shouldn't be PM'd about their own game.
-    expect(sendMessage).toHaveBeenCalledWith(99, expect.stringContaining('Group'));
+    expect(sendMessage).toHaveBeenCalledWith(99, expect.stringContaining('Group'), {
+      parse_mode: 'HTML',
+    });
     expect(sendMessage).not.toHaveBeenCalledWith(
       1,
       expect.stringContaining('A new game has started'),
+      expect.anything(),
     );
   });
 
@@ -352,7 +359,9 @@ describe('GameLobbyManager', () => {
     sendMessage.mockClear();
     await lobby.extend(chatId, 2n, false, 10);
 
-    expect(sendMessage).toHaveBeenCalledWith(112, expect.stringContaining('extended'));
+    expect(sendMessage).toHaveBeenCalledWith(112, expect.stringContaining('extended'), {
+      parse_mode: 'HTML',
+    });
   });
 
   it('extend refuses a non-admin when AllowExtend is off', async () => {
@@ -367,7 +376,9 @@ describe('GameLobbyManager', () => {
 
     await lobby.extend(chatId, 2n, false, 10);
 
-    expect(sendMessage).toHaveBeenCalledWith(113, expect.stringContaining('admin'));
+    expect(sendMessage).toHaveBeenCalledWith(113, expect.stringContaining('admin'), {
+      parse_mode: 'HTML',
+    });
   });
 
   it('flee is always allowed while still in the joining lobby, even with AllowFlee off', async () => {
@@ -401,7 +412,9 @@ describe('GameLobbyManager', () => {
     await lobby.flee(chatId, { id: 2n, name: 'Player2' });
 
     expect(gameManager.get(chatId)!.players).toHaveLength(playersBefore);
-    expect(sendMessage).toHaveBeenCalledWith(115, expect.stringContaining('disabled'));
+    expect(sendMessage).toHaveBeenCalledWith(115, expect.stringContaining('disabled'), {
+      parse_mode: 'HTML',
+    });
   });
 
   it('smite removes a player from the joining lobby', async () => {
@@ -433,7 +446,9 @@ describe('GameLobbyManager', () => {
     sendMessage.mockClear();
     await lobby.forceStart(chatId, false);
 
-    expect(sendMessage).toHaveBeenCalledWith(106, expect.stringContaining('admin'));
+    expect(sendMessage).toHaveBeenCalledWith(106, expect.stringContaining('admin'), {
+      parse_mode: 'HTML',
+    });
     expect(gameManager.get(chatId)!.phase).toBe('Joining');
   });
 
@@ -452,8 +467,16 @@ describe('GameLobbyManager', () => {
     sendMessage.mockClear();
     await lobby.showPlayers(chatId);
 
-    expect(sendMessage).toHaveBeenCalledWith(109, expect.stringContaining('Alice 🥇'));
-    expect(sendMessage).not.toHaveBeenCalledWith(109, expect.stringContaining('Bob 🥇'));
+    expect(sendMessage).toHaveBeenCalledWith(
+      109,
+      expect.stringContaining('<a href="tg://user?id=2">Alice</a> 🥇'),
+      { parse_mode: 'HTML' },
+    );
+    expect(sendMessage).not.toHaveBeenCalledWith(
+      109,
+      expect.stringContaining('Bob</a> 🥇'),
+      expect.anything(),
+    );
   });
 
   it('/players shows plain names when nobody has donated', async () => {

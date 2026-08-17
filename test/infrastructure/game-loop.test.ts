@@ -18,6 +18,12 @@ import type { GameRepository } from '../../src/infrastructure/persistence/game.r
 
 let translator: Translator;
 
+/** Matches `mentionHtml()`'s output - every non-bot player name in a broadcast message is now a
+ * real Telegram text-mention, not plain text (see `src/infrastructure/telegram/mention.ts`). */
+function mention(id: bigint, name: string): string {
+  return `<a href="tg://user?id=${id}">${name}</a>`;
+}
+
 beforeEach(async () => {
   const locales = await loadLocales();
   translator = new Translator(locales, getDefaultLocale(locales));
@@ -432,7 +438,9 @@ describe('GameLoop', () => {
       (call) => typeof call[1] === 'string' && call[1].includes('Players Alive'),
     );
     const badgedPlayer = game.players.find((p) => p.id === 1n)!;
-    expect(summaryCall![1] as string).toContain(`${badgedPlayer.name} 🥈`);
+    expect(summaryCall![1] as string).toContain(
+      `<a href="tg://user?id=${badgedPlayer.id}">${badgedPlayer.name}</a> 🥈`,
+    );
   });
 
   it("passes the game's real-world duration and surviving/non-fled players as longHaul, for the LongHaul achievement", async () => {
@@ -618,7 +626,9 @@ describe('GameLoop', () => {
     expect(
       sendMessage.mock.calls.some(
         (call) =>
-          typeof call[1] === 'string' && call[1] === `${voter.name} voted to lynch ${wolf.name}.`,
+          typeof call[1] === 'string' &&
+          call[1] ===
+            `${mention(voter.id, voter.name)} voted to lynch ${mention(wolf.id, wolf.name)}.`,
       ),
     ).toBe(true);
   });
@@ -671,13 +681,15 @@ describe('GameLoop', () => {
 
     await vi.advanceTimersByTimeAsync(5000); // lynch resolves
 
-    const voterNames = villagers.map((p) => p.name).join(', ');
+    const voterNames = villagers.map((p) => mention(p.id, p.name)).join(', ');
     expect(
       sendMessage.mock.calls.some(
         (call) =>
           typeof call[1] === 'string' &&
           call[1].includes('Secret lynch results') &&
-          call[1].includes(`${villagers.length} vote(s) - ${wolf.name} (voted by: ${voterNames})`),
+          call[1].includes(
+            `${villagers.length} vote(s) - ${mention(wolf.id, wolf.name)} (voted by: ${voterNames})`,
+          ),
       ),
     ).toBe(true);
   });
@@ -707,7 +719,7 @@ describe('GameLoop', () => {
       sendMessage.mock.calls.some(
         (call) =>
           typeof call[1] === 'string' &&
-          call[1].includes(`${villagers.length} vote(s) - ${wolf.name}`) &&
+          call[1].includes(`${villagers.length} vote(s) - ${mention(wolf.id, wolf.name)}`) &&
           !call[1].includes('voted by'),
       ),
     ).toBe(true);

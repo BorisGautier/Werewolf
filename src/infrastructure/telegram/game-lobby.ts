@@ -31,6 +31,7 @@ import { groupBans } from '../monitoring/metrics.js';
 import type { Logger } from '../logging/logger.js';
 import type { GameLoop } from './game-loop.js';
 import { aboutLocaleKey } from './role-info.js';
+import { mentionHtml, mentionOrPlain } from './mention.js';
 import {
   activeLobbies,
   botPlayersAdded,
@@ -54,7 +55,7 @@ interface LobbySession {
   language: string;
   secondsLeft: number;
   forceStarted: boolean;
-  playersJoinedSinceAnnounce: string[];
+  playersJoinedSinceAnnounce: { id: bigint; name: string }[];
   interval: ReturnType<typeof setInterval>;
   /** Non-admins may only /extend the join countdown once each - mirrors `HaveExtended`. */
   haveExtended: Set<bigint>;
@@ -167,8 +168,9 @@ export class GameLobbyManager {
     const messageKey = mode === 'Chaos' ? 'PlayerStartedChaosGame' : 'PlayerStartedGame';
     await this.bot.api.sendMessage(
       chatNumber(chatId),
-      this.t.translate(language, messageKey, starter.name),
+      this.t.translate(language, messageKey, mentionHtml(starter.id, starter.name)),
       {
+        parse_mode: 'HTML',
         reply_markup: keyboard,
       },
     );
@@ -340,7 +342,7 @@ export class GameLobbyManager {
       throw err;
     }
 
-    session.playersJoinedSinceAnnounce.push(uniqueName);
+    session.playersJoinedSinceAnnounce.push({ id: telegramUser.id, name: uniqueName });
     const sentPm = await this.sendToUser(
       telegramUser.id,
       language,
@@ -359,8 +361,8 @@ export class GameLobbyManager {
       await this.bot.api
         .sendMessage(
           chatNumber(chatId),
-          this.t.translate(language, 'MustStartPmFirstGroup', name),
-          keyboard ? { reply_markup: keyboard } : {},
+          this.t.translate(language, 'MustStartPmFirstGroup', mentionHtml(telegramUser.id, name)),
+          { parse_mode: 'HTML', ...(keyboard ? { reply_markup: keyboard } : {}) },
         )
         .catch(() => null);
     }
@@ -467,7 +469,7 @@ export class GameLobbyManager {
         await Promise.all(
           game.players.map(async (p) => {
             const dbPlayer = await this.players.findByTelegramId(p.id);
-            return `${p.name}${donorBadge(dbPlayer?.donationLevel ?? 0)}`;
+            return `${mentionOrPlain(p.id, p.name, p.isBot)}${donorBadge(dbPlayer?.donationLevel ?? 0)}`;
           }),
         )
       ).join('\n') || '-';
@@ -512,7 +514,7 @@ export class GameLobbyManager {
       },
       'Player fled game',
     );
-    await this.send(chatId, language, 'FledGame', player.name);
+    await this.send(chatId, language, 'FledGame', mentionHtml(player.id, player.name));
   }
 
   /**
@@ -533,7 +535,7 @@ export class GameLobbyManager {
         { chatId: chatId.toString(), targetId: target.id.toString(), targetName: target.name },
         'Player smitten by admin',
       );
-      await this.send(chatId, group.language, 'PlayerSmitten', target.name);
+      await this.send(chatId, group.language, 'PlayerSmitten', mentionHtml(target.id, target.name));
     }
     return removed;
   }
@@ -558,7 +560,7 @@ export class GameLobbyManager {
         chatId,
         session.language,
         'HaveJoined',
-        session.playersJoinedSinceAnnounce.join(', '),
+        session.playersJoinedSinceAnnounce.map((p) => mentionHtml(p.id, p.name)).join(', '),
       );
       session.playersJoinedSinceAnnounce = [];
     }
@@ -608,7 +610,7 @@ export class GameLobbyManager {
     );
     const undelivered = session.game.players
       .filter((p, index) => !p.isBot && !delivered[index])
-      .map((p) => p.name);
+      .map((p) => mentionHtml(p.id, p.name));
     if (undelivered.length > 0) {
       pmFailures.inc(undelivered.length);
       const botUsername = this.bot.botInfo?.username ?? '';
@@ -622,7 +624,7 @@ export class GameLobbyManager {
         .sendMessage(
           chatNumber(session.chatId),
           this.t.translate(session.language, 'PMFailed', undelivered.join(', ')),
-          keyboard ? { reply_markup: keyboard } : {},
+          { parse_mode: 'HTML', ...(keyboard ? { reply_markup: keyboard } : {}) },
         )
         .catch(() => null);
     }
@@ -673,7 +675,7 @@ export class GameLobbyManager {
     if (role === ROLE_BIT.Mason) {
       const coMasons = game.players.filter((p) => p.id !== player.id && p.role === ROLE_BIT.Mason);
       if (coMasons.length > 0) {
-        const names = coMasons.map((p) => p.name).join(', ');
+        const names = coMasons.map((p) => mentionOrPlain(p.id, p.name, p.isBot)).join(', ');
         teamInfo =
           language === 'fr'
             ? `\n\n👷 <b>Vos confrères Maçons sont :</b> ${names}`
@@ -692,7 +694,7 @@ export class GameLobbyManager {
         const names = pack
           .map(
             (p) =>
-              `${p.name} (${ROLE_META[roleName(p.role)].emoji} ${this.t.translate(language, `Role_${roleName(p.role)}`)})`,
+              `${mentionOrPlain(p.id, p.name, p.isBot)} (${ROLE_META[roleName(p.role)].emoji} ${this.t.translate(language, `Role_${roleName(p.role)}`)})`,
           )
           .join('\n• ');
         teamInfo =
@@ -708,7 +710,7 @@ export class GameLobbyManager {
     } else if (role === ROLE_BIT.Cultist) {
       const cult = game.players.filter((p) => p.id !== player.id && p.role === ROLE_BIT.Cultist);
       if (cult.length > 0) {
-        const names = cult.map((p) => p.name).join(', ');
+        const names = cult.map((p) => mentionOrPlain(p.id, p.name, p.isBot)).join(', ');
         teamInfo =
           language === 'fr'
             ? `\n\n🔮 <b>Vos Frères du Culte sont :</b> ${names}`
@@ -716,14 +718,20 @@ export class GameLobbyManager {
       }
     } else if (role === ROLE_BIT.Hitman && game.hitmanTargetMap.has(player.id)) {
       const targetId = game.hitmanTargetMap.get(player.id)!;
-      const targetName = game.players.find((p) => p.id === targetId)?.name ?? '???';
+      const targetPlayer = game.players.find((p) => p.id === targetId);
+      const targetName = targetPlayer
+        ? mentionOrPlain(targetPlayer.id, targetPlayer.name, targetPlayer.isBot)
+        : '???';
       teamInfo =
         language === 'fr'
           ? `\n\n🎯 <b>Votre cible d'assassinat est :</b> ${targetName}`
           : `\n\n🎯 <b>Your assassination target is:</b> ${targetName}`;
     } else if (role === ROLE_BIT.Avenger && game.avengerTargetMap.has(player.id)) {
       const targetId = game.avengerTargetMap.get(player.id)!;
-      const targetName = game.players.find((p) => p.id === targetId)?.name ?? '???';
+      const targetPlayer = game.players.find((p) => p.id === targetId);
+      const targetName = targetPlayer
+        ? mentionOrPlain(targetPlayer.id, targetPlayer.name, targetPlayer.isBot)
+        : '???';
       teamInfo =
         language === 'fr'
           ? `\n\n💀 <b>Votre rival juré est :</b> ${targetName}`
@@ -794,7 +802,9 @@ export class GameLobbyManager {
     ...args: unknown[]
   ): Promise<void> {
     try {
-      await this.bot.api.sendMessage(chatNumber(chatId), this.t.translate(language, key, ...args));
+      await this.bot.api.sendMessage(chatNumber(chatId), this.t.translate(language, key, ...args), {
+        parse_mode: 'HTML',
+      });
     } catch (err) {
       this.logger.error(
         { chatId: chatId.toString(), err: (err as Error).message },
@@ -813,6 +823,7 @@ export class GameLobbyManager {
       await this.bot.api.sendMessage(
         chatNumber(telegramId),
         this.t.translate(language, key, ...args),
+        { parse_mode: 'HTML' },
       );
       return true;
     } catch (err) {

@@ -12,9 +12,18 @@ export class AdminAuthManager {
   private adminPasswordHash: string;
 
   constructor(secretKey?: string, adminPassword?: string) {
-    this.secretKey =
-      secretKey ?? process.env.ADMIN_JWT_SECRET ?? 'werewolf-default-super-secret-key-2026';
-    const password = adminPassword ?? process.env.ADMIN_PASSWORD ?? 'admin123';
+    // `JWT_SECRET`/`ADMIN_PASSWORD` are the names actually set in `.env.prod` and documented in
+    // README.md - this used to read a differently-named `ADMIN_JWT_SECRET` that was never set,
+    // silently falling back to a secret hardcoded in this public repo for every deployment.
+    const resolvedSecret = secretKey ?? process.env.JWT_SECRET;
+    const resolvedPassword = adminPassword ?? process.env.ADMIN_PASSWORD;
+    if ((!resolvedSecret || !resolvedPassword) && process.env.NODE_ENV === 'production') {
+      throw new Error(
+        'JWT_SECRET and ADMIN_PASSWORD must both be set in production - refusing to start the admin dashboard with an insecure default.',
+      );
+    }
+    this.secretKey = resolvedSecret ?? 'dev-only-insecure-admin-jwt-secret';
+    const password = resolvedPassword ?? 'admin123';
     this.adminPasswordHash = this.hashPassword(password);
   }
 

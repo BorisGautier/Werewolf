@@ -2,6 +2,14 @@ import type { CommandContext, Context } from 'grammy';
 import type { TournamentRepository } from '../persistence/tournament.repository.js';
 import type { PlayerRepository } from '../persistence/player.repository.js';
 
+/** Neutralizes Telegram legacy-Markdown syntax (`_`, `*`, `` ` ``, `[`) in free-form,
+ * player-chosen text (team/tournament names) before it's dropped into a `parse_mode: 'Markdown'`
+ * message - otherwise a crafted name like `[click me](https://evil)` renders as a real link, or
+ * unbalanced `*`/`_` breaks the whole message ("can't parse entities"). */
+function escapeMarkdown(text: string): string {
+  return text.replace(/([_*`[])/g, String.raw`\$1`);
+}
+
 export class TournamentCommandHandler {
   constructor(
     private readonly tournamentRepo: TournamentRepository,
@@ -36,7 +44,7 @@ export class TournamentCommandHandler {
 
       let text = '🏆 *TOURNOIS OFFICIELS & CLASSEMENT*\n\n';
       for (const t of tournaments) {
-        text += `• *${t.name}* (ID: \`${t.id}\`)\n  Statut: \`${t.status}\` | Manches: ${t.currentRound}/${t.totalRounds}\n\n`;
+        text += `• *${escapeMarkdown(t.name)}* (ID: \`${t.id}\`)\n  Statut: \`${t.status}\` | Manches: ${t.currentRound}/${t.totalRounds}\n\n`;
       }
       text += '💡 *Commandes Utiles :*\n';
       text += '• `/creerequipe <NomDuClan>` : Créer votre équipe\n';
@@ -78,7 +86,7 @@ export class TournamentCommandHandler {
       const team = await this.tournamentRepo.createTeam(teamName, randomCode, userId);
 
       await ctx.reply(
-        `🎉 *Équipe "${team.name}" créée avec succès !*\n\n` +
+        `🎉 *Équipe "${escapeMarkdown(team.name)}" créée avec succès !*\n\n` +
           `👑 Vous êtes le Capitaine.\n` +
           `🔑 *Code de recrutement :* \`${team.code}\`\n\n` +
           `Partagez ce code avec vos 3 coéquipiers pour qu'ils tapent :\n` +
@@ -132,7 +140,7 @@ export class TournamentCommandHandler {
 
       await this.tournamentRepo.joinTeam(team.id, userId);
       await ctx.reply(
-        `✅ *Vous avez rejoint l'équipe "${team.name}" !* (${team.members.length + 1}/4 membres)`,
+        `✅ *Vous avez rejoint l'équipe "${escapeMarkdown(team.name)}" !* (${team.members.length + 1}/4 membres)`,
         {
           parse_mode: 'Markdown',
         },
