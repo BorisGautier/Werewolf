@@ -54,6 +54,16 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       PORT: ${PORT:-4000}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
+      # Required as of the V1 security fix: the admin dashboard's JWT signing secret used to be
+      # read from a differently-named var that was never set here, silently falling back to a
+      # secret hardcoded in the repo. It's now required in production - the app refuses to start
+      # without it rather than repeat that mistake. Must be set in the deploy .env (ENV_FILE_CONTENT).
+      JWT_SECRET: ${JWT_SECRET}
+      # Optional: require `Authorization: Bearer <token>` on the Prometheus /metrics endpoint.
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
+      # Optional: comma-separated origins allowed to call the admin API cross-origin. Leave unset
+      # unless the dashboard is ever served from a different origin than this app itself.
+      ADMIN_ALLOWED_ORIGINS: ${ADMIN_ALLOWED_ORIGINS:-}
       SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
       MAILGUN_API_KEY: ${MAILGUN_API_KEY:-}
       MAILGUN_DOMAIN: ${MAILGUN_DOMAIN:-}

@@ -1,4 +1,4 @@
-import { exec } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import * as os from 'node:os';
 import { Bot, GrammyError, InlineKeyboard, type Context } from 'grammy';
 import { GameManager } from '../../application/game-manager.js';
@@ -8,7 +8,6 @@ import type { Translator } from '../i18n/translator.js';
 import type { GameMode } from '../../domain/game/game-mode.js';
 import { getRankForPoints } from '../../domain/scoring/rank.js';
 import { TITLE_CATALOG, getTitleById } from '../../domain/titles/title.js';
-import { LAST_GAZETTES_BY_CHAT } from '../../domain/gazette/gazette-generator.js';
 import { AchievementRepository } from '../persistence/achievement.repository.js';
 import { AdminRepository } from '../persistence/admin.repository.js';
 import { GameRepository } from '../persistence/game.repository.js';
@@ -73,6 +72,7 @@ export async function isGroupAdminOrAnonymous(ctx: Context): Promise<boolean> {
 import { ReportRepository } from '../persistence/report.repository.js';
 import { TournamentRepository } from '../persistence/tournament.repository.js';
 import { TournamentCommandHandler } from './tournament-commands.js';
+import { escapeHtml, mentionHtml, mentionOrPlain } from './mention.js';
 
 export interface BotDependencies {
   translator: Translator;
@@ -91,6 +91,13 @@ export interface BotDependencies {
 }
 
 const INVITE_LINK_PATTERN = /^(https?:\/\/)?t(elegram)?\.me\/(\+|joinchat\/)([a-zA-Z0-9_-]+)$/;
+
+/** The one place `DEV_USER_IDS` gets checked - every dev-only command below calls this instead of
+ * redefining its own `env.devUserIds.includes(...)` closure, so a new dev-only command can't miss
+ * the check the way `/botgame`/`/addbots` originally did. */
+function isDevUser(env: Env, telegramId: bigint): boolean {
+  return env.devUserIds.includes(telegramId);
+}
 
 /**
  * Composition root for the Telegram bot itself.
@@ -245,7 +252,7 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
   });
 
   bot.command(['testscenarios', 'testsuite', 'auditsuite'], async (ctx) => {
-    if (!ctx.from || !env.devUserIds.includes(BigInt(ctx.from.id))) return;
+    if (!ctx.from || !isDevUser(env, BigInt(ctx.from.id))) return;
     await ctx.reply('🧪 Running Automated Scenario Audit Suite...');
     const runner = new (await import('../testing/scenario-runner.js')).ScenarioRunner();
     const results = await runner.runAllScenarios();
@@ -257,7 +264,7 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
 
   bot.command('testgif', async (ctx) => {
     if (!ctx.from) return;
-    if (!env.devUserIds.includes(BigInt(ctx.from.id))) return;
+    if (!isDevUser(env, BigInt(ctx.from.id))) return;
     const category = (
       (ctx.match as string | undefined) ?? ''
     ).trim() as import('../persistence/gif-pack.repository.js').GifCategory;
@@ -466,8 +473,7 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
   });
 
   bot.command('gazette', async (ctx) => {
-    const chatId = ctx.chat?.id ? ctx.chat.id.toString() : '';
-    const gazette = LAST_GAZETTES_BY_CHAT.get(chatId);
+    const gazette = ctx.chat ? gameLoop.getLastGazette(BigInt(ctx.chat.id)) : undefined;
     if (!gazette) {
       await ctx.reply(
         '📜 <i>Aucune gazette récente pour ce groupe. Jouez une partie pour éditer la première gazette !</i>',
@@ -598,9 +604,11 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     const claimedRole = text.charAt(0).toUpperCase() + text.slice(1);
     game.claimsMap.set(userId, claimedRole);
 
+    const playerMention = mentionHtml(userId, player.name);
+    const safeClaimedRole = escapeHtml(claimedRole);
     const announcement = isFr
-      ? `📢 <b>CLAIM :</b> <a href="tg://user?id=${userId}">${player.name}</a> affirme être <b>${claimedRole}</b> !`
-      : `📢 <b>CLAIM:</b> <a href="tg://user?id=${userId}">${player.name}</a> claims to be <b>${claimedRole}</b>!`;
+      ? `📢 <b>CLAIM :</b> ${playerMention} affirme être <b>${safeClaimedRole}</b> !`
+      : `📢 <b>CLAIM:</b> ${playerMention} claims to be <b>${safeClaimedRole}</b>!`;
 
     await ctx.api.sendMessage(Number(game.chatId), announcement, { parse_mode: 'HTML' });
   });
@@ -621,10 +629,11 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     for (const p of game.players) {
       const claim = game.claimsMap.get(p.id);
       const status = p.isDead ? '💀 mort' : '🙂 en vie';
+      const pMention = mentionOrPlain(p.id, p.name, p.isBot);
       if (claim) {
-        lines.push(`• <b>${p.name}</b> (${status}) : <b>${claim}</b>`);
+        lines.push(`• <b>${pMention}</b> (${status}) : <b>${escapeHtml(claim)}</b>`);
       } else {
-        lines.push(`• <b>${p.name}</b> (${status}) : <i>(Aucun claim)</i>`);
+        lines.push(`• <b>${pMention}</b> (${status}) : <i>(Aucun claim)</i>`);
       }
     }
 
@@ -692,11 +701,11 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     const alertMsg = deps.translator.translate(
       'en',
       'ReportAdminNotification',
-      reporterName,
+      mentionHtml(reporterId, reporterName),
       reporterId.toString(),
-      reportedName,
+      mentionHtml(reportedId, reportedName),
       reportedId.toString(),
-      reason,
+      escapeHtml(reason),
     );
 
     for (const adminId of adminIds) {
@@ -707,7 +716,10 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
       }
     }
 
-    await ctx.reply(deps.translator.translate(language, 'ReportReceived', reportedName));
+    await ctx.reply(
+      deps.translator.translate(language, 'ReportReceived', mentionHtml(reportedId, reportedName)),
+      { parse_mode: 'HTML' },
+    );
   });
 
   bot.command('accuse', async (ctx) => {
@@ -721,9 +733,22 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     }
 
     const parts = text.split(' ');
-    const accused = parts[0]!;
-    const motive = parts.slice(1).join(' ').trim() || undefined;
-    const accuser = ctx.from.first_name;
+    const accusedRaw = parts[0]!;
+    const motive = parts.slice(1).join(' ').trim()
+      ? escapeHtml(parts.slice(1).join(' ').trim())
+      : undefined;
+    const accuser = mentionHtml(
+      ctx.from.id,
+      `${ctx.from.first_name} ${ctx.from.last_name ?? ''}`.trim(),
+    );
+
+    let accused = escapeHtml(accusedRaw);
+    if (accusedRaw.startsWith('@')) {
+      const targetPlayer = await deps.playerRepository.findByUsername(accusedRaw.slice(1));
+      if (targetPlayer) {
+        accused = mentionHtml(targetPlayer.telegramId, targetPlayer.displayName ?? accusedRaw);
+      }
+    }
 
     const templates = [
       `🎭 <b>TIRADE D'ACCUSATION SPECTACULAIRE !</b> 📜\n\n<i>${accuser} pointe un doigt accusateur et tremblant vers <b>${accused}</b> !</i>\n\n💬 « Regardez-le ! Ses mains tremblent comme les feuilles d'un saule pleureur ! ${motive ? `Il affirme que "${motive}", mais ` : ''}Hier soir, je l'ai vu rôder près de la porcherie... <b>${accused} est un Loup-Garou, c'est une certitude !</b> » 🐺🔥`,
@@ -750,9 +775,15 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
 
     const lines = ['⚠️ <b>Pending Player Reports:</b>\n'];
     for (const r of pending) {
-      const reporter = r.reporter?.displayName ?? r.reporterId.toString();
-      const reported = r.reported?.displayName ?? r.reportedId.toString();
-      lines.push(`• <b>#${r.id}</b>: ${reporter} ➡️ ${reported} - <i>${r.reason}</i>`);
+      const reporter = mentionHtml(
+        r.reporterId,
+        r.reporter?.displayName ?? r.reporterId.toString(),
+      );
+      const reported = mentionHtml(
+        r.reportedId,
+        r.reported?.displayName ?? r.reportedId.toString(),
+      );
+      lines.push(`• <b>#${r.id}</b>: ${reporter} ➡️ ${reported} - <i>${escapeHtml(r.reason)}</i>`);
     }
 
     await ctx.reply(lines.join('\n'), { parse_mode: 'HTML' });
@@ -924,8 +955,23 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
   // Every night/day/lynch menu button (see game-loop.ts) - registered after the join button so
   // that more specific handler only intercepts its own exact callback data, and this one gets
   // everything else.
+  // Callback buttons (night/day/lynch menus) aren't covered by SpamGuard (that only watches
+  // slash commands) - a scripted client mashing a button can otherwise fire unlimited
+  // `handleCallback` calls per second. This is a silent per-user cooldown, not a ban: it just
+  // drops taps that arrive faster than a human plausibly taps, while still acknowledging the
+  // callback so the Telegram client's loading spinner doesn't hang.
+  const lastCallbackAt = new Map<bigint, number>();
+  const CALLBACK_COOLDOWN_MS = 350;
+
   bot.on('callback_query:data', async (ctx) => {
     if (!ctx.from || !ctx.chat) return;
+    const callerId = BigInt(ctx.from.id);
+    const now = Date.now();
+    if (now - (lastCallbackAt.get(callerId) ?? 0) < CALLBACK_COOLDOWN_MS) {
+      await ctx.answerCallbackQuery().catch(() => null);
+      return;
+    }
+    lastCallbackAt.set(callerId, now);
     const text = await gameLoop.handleCallback(
       BigInt(ctx.from.id),
       BigInt(ctx.chat.id),
@@ -961,7 +1007,11 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
   });
 
   bot.command(['addbots', 'addbot'], async (ctx) => {
-    if (!ctx.chat || ctx.chat.type === 'private') return;
+    if (!ctx.chat || ctx.chat.type === 'private' || !ctx.from) return;
+    if (!isDevUser(env, BigInt(ctx.from.id))) {
+      await ctx.reply('⛔ Cette commande est réservée aux développeurs du bot.');
+      return;
+    }
     const count = parseInt((ctx.match as string | undefined) ?? '', 10) || 4;
     const added = await lobby.addBotPlayers(BigInt(ctx.chat.id), count);
     if (added > 0) {
@@ -977,6 +1027,10 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
 
   bot.command('botgame', async (ctx) => {
     if (!ctx.chat || ctx.chat.type === 'private' || !ctx.from) return;
+    if (!isDevUser(env, BigInt(ctx.from.id))) {
+      await ctx.reply('⛔ Cette commande est réservée aux développeurs du bot.');
+      return;
+    }
     const name = `${ctx.from.first_name} ${ctx.from.last_name ?? ''}`.trim();
     await lobby.startGame(
       BigInt(ctx.chat.id),
@@ -1307,7 +1361,14 @@ function registerModerationCommands(
       await deps.adminRepository.ban(target.id, reason, BigInt(ctx.from.id));
       bansApplied.inc();
       await lobby.smite(BigInt(ctx.chat.id), target);
-      await ctx.reply(deps.translator.translate(group.language, 'BanConfirmed', target.name));
+      await ctx.reply(
+        deps.translator.translate(
+          group.language,
+          'BanConfirmed',
+          mentionHtml(target.id, target.name),
+        ),
+        { parse_mode: 'HTML' },
+      );
     }
   });
 
@@ -1335,7 +1396,12 @@ function registerModerationCommands(
     for (const target of targets) {
       const unbanned = await deps.adminRepository.unban(target.id);
       const key = unbanned ? 'UnbanConfirmed' : 'UnbanNotFound';
-      await ctx.reply(deps.translator.translate(group.language, key, target.name));
+      await ctx.reply(
+        deps.translator.translate(group.language, key, mentionHtml(target.id, target.name)),
+        {
+          parse_mode: 'HTML',
+        },
+      );
     }
   });
 
@@ -1426,7 +1492,14 @@ function registerModerationCommands(
 
     const ban = await deps.adminRepository.getBan(target.id);
     if (!ban) {
-      await ctx.reply(deps.translator.translate(group.language, 'GetBanNotBanned', target.name));
+      await ctx.reply(
+        deps.translator.translate(
+          group.language,
+          'GetBanNotBanned',
+          mentionHtml(target.id, target.name),
+        ),
+        { parse_mode: 'HTML' },
+      );
       return;
     }
     const expires = ban.expiresAt
@@ -1439,12 +1512,13 @@ function registerModerationCommands(
       deps.translator.translate(
         group.language,
         'GetBanStatus',
-        target.name,
-        ban.reason,
+        mentionHtml(target.id, target.name),
+        escapeHtml(ban.reason),
         ban.bannedBy?.toString() ?? '?',
         expires,
         firstSeen,
       ),
+      { parse_mode: 'HTML' },
     );
   });
 
@@ -1481,7 +1555,7 @@ function registerModerationCommands(
       ? deps.translator.translate(
           group.language,
           'UserProfileBanned',
-          ban.reason,
+          escapeHtml(ban.reason),
           ban.expiresAt
             ? ban.expiresAt.toISOString()
             : deps.translator.translate(group.language, 'GetBanPermanent'),
@@ -1492,7 +1566,7 @@ function registerModerationCommands(
       deps.translator.translate(
         group.language,
         'UserProfile',
-        player.displayName ?? target.name,
+        mentionHtml(target.id, player.displayName ?? target.name),
         player.username ?? '-',
         player.languageCode ?? '-',
         `${played} (won: ${won})`,
@@ -1501,6 +1575,7 @@ function registerModerationCommands(
         player.tempBanCount.toString(),
         banStatus,
       ),
+      { parse_mode: 'HTML' },
     );
   });
 }
@@ -1510,7 +1585,7 @@ async function isGlobalAdminCheck(
   deps: BotDependencies,
   telegramId: bigint,
 ): Promise<boolean> {
-  if (env.devUserIds.includes(telegramId)) return true;
+  if (isDevUser(env, telegramId)) return true;
   return deps.adminRepository.isGlobalAdmin(telegramId);
 }
 
@@ -1583,13 +1658,25 @@ function registerAchievementCommands(bot: Bot, env: Env, deps: BotDependencies):
       const added = await deps.achievementRepository.unlock(target.id, code);
       const key = added ? 'AchAdded' : 'AchAlreadyHad';
       await ctx.reply(
-        deps.translator.translate(language, key, ACHIEVEMENTS[code].name, target.name),
+        deps.translator.translate(
+          language,
+          key,
+          ACHIEVEMENTS[code].name,
+          mentionHtml(target.id, target.name),
+        ),
+        { parse_mode: 'HTML' },
       );
     } else {
       const removed = await deps.achievementRepository.remove(target.id, code);
       const key = removed ? 'AchRemoved' : 'AchDidntHave';
       await ctx.reply(
-        deps.translator.translate(language, key, ACHIEVEMENTS[code].name, target.name),
+        deps.translator.translate(
+          language,
+          key,
+          ACHIEVEMENTS[code].name,
+          mentionHtml(target.id, target.name),
+        ),
+        { parse_mode: 'HTML' },
       );
     }
   });
@@ -1662,7 +1749,7 @@ function registerDevCommands(
   maintenance: { on: boolean },
   startTime: Date,
 ): void {
-  const isDev = (telegramId: bigint) => env.devUserIds.includes(telegramId);
+  const isDev = (telegramId: bigint) => isDevUser(env, telegramId);
 
   bot.command('leavegroup', async (ctx) => {
     if (!ctx.from) return;
@@ -1802,12 +1889,24 @@ function registerDevCommands(
     await ctx.reply(
       'Pulling latest code and rebuilding - the process will restart shortly if this succeeds...',
     );
-    exec('git pull && npm run build', { cwd: process.cwd() }, (err) => {
-      if (err) {
-        logger.error({ err }, 'Update failed');
+    // execFile (argument array, no shell) instead of exec('git pull && npm run build') - no
+    // string is ever interpreted by a shell, so there's no metacharacter-injection surface even
+    // in principle, regardless of whether user input could ever reach this (it can't today).
+    execFile('git', ['pull'], { cwd: process.cwd() }, (pullErr) => {
+      if (pullErr) {
+        logger.error({ err: pullErr }, 'Update failed: git pull');
         return;
       }
-      process.exit(0);
+      // npm's own executable is a .cmd/.ps1 shim on Windows, which execFile can't launch
+      // directly without a shell - `shell: true` is safe here since every argument is a static
+      // hardcoded string, never user input.
+      execFile('npm', ['run', 'build'], { cwd: process.cwd(), shell: true }, (buildErr) => {
+        if (buildErr) {
+          logger.error({ err: buildErr }, 'Update failed: npm run build');
+          return;
+        }
+        process.exit(0);
+      });
     });
   });
 
@@ -1841,7 +1940,7 @@ function registerDevCommands(
  * submission replaces the need for it).
  */
 function registerGifCommands(bot: Bot, env: Env, deps: BotDependencies): void {
-  const isDev = (telegramId: bigint) => env.devUserIds.includes(telegramId);
+  const isDev = (telegramId: bigint) => isDevUser(env, telegramId);
 
   bot.command('customgif', async (ctx) => {
     if (!ctx.from) return;
@@ -1985,7 +2084,7 @@ const DONATE_PAYLOAD_PREFIX = 'donate:';
  * unlocks the custom gif pack feature (see `registerGifCommands`), 2 and 3 are cosmetic-only.
  */
 function registerDonationCommands(bot: Bot, env: Env, deps: BotDependencies): void {
-  const isDev = (telegramId: bigint) => env.devUserIds.includes(telegramId);
+  const isDev = (telegramId: bigint) => isDevUser(env, telegramId);
 
   bot.command('donate', async (ctx) => {
     if (!ctx.from || !ctx.chat) return;

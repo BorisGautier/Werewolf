@@ -104,4 +104,101 @@ describe('AdminServer REST API & Dashboard', () => {
     // Returns 400 when Prisma DB is not wired into isolated test server instance
     expect([200, 400]).toContain(res.status);
   });
+
+  it('rejects toggling maintenance mode without a token', async () => {
+    const res = await fetch('http://localhost:4099/api/admin/maintenance', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: true }),
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it('toggles maintenance mode with a valid token', async () => {
+    const maintenance = { on: false };
+    const maintenanceServer = new AdminServer({
+      port: 4098,
+      authManager,
+      maintenance,
+    });
+    await maintenanceServer.start();
+    try {
+      const token = authManager.generateToken('admin');
+      const res = await fetch('http://localhost:4098/api/admin/maintenance', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: true }),
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as any;
+      expect(body.maintenance).toBe(true);
+      expect(maintenance.on).toBe(true);
+    } finally {
+      await maintenanceServer.stop();
+    }
+  });
+
+  it('does not send an Access-Control-Allow-Origin header for an unlisted origin', async () => {
+    const res = await fetch('http://localhost:4099/api/admin/stats', {
+      headers: {
+        Authorization: `Bearer ${authManager.generateToken('admin')}`,
+        Origin: 'https://evil.example.com',
+      },
+    });
+    expect(res.headers.get('access-control-allow-origin')).toBeNull();
+  });
+
+  it('hides internal error details from 500 responses', async () => {
+    const res = await fetch('http://localhost:4099/api/admin/groups//ban', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${authManager.generateToken('admin')}`,
+        'Content-Type': 'application/json',
+      },
+      body: 'not valid json{{{',
+    });
+    if (res.status === 500) {
+      const body = (await res.json()) as any;
+      expect(body.error).toBe('Internal server error');
+    } else {
+      expect([400, 404]).toContain(res.status);
+    }
+  });
+});
+
+describe('AdminAuthManager production safety', () => {
+  it('throws when JWT_SECRET/ADMIN_PASSWORD are unset in production', async () => {
+    const prevEnv = process.env.NODE_ENV;
+    const prevSecret = process.env.JWT_SECRET;
+    const prevPassword = process.env.ADMIN_PASSWORD;
+    process.env.NODE_ENV = 'production';
+    delete process.env.JWT_SECRET;
+    delete process.env.ADMIN_PASSWORD;
+    try {
+      expect(() => new AdminAuthManager()).toThrow();
+    } finally {
+      process.env.NODE_ENV = prevEnv;
+      if (prevSecret === undefined) delete process.env.JWT_SECRET;
+      else process.env.JWT_SECRET = prevSecret;
+      if (prevPassword === undefined) delete process.env.ADMIN_PASSWORD;
+      else process.env.ADMIN_PASSWORD = prevPassword;
+    }
+  });
+
+  it('reads the JWT_SECRET/ADMIN_PASSWORD env vars actually used in deployment', async () => {
+    const prevSecret = process.env.JWT_SECRET;
+    const prevPassword = process.env.ADMIN_PASSWORD;
+    process.env.JWT_SECRET = 'env-secret';
+    process.env.ADMIN_PASSWORD = 'env-password';
+    try {
+      const manager = new AdminAuthManager();
+      expect(manager.verifyPassword('env-password')).toBe(true);
+      expect(manager.verifyPassword('wrong')).toBe(false);
+    } finally {
+      if (prevSecret === undefined) delete process.env.JWT_SECRET;
+      else process.env.JWT_SECRET = prevSecret;
+      if (prevPassword === undefined) delete process.env.ADMIN_PASSWORD;
+      else process.env.ADMIN_PASSWORD = prevPassword;
+    }
+  });
 });

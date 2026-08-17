@@ -15,6 +15,7 @@ import { findById, type Player } from '../../domain/game/player.js';
 import type { FreezeFlavor, GameEvent } from '../../domain/game/game-event.js';
 import type { Team } from '../../domain/game/team.js';
 import { deathFlavorKey } from './death-messages.js';
+import { mentionOrPlain } from './mention.js';
 
 /** The Snow Wolf's target's own "you woke up frozen" locale key, keyed by `FreezeFlavor`. */
 const FREEZE_FLAVOR_KEY: Record<FreezeFlavor, string> = {
@@ -72,7 +73,9 @@ function displayRole(
 }
 
 function nameOf(players: readonly Player[], id: bigint): string {
-  return findById(players, id)?.name ?? '???';
+  const player = findById(players, id);
+  if (!player) return '???';
+  return mentionOrPlain(player.id, player.name, player.isBot);
 }
 
 /** @param showRolesOnDeath mirrors the group's `ShowRolesDeath` config flag. */

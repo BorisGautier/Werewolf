@@ -13,14 +13,14 @@ describe('AiPlayerAgent', () => {
         {
           senderId: 1001n,
           senderName: 'Marc',
-          text: 'Alex est très suspect aujourd\'hui !',
+          text: "Alex est très suspect aujourd'hui !",
           timestamp: Date.now(),
         },
       ],
       targetMessage: {
         senderId: 1001n,
         senderName: 'Marc',
-        text: 'Alex est très suspect aujourd\'hui !',
+        text: "Alex est très suspect aujourd'hui !",
         timestamp: Date.now(),
       },
       livingPlayerNames: ['Marc', '🤖 Alex (IA)', '🤖 Beatrice (IA)'],
