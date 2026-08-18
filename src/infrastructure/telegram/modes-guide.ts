@@ -36,7 +36,7 @@ const MODES_DATA_FR: Record<GameMode, ModeInfo> = {
     atmosphere: 'Ultra-agressif et hécatombe rapide',
     description:
       "Taux maximal de rôles tueurs et armés. Les nuits sont extrêmement mortelles et les parties s'enchaînent à toute vitesse !",
-    keyRoles: 'Tueur en série, Incendiaire, Loup Alpha, Franc-Tireur, Chasseur, Chimiste.',
+    keyRoles: 'Tueur en série, Pyromane, Loup Alpha, Franc-Tireur, Chasseur, Chimiste.',
   },
   DarkMagic: {
     emoji: '🔮',
@@ -45,7 +45,7 @@ const MODES_DATA_FR: Record<GameMode, ModeInfo> = {
     atmosphere: 'Sortilèges, résurrections et mystique',
     description:
       "Les forces occultes dominent le village. Les pouvoirs magiques et divinatoires s'affrontent sous la lune.",
-    keyRoles: 'Sorcier, Chimiste, Nécromancien, Voyante, Oracle, Augure, Miroir Réflecteur.',
+    keyRoles: 'Sorcière, Chimiste, Nécromancien, Voyante, Oracle, Augure, Miroir Réflecteur.',
   },
   WolfPack: {
     emoji: '🐺',
@@ -81,7 +81,7 @@ const MODES_DATA_FR: Record<GameMode, ModeInfo> = {
     atmosphere: 'Chacun pour soi, bluff et coups bas',
     description:
       "Concentration maximale de rôles neutres solitaires. Aucune alliance n'est sûre, le chacun pour soi est de mise !",
-    keyRoles: 'Tanneur, Bouffon, Assassin à Gages, Vengeur, Voleur, Incendiaire.',
+    keyRoles: 'Tanneur, Bouffon, Assassin à Gages, Vengeur, Voleur, Pyromane.',
   },
   HolyWar: {
     emoji: '⚔️',

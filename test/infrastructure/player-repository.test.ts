@@ -203,3 +203,41 @@ describe('PlayerRepository - getPlayerRank', () => {
     expect(result).toEqual({ rank: 5, points: 50, gamesPlayed: 3, gamesWon: 1 });
   });
 });
+
+describe('PlayerRepository - getTopPlayers/getPlayerRank never exclude real players by id', () => {
+  // Regression test: an earlier "defense in depth" filter (`telegramId < 990000n`, meant to keep
+  // synthetic bot rows out) actually excluded almost every *real* player instead - modern Telegram
+  // user ids commonly run into the hundreds of millions to low billions, so this modern-looking id
+  // is exactly the kind of value that filter used to wrongly treat as a bot.
+  const MODERN_REAL_TELEGRAM_ID = 5_678_901_234n;
+
+  it('getTopPlayers does not filter by telegramId at all', async () => {
+    const player = makePlayer({ telegramId: MODERN_REAL_TELEGRAM_ID, points: 100 });
+    const findMany = vi.fn(async (_args: { where?: Record<string, unknown> }) => [player]);
+    const prisma = { player: { findMany } } as AnyPrisma;
+    const repo = new PlayerRepository(prisma);
+
+    const result = await repo.getTopPlayers(10);
+
+    expect(result).toEqual([player]);
+    const call = findMany.mock.calls[0]![0];
+    expect(call.where ?? {}).not.toHaveProperty('telegramId');
+  });
+
+  it('getPlayerRank counts every higher-scoring player, not just ones below an id ceiling', async () => {
+    const count = vi.fn(async (_args: { where?: Record<string, unknown> }) => 3);
+    const prisma = {
+      player: {
+        findUnique: vi.fn(async () => ({ points: 50, gamesPlayed: 3, gamesWon: 1 })),
+        count,
+      },
+    } as AnyPrisma;
+    const repo = new PlayerRepository(prisma);
+
+    const result = await repo.getPlayerRank(MODERN_REAL_TELEGRAM_ID);
+
+    expect(result).toEqual({ rank: 4, points: 50, gamesPlayed: 3, gamesWon: 1 });
+    const call = count.mock.calls[0]![0];
+    expect(call.where).not.toHaveProperty('telegramId');
+  });
+});

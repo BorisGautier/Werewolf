@@ -7,7 +7,6 @@ import type { GameManager } from '../../application/game-manager.js';
 import type { Logger } from '../logging/logger.js';
 import { AdminAuthManager } from './admin-auth.js';
 import { DatabaseBackupManager } from '../persistence/db-backup.js';
-import { SYNTHETIC_BOT_ID_FLOOR } from '../../domain/game/player.js';
 import {
   TournamentRepository,
   type TournamentStatus,
@@ -158,9 +157,11 @@ export class AdminServer {
         let totalGroups = 0;
         if (this.prisma) {
           try {
-            totalPlayers = await this.prisma.player.count({
-              where: { telegramId: { lt: SYNTHETIC_BOT_ID_FLOOR } },
-            });
+            // No bot-id filter here: bots are synthetic, in-memory-only Player rows are never
+            // persisted for them in the first place (see PlayerRepository.getTopPlayers's doc
+            // comment) - a numeric id ceiling would only end up excluding real players instead,
+            // since modern Telegram user ids routinely exceed any such threshold.
+            totalPlayers = await this.prisma.player.count();
             totalGroups = await this.prisma.group.count();
           } catch {
             // ignore database count errors in stats
@@ -297,9 +298,7 @@ export class AdminServer {
     try {
       activeGamesCount = this.gameManager ? this.gameManager.size : 0;
       if (this.prisma) {
-        totalPlayers = await this.prisma.player
-          .count({ where: { telegramId: { lt: SYNTHETIC_BOT_ID_FLOOR } } })
-          .catch(() => 0);
+        totalPlayers = await this.prisma.player.count().catch(() => 0);
         totalGroups = await this.prisma.group.count().catch(() => 0);
         pendingGroups = await this.prisma.group
           .count({ where: { isApproved: false } })
@@ -386,17 +385,14 @@ export class AdminServer {
     try {
       const search = url.searchParams.get('q') ?? '';
       const players = await this.prisma.player.findMany({
-        where: {
-          telegramId: { lt: SYNTHETIC_BOT_ID_FLOOR },
-          ...(search
-            ? {
-                OR: [
-                  { username: { contains: search, mode: 'insensitive' } },
-                  { displayName: { contains: search, mode: 'insensitive' } },
-                ],
-              }
-            : {}),
-        },
+        where: search
+          ? {
+              OR: [
+                { username: { contains: search, mode: 'insensitive' } },
+                { displayName: { contains: search, mode: 'insensitive' } },
+              ],
+            }
+          : {},
         take: 50,
         orderBy: { createdAt: 'desc' },
       });
@@ -1677,16 +1673,16 @@ export class AdminServer {
     const sampleRoles = [
       { name: "Voyante", emoji: "🔮", team: "village", desc: "Découvre le rôle exact d'un joueur chaque nuit." },
       { name: "Loup-Garou", emoji: "🐺", team: "wolves", desc: "Se concerte avec la meute pour dévorer un villageois chaque nuit." },
-      { name: "Sorcière", emoji: "🧪", team: "village", desc: "Possède une potion de guérison et une potion de poison mortel." },
-      { name: "Chasseur", emoji: "🏹", team: "village", desc: "S'il meurt, il tire une dernière balle pour éliminer un joueur." },
+      { name: "Sorcière", emoji: "🔮", team: "village", desc: "Sonde un joueur chaque nuit pour savoir s'il est Loup ou Voyante." },
+      { name: "Chasseur", emoji: "🎯", team: "village", desc: "S'il meurt, il tire une dernière balle pour éliminer un joueur." },
       { name: "Augure", emoji: "👁️", team: "village", desc: "Révèle chaque nuit un rôle qui n'est PAS présent dans la partie." },
-      { name: "Arsonist", emoji: "🔥", team: "solo", desc: "Asperge les joueurs d'essence puis les brûle tous simultanément." },
+      { name: "Pyromane", emoji: "🔥", team: "solo", desc: "Asperge les joueurs d'essence puis les brûle tous simultanément." },
       { name: "Loup des Neiges", emoji: "❄️", team: "wolves", desc: "Gèle une cible pendant la nuit, annulant toute son action." },
-      { name: "Chasseur de Cultistes", emoji: "🗡️", team: "solo", desc: "Traque et liquide les membres de la secte la nuit." },
+      { name: "Chasseur de Cultistes", emoji: "🗡️", team: "village", desc: "Traque et liquide les membres de la secte la nuit." },
       { name: "Doppelganger", emoji: "🎭", team: "solo", desc: "Sélectionne un joueur et hérite de son rôle lorsqu'il meurt." },
       { name: "Ange Gardien", emoji: "👼", team: "village", desc: "Protège un joueur contre les attaques nocturnes des loups." },
       { name: "Grand Méchant Loup", emoji: "🐺", team: "wolves", desc: "Peut dévorer une deuxième victime tant qu'aucun loup n'est mort." },
-      { name: "Tanner (L'Idiot)", emoji: "🤡", team: "solo", desc: "Gagne immédiatement la partie s'il réussit à se faire lynchera par le village !" }
+      { name: "Tanner (L'Idiot)", emoji: "🤡", team: "solo", desc: "Gagne immédiatement la partie s'il réussit à se faire lyncher par le village !" }
     ];
 
     function renderRoles(filter = 'all') {

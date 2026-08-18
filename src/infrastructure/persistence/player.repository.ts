@@ -1,6 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
 import { getRankForPoints, type RankTier } from '../../domain/scoring/rank.js';
-import { SYNTHETIC_BOT_ID_FLOOR } from '../../domain/game/player.js';
 import {
   dbErrors,
   dbQueries,
@@ -220,14 +219,20 @@ export class PlayerRepository {
     });
   }
 
-  /** Returns top ranked players ordered by points descending. */
+  /**
+   * Returns top ranked players ordered by points descending.
+   *
+   * Deliberately doesn't filter by `telegramId` to exclude bots - a real Telegram user id is a
+   * 64-bit number that today commonly runs into the hundreds of millions to low billions (accounts
+   * have grown well past the 32-bit range Telegram started with), so any small numeric ceiling
+   * meant to catch "synthetic-looking" ids would exclude the majority of real players' actual ids
+   * along with it. `awardPoints()` is the real, reliable guard - it's only ever called for players
+   * whose in-memory `Player.isBot` flag is false, so a bot can never end up with a DB row or points
+   * here in the first place; there's nothing left for a query-side filter to defend against.
+   */
   async getTopPlayers(limit = 10) {
     return this.prisma.player.findMany({
       take: limit,
-      // Defense in depth against a synthetic bot id ever having a Player row (see
-      // `SYNTHETIC_BOT_ID_FLOOR`'s doc comment) - `awardPoints` is the actual place that's
-      // guarded against creating one, this just keeps the leaderboard clean even so.
-      where: { telegramId: { lt: SYNTHETIC_BOT_ID_FLOOR } },
       orderBy: [{ points: 'desc' }, { gamesWon: 'desc' }],
       select: {
         id: true,
@@ -254,7 +259,7 @@ export class PlayerRepository {
     if (!target) return null;
 
     const higherCount = await this.prisma.player.count({
-      where: { points: { gt: target.points }, telegramId: { lt: SYNTHETIC_BOT_ID_FLOOR } },
+      where: { points: { gt: target.points } },
     });
     return {
       rank: higherCount + 1,
