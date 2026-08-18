@@ -553,7 +553,9 @@ export function describeEvent(
       // Secret, like every other wolf-subtype ability that isn't the shared pack kill - only the
       // Trapper Wolf learns their ambush is armed; the trapped player and the group learn nothing
       // unless someone actually walks into it.
-      return [{ audience: event.trapperId, key: 'TrapperWolfTrapSetMsg', args: [name(event.targetId)] }];
+      return [
+        { audience: event.trapperId, key: 'TrapperWolfTrapSetMsg', args: [name(event.targetId)] },
+      ];
 
     case 'ChameleonDisguiseChosen':
       // PM-only confirmation - the disguise itself is invisible to everyone else by design; only
@@ -571,7 +573,9 @@ export function describeEvent(
       // PM-only, like the other wolf-subtype ability confirmations - the public death itself (with
       // its own `ViperPoisonPublic` flavor, see death-messages.ts) doesn't arrive until "sunset",
       // via the ordinary `PlayerDied('ViperPoison')` event this one has no connection to on the wire.
-      return [{ audience: event.viperId, key: 'ViperWolfPoisonedMsg', args: [name(event.targetId)] }];
+      return [
+        { audience: event.viperId, key: 'ViperWolfPoisonedMsg', args: [name(event.targetId)] },
+      ];
 
     case 'HowlerWolfHowled':
       // PM-only to the Howler themselves - the group learns the *effect* (a neutral, identity-free

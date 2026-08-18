@@ -30,7 +30,7 @@ describe('resolveChameleonWolfNight', () => {
     expect(resolveChameleonWolfNight([selfTargeting, target])).toEqual([]);
   });
 
-  it('presents the chosen target\'s role, and is not gated by hasUsedAbility (repeatable every night)', () => {
+  it("presents the chosen target's role, and is not gated by hasUsedAbility (repeatable every night)", () => {
     const chameleon = createPlayer(1n, 'CW', ROLE_BIT.ChameleonWolf, 'Wolf');
     const seer = createPlayer(2n, 'S', ROLE_BIT.Seer, 'Village');
     chameleon.choice3 = seer.id;
@@ -81,7 +81,13 @@ describe('resolveClairvoyanceNight - Chameleon Wolf interaction', () => {
     const chameleon = createPlayer(2n, 'CW', ROLE_BIT.ChameleonWolf, 'Wolf');
     seer.choice = chameleon.id;
 
-    const events = resolveClairvoyanceNight([seer, chameleon], [], () => 0.99, new Map(), new Map());
+    const events = resolveClairvoyanceNight(
+      [seer, chameleon],
+      [],
+      () => 0.99,
+      new Map(),
+      new Map(),
+    );
 
     const vision = events.find((e) => e.type === 'SeerVision');
     expect(vision).toMatchObject({ targetId: chameleon.id, shownRole: ROLE_BIT.ChameleonWolf });

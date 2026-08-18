@@ -201,7 +201,13 @@ describe('resolveArchangelShot', () => {
     expect(wolf.isDead).toBe(true);
     expect(events).toEqual([
       { type: 'ArchangelShotFired', archangelId: archangel.id, targetId: wolf.id, hit: true },
-      { type: 'PlayerDied', playerId: wolf.id, method: 'Shoot', killerIds: [archangel.id], isNight: false },
+      {
+        type: 'PlayerDied',
+        playerId: wolf.id,
+        method: 'Shoot',
+        killerIds: [archangel.id],
+        isNight: false,
+      },
     ]);
   });
 

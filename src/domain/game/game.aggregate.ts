@@ -310,9 +310,7 @@ export class Game {
     // the victim through the entire day it was injected on (see `resolveViperWolfNight`).
     const events: GameEvent[] = [];
     if (this.poisonedViperVictimsSet.size > 0) {
-      const viperIds = this.players
-        .filter((p) => p.role === ROLE_BIT.ViperWolf)
-        .map((p) => p.id);
+      const viperIds = this.players.filter((p) => p.role === ROLE_BIT.ViperWolf).map((p) => p.id);
       for (const victimId of this.poisonedViperVictimsSet) {
         const victim = this.players.find((p) => p.id === victimId);
         if (!victim || victim.isDead) continue;
@@ -417,7 +415,12 @@ export class Game {
         ...lynchResult,
         finished: true,
         winningTeam: 'Tanner',
-        events: [...lynchResult.events, ...archangelEvents, ...berserkerEvents, ...roleChangeEvents],
+        events: [
+          ...lynchResult.events,
+          ...archangelEvents,
+          ...berserkerEvents,
+          ...roleChangeEvents,
+        ],
       };
     }
 
@@ -815,7 +818,10 @@ export class Game {
       this.consecutiveVillageDeaths = 0;
       for (const archangel of this.players) {
         if (archangel.role !== ROLE_BIT.Archangel || archangel.isDead) continue;
-        this.archangelBulletsMap.set(archangel.id, (this.archangelBulletsMap.get(archangel.id) ?? 0) + 1);
+        this.archangelBulletsMap.set(
+          archangel.id,
+          (this.archangelBulletsMap.get(archangel.id) ?? 0) + 1,
+        );
         granted.push({ type: 'ArchangelBulletGranted', archangelId: archangel.id });
       }
     }
@@ -883,7 +889,13 @@ export class Game {
     for (const [hitmanId, targetId] of this.hitmanTargetMap) {
       const hitman = this.players.find((p) => p.id === hitmanId);
       const target = this.players.find((p) => p.id === targetId);
-      if (hitman && hitman.role === ROLE_BIT.Hitman && !hitman.isDead && !hitman.won && target?.isDead) {
+      if (
+        hitman &&
+        hitman.role === ROLE_BIT.Hitman &&
+        !hitman.isDead &&
+        !hitman.won &&
+        target?.isDead
+      ) {
         hitman.won = true;
         this.phase = 'Ended';
         this.winningTeam = 'Neutral';
