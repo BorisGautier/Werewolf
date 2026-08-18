@@ -15,6 +15,7 @@ import { findById, type Player } from '../../domain/game/player.js';
 import type { FreezeFlavor, GameEvent } from '../../domain/game/game-event.js';
 import type { Team } from '../../domain/game/team.js';
 import { deathFlavorKey } from './death-messages.js';
+import { mentionOrPlain } from './mention.js';
 
 /** The Snow Wolf's target's own "you woke up frozen" locale key, keyed by `FreezeFlavor`. */
 const FREEZE_FLAVOR_KEY: Record<FreezeFlavor, string> = {
@@ -72,7 +73,9 @@ function displayRole(
 }
 
 function nameOf(players: readonly Player[], id: bigint): string {
-  return findById(players, id)?.name ?? '???';
+  const player = findById(players, id);
+  if (!player) return '???';
+  return mentionOrPlain(player.id, player.name, player.isBot);
 }
 
 /** @param showRolesOnDeath mirrors the group's `ShowRolesDeath` config flag. */
@@ -453,6 +456,152 @@ export function describeEvent(
 
     case 'DetectiveCaught':
       return wolfPackPms(players, name(event.playerId), 'DetectiveCaught');
+
+    case 'CrowCursed':
+      // A secret hex - only the Crow is told it landed, the target is never warned.
+      return [{ audience: event.crowId, key: 'CrowCursedTarget', args: [name(event.targetId)] }];
+
+    case 'HitmanTargetEliminated':
+      return [
+        {
+          audience: 'group',
+          key: 'HitmanContractComplete',
+          args: [name(event.hitmanId), name(event.targetId)],
+        },
+      ];
+
+    case 'PlayerResurrected':
+      // A dramatic, publicly visible event - the group sees the "dead" player back among the
+      // living, though not who brought them back (mirrors how the Necromancer's own night choice
+      // stays private, same as every other night-menu role).
+      return [
+        { audience: 'group', key: 'PlayerResurrectedMsg', args: [name(event.playerId)] },
+        {
+          audience: event.necromancerId,
+          key: 'NecromancerResurrectSuccess',
+          args: [name(event.playerId)],
+        },
+      ];
+
+    case 'WatchmanReport':
+      return [
+        {
+          audience: event.watchmanId,
+          key: 'WatchmanReportMsg',
+          args: [name(event.targetId), event.visitorCount],
+        },
+      ];
+
+    case 'TrackerReport':
+      return [
+        {
+          audience: event.trackerId,
+          key: event.leftHome ? 'TrackerLeftHome' : 'TrackerStayedHome',
+          args: [name(event.targetId)],
+        },
+      ];
+
+    case 'PriestessBlessingSaved':
+      // Silent to the group, same as a Guardian Angel block - only the Priestess and the saved
+      // player themselves learn what happened.
+      return [
+        { audience: event.priestessId, key: 'PriestessSaved', args: [name(event.targetId)] },
+        { audience: event.targetId, key: 'PriestessSavedYou', args: [] },
+      ];
+
+    case 'WolfPackBlinded':
+      return wolfPackPms(players, '', 'WolfPackBlindedMsg');
+
+    case 'MimicChoseDisguise':
+      return [
+        { audience: event.mimicId, key: 'MimicDisguiseLocked', args: [name(event.targetId)] },
+      ];
+
+    case 'ReflectorActivated':
+      return [{ audience: event.reflectorId, key: 'ReflectorActivatedMsg', args: [] }];
+
+    case 'ReflectorReflected':
+      // Silent to the group and even to the attacker - same secrecy the Guardian Angel's own
+      // blocks get - only the Reflector learns their mirror actually caught someone.
+      return [
+        {
+          audience: event.reflectorId,
+          key: 'ReflectorReflectedMsg',
+          args: [name(event.attackerId)],
+        },
+      ];
+
+    case 'ArchangelBulletGranted':
+      // PM-only, like every other secret-role-power event above - the streak that earned it is
+      // public (everyone saw the deaths), but who holds the Archangel's bullet stays hidden.
+      return [{ audience: event.archangelId, key: 'ArchangelBulletReceived', args: [] }];
+
+    case 'ArchangelShotFired':
+      // A hit is followed by its own `PlayerDied('Shoot')` event (see `resolveArchangelShot`),
+      // which already announces the death to the group - this only PMs the Archangel confirming
+      // the target really was a Werewolf. A miss is entirely silent to everyone but them: the
+      // sacred bullet does nothing observable to a non-wolf, so their identity stays hidden.
+      return [
+        {
+          audience: event.archangelId,
+          key: event.hit ? 'ArchangelShotHit' : 'ArchangelShotMiss',
+          args: [name(event.targetId)],
+        },
+      ];
+
+    case 'TrapperWolfTrapSet':
+      // Secret, like every other wolf-subtype ability that isn't the shared pack kill - only the
+      // Trapper Wolf learns their ambush is armed; the trapped player and the group learn nothing
+      // unless someone actually walks into it.
+      return [
+        { audience: event.trapperId, key: 'TrapperWolfTrapSetMsg', args: [name(event.targetId)] },
+      ];
+
+    case 'ChameleonDisguiseChosen':
+      // PM-only confirmation - the disguise itself is invisible to everyone else by design; only
+      // a Seer probing them tonight would ever notice, and even then they'd just see the borrowed
+      // role, never learning a Chameleon Wolf was behind it.
+      return [
+        {
+          audience: event.chameleonId,
+          key: 'ChameleonDisguiseChosenMsg',
+          args: [displayRole(event.appearanceRole, t, language)],
+        },
+      ];
+
+    case 'ViperWolfPoisoned':
+      // PM-only, like the other wolf-subtype ability confirmations - the public death itself (with
+      // its own `ViperPoisonPublic` flavor, see death-messages.ts) doesn't arrive until "sunset",
+      // via the ordinary `PlayerDied('ViperPoison')` event this one has no connection to on the wire.
+      return [
+        { audience: event.viperId, key: 'ViperWolfPoisonedMsg', args: [name(event.targetId)] },
+      ];
+
+    case 'HowlerWolfHowled':
+      // PM-only to the Howler themselves - the group learns the *effect* (a neutral, identity-free
+      // "today's votes are anonymous" announcement, sent by `GameLoop.runDay()` from
+      // `Game.anonymousLynchVotes` directly) but never that a howl caused it.
+      return [{ audience: event.howlerId, key: 'HowlerWolfHowledMsg', args: [] }];
+
+    case 'BerserkerWolfEnraged':
+      // PM-only - the group already knows a wolf was just lynched (from the ordinary lynch
+      // announcement), but not that it awakened anyone's rage or that the pack gets a second kill
+      // tonight; only the Berserker Wolf themselves learns that.
+      return [{ audience: event.berserkerId, key: 'BerserkerWolfEnragedMsg', args: [] }];
+
+    case 'AvengerRivalLynched':
+      // Public: unlike the Hitman's silent contract, the Avenger's whole premise is a *public*
+      // vendetta fulfilled by the village's own hand - the group already saw the lynch itself, this
+      // adds the reveal that it was secretly someone's long-awaited vengeance. The immediately
+      // following `GameEnded('Neutral')` event announces the actual win.
+      return [{ audience: 'group', key: 'AvengerRivalLynchedMsg', args: [name(event.avengerId)] }];
+
+    case 'CrownPrinceSucceeded':
+      // PM-only: the whole point of the Mayor's power is *choosing* when to reveal for the
+      // double-vote bonus - announcing the succession to the group the instant it happens would
+      // out the new Mayor before they ever get to make that choice themselves. Only they learn
+      // they've inherited the role; the village finds out only if/when they later use it.
+      return [{ audience: event.playerId, key: 'CrownPrinceSucceededMsg', args: [] }];
   }
 }
 

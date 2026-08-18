@@ -205,7 +205,9 @@ describe('GameLobbyManager', () => {
 
     sendMessage.mockClear();
     await lobby.startGame(chatId, 'Group', { id: 99n, name: 'Late' }, 'Normal');
-    expect(sendMessage).toHaveBeenCalledWith(101, expect.stringContaining('already running'));
+    expect(sendMessage).toHaveBeenCalledWith(101, expect.stringContaining('already running'), {
+      parse_mode: 'HTML',
+    });
   });
 
   it("refuses to start a game and leaves a group that's been /bangroup'd, even without creating a game", async () => {
@@ -254,9 +256,33 @@ describe('GameLobbyManager', () => {
     await lobby.join(chatId, user(2, 'Alice'));
     sendMessage.mockClear();
 
-    await vi.advanceTimersByTimeAsync(1000);
+    // Alice's join just pushed the 1s countdown out by JOIN_EXTEND_SECONDS (30s) - advance past
+    // the actual new deadline rather than the original bare joinTimeSeconds.
+    await vi.advanceTimersByTimeAsync(31_000);
 
-    expect(sendMessage).toHaveBeenCalledWith(104, expect.stringContaining('cancelled'));
+    expect(sendMessage).toHaveBeenCalledWith(104, expect.stringContaining('cancelled'), {
+      parse_mode: 'HTML',
+    });
+    expect(gameManager.has(chatId)).toBe(false);
+  });
+
+  it('extends the join countdown by 30 seconds every time a player joins', async () => {
+    vi.useFakeTimers();
+    const { lobby, gameManager } = createHarness(10);
+    const chatId = 116n;
+
+    await lobby.startGame(chatId, 'Group', { id: 1n, name: 'Starter' }, 'Normal');
+
+    // 10s base countdown - still open with 1s left to go.
+    await vi.advanceTimersByTimeAsync(9000);
+    expect(gameManager.has(chatId)).toBe(true);
+
+    // A join right before the original deadline should push it 30s further out (1s + 30s = 31s left).
+    await lobby.join(chatId, user(2, 'Alice'));
+    await vi.advanceTimersByTimeAsync(30_000); // the original countdown would've ended long ago
+    expect(gameManager.has(chatId)).toBe(true); // still open thanks to the +30s extension
+
+    await vi.advanceTimersByTimeAsync(1000); // the last second of the extension elapses
     expect(gameManager.has(chatId)).toBe(false);
   });
 
@@ -292,10 +318,13 @@ describe('GameLobbyManager', () => {
     await lobby.startGame(chatId, 'Group', { id: 1n, name: 'Starter' }, 'Normal');
 
     // The starter (1n) is on the waitlist too but shouldn't be PM'd about their own game.
-    expect(sendMessage).toHaveBeenCalledWith(99, expect.stringContaining('Group'));
+    expect(sendMessage).toHaveBeenCalledWith(99, expect.stringContaining('Group'), {
+      parse_mode: 'HTML',
+    });
     expect(sendMessage).not.toHaveBeenCalledWith(
       1,
       expect.stringContaining('A new game has started'),
+      expect.anything(),
     );
   });
 
@@ -336,6 +365,28 @@ describe('GameLobbyManager', () => {
     expect(gameManager.get(chatId)!.phase).toBe('Joining');
   });
 
+  it('honors a group configured for the maximum 300-second extend cap, without clamping it down', async () => {
+    vi.useFakeTimers();
+    const { lobby, groupsStore, sendMessage } = createHarness(60);
+    const chatId = 117n;
+    groupsStore.set(
+      chatId.toString(),
+      fakeGroup(chatId, 'Group', { allowExtend: true, maxExtendSeconds: 300 }),
+    );
+
+    await lobby.startGame(chatId, 'Group', { id: 1n, name: 'Starter' }, 'Normal');
+    await lobby.join(chatId, user(2, 'Alice'));
+    sendMessage.mockClear();
+
+    await lobby.extend(chatId, 2n, false, 300); // not clamped - 300 is within maxExtendSeconds
+
+    expect(sendMessage).toHaveBeenCalledWith(
+      117,
+      expect.stringContaining('300'),
+      expect.anything(),
+    );
+  });
+
   it('extend rejects a second request from the same non-admin player', async () => {
     vi.useFakeTimers();
     const { lobby, sendMessage, groupsStore } = createHarness(60);
@@ -352,7 +403,9 @@ describe('GameLobbyManager', () => {
     sendMessage.mockClear();
     await lobby.extend(chatId, 2n, false, 10);
 
-    expect(sendMessage).toHaveBeenCalledWith(112, expect.stringContaining('extended'));
+    expect(sendMessage).toHaveBeenCalledWith(112, expect.stringContaining('extended'), {
+      parse_mode: 'HTML',
+    });
   });
 
   it('extend refuses a non-admin when AllowExtend is off', async () => {
@@ -367,7 +420,9 @@ describe('GameLobbyManager', () => {
 
     await lobby.extend(chatId, 2n, false, 10);
 
-    expect(sendMessage).toHaveBeenCalledWith(113, expect.stringContaining('admin'));
+    expect(sendMessage).toHaveBeenCalledWith(113, expect.stringContaining('admin'), {
+      parse_mode: 'HTML',
+    });
   });
 
   it('flee is always allowed while still in the joining lobby, even with AllowFlee off', async () => {
@@ -401,7 +456,9 @@ describe('GameLobbyManager', () => {
     await lobby.flee(chatId, { id: 2n, name: 'Player2' });
 
     expect(gameManager.get(chatId)!.players).toHaveLength(playersBefore);
-    expect(sendMessage).toHaveBeenCalledWith(115, expect.stringContaining('disabled'));
+    expect(sendMessage).toHaveBeenCalledWith(115, expect.stringContaining('disabled'), {
+      parse_mode: 'HTML',
+    });
   });
 
   it('smite removes a player from the joining lobby', async () => {
@@ -433,7 +490,9 @@ describe('GameLobbyManager', () => {
     sendMessage.mockClear();
     await lobby.forceStart(chatId, false);
 
-    expect(sendMessage).toHaveBeenCalledWith(106, expect.stringContaining('admin'));
+    expect(sendMessage).toHaveBeenCalledWith(106, expect.stringContaining('admin'), {
+      parse_mode: 'HTML',
+    });
     expect(gameManager.get(chatId)!.phase).toBe('Joining');
   });
 
@@ -452,8 +511,16 @@ describe('GameLobbyManager', () => {
     sendMessage.mockClear();
     await lobby.showPlayers(chatId);
 
-    expect(sendMessage).toHaveBeenCalledWith(109, expect.stringContaining('Alice 🥇'));
-    expect(sendMessage).not.toHaveBeenCalledWith(109, expect.stringContaining('Bob 🥇'));
+    expect(sendMessage).toHaveBeenCalledWith(
+      109,
+      expect.stringContaining('<a href="tg://user?id=2">Alice</a> 🥇'),
+      { parse_mode: 'HTML' },
+    );
+    expect(sendMessage).not.toHaveBeenCalledWith(
+      109,
+      expect.stringContaining('Bob</a> 🥇'),
+      expect.anything(),
+    );
   });
 
   it('/players shows plain names when nobody has donated', async () => {

@@ -146,10 +146,35 @@ export function augurSees(
  * Seer checking a Wolf Man), and the Fool's `foolCorrectSeeCount`/`foolCorrectlySeenBH`/
  * `hasSeenImpossible`.
  */
+/**
+ * What a real Seer perceives when they look at `target` - straight through a Mimic's imitated
+ * identity or a Chameleon Wolf's chosen-for-tonight disguise (see the Mimic/Chameleon Wolf
+ * resolutions in night-resolution.ts and game.aggregate.ts), or just their actual role otherwise.
+ */
+function resolvePerceivedRole(
+  players: readonly Player[],
+  target: Player,
+  mimicTargetMap: ReadonlyMap<bigint, bigint>,
+  chameleonAppearanceMap: ReadonlyMap<bigint, Role>,
+): Role {
+  if (target.role === ROLE_BIT.Mimic) {
+    const imitatedId = mimicTargetMap.get(target.id);
+    const imitated =
+      imitatedId !== undefined ? players.find((p) => p.id === imitatedId) : undefined;
+    return imitated?.role ?? target.role;
+  }
+  if (target.role === ROLE_BIT.ChameleonWolf) {
+    return chameleonAppearanceMap.get(target.id) ?? target.role;
+  }
+  return target.role;
+}
+
 export function resolveClairvoyanceNight(
   players: readonly Player[],
   possibleRoles: readonly Role[],
   random: () => number = Math.random,
+  mimicTargetMap: ReadonlyMap<bigint, bigint> = new Map(),
+  chameleonAppearanceMap: ReadonlyMap<bigint, Role> = new Map(),
 ): GameEvent[] {
   const events: GameEvent[] = [];
 
@@ -157,11 +182,17 @@ export function resolveClairvoyanceNight(
     const target = players.find((p) => p.id === seer.choice);
     if (!target) continue;
     if (target.role === ROLE_BIT.WolfMan) target.trustworthy = true;
+    const perceivedRole = resolvePerceivedRole(
+      players,
+      target,
+      mimicTargetMap,
+      chameleonAppearanceMap,
+    );
     events.push({
       type: 'SeerVision',
       playerId: seer.id,
       targetId: target.id,
-      shownRole: seerSees(target.role, random),
+      shownRole: seerSees(perceivedRole, random),
     });
   }
 

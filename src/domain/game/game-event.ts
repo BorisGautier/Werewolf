@@ -104,4 +104,23 @@ export type GameEvent =
   | { type: 'DetectiveCaught'; playerId: bigint }
   | { type: 'HarlotVisited'; harlotId: bigint; targetId: bigint }
   | { type: 'ChemistBackfired'; chemistId: bigint; targetId: bigint }
-  | { type: 'WolfPackHasDrunkMembers'; soberWolfIds: bigint[] };
+  | { type: 'WolfPackHasDrunkMembers'; soberWolfIds: bigint[] }
+  | { type: 'CrowCursed'; crowId: bigint; targetId: bigint }
+  | { type: 'HitmanTargetEliminated'; hitmanId: bigint; targetId: bigint }
+  | { type: 'PlayerResurrected'; necromancerId: bigint; playerId: bigint }
+  | { type: 'WatchmanReport'; watchmanId: bigint; targetId: bigint; visitorCount: number }
+  | { type: 'TrackerReport'; trackerId: bigint; targetId: bigint; leftHome: boolean }
+  | { type: 'PriestessBlessingSaved'; priestessId: bigint; targetId: bigint }
+  | { type: 'WolfPackBlinded' }
+  | { type: 'MimicChoseDisguise'; mimicId: bigint; targetId: bigint }
+  | { type: 'ReflectorActivated'; reflectorId: bigint }
+  | { type: 'ReflectorReflected'; reflectorId: bigint; attackerId: bigint }
+  | { type: 'ArchangelBulletGranted'; archangelId: bigint }
+  | { type: 'ArchangelShotFired'; archangelId: bigint; targetId: bigint; hit: boolean }
+  | { type: 'TrapperWolfTrapSet'; trapperId: bigint; targetId: bigint }
+  | { type: 'ChameleonDisguiseChosen'; chameleonId: bigint; appearanceRole: Role }
+  | { type: 'ViperWolfPoisoned'; viperId: bigint; targetId: bigint }
+  | { type: 'HowlerWolfHowled'; howlerId: bigint }
+  | { type: 'BerserkerWolfEnraged'; berserkerId: bigint }
+  | { type: 'AvengerRivalLynched'; avengerId: bigint; targetId: bigint }
+  | { type: 'CrownPrinceSucceeded'; playerId: bigint };

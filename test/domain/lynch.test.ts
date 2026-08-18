@@ -31,6 +31,18 @@ describe('resolveLynchVotes', () => {
     expect(resolution.outcome).toBe('NoVotes');
   });
 
+  it("applies a Crow's curse as +2 penalty votes, deciding a tie, then clears the curse so it doesn't linger", () => {
+    const [a, b, c, d] = villagers(4);
+    a!.choice = c!.id; // 1 vote for c
+    b!.choice = d!.id; // 1 vote for d
+    c!.isCursedByCrow = true; // +2 penalty votes breaks what would otherwise be a 1-1 tie against c
+
+    const { resolution } = resolveLynchVotes([a!, b!, c!, d!], { lynchAttempt: 1 });
+
+    expect(resolution).toEqual({ outcome: 'Lynched', playerId: c!.id });
+    expect(c!.isCursedByCrow).toBe(false); // one-shot - cleared once applied
+  });
+
   it('reports a tie without random-picking unless randomLynchOnTie is set', () => {
     const [a, b, c, d] = villagers(4);
     a!.choice = c!.id;
@@ -241,6 +253,54 @@ describe('resolveLynchVotes', () => {
     resolveLynchVotes([tanner, v1, v2, v3], { lynchAttempt: 1 });
 
     expect(tanner.tannerOverkill).toBe(false);
+  });
+});
+
+describe("resolveLynchVotes - Avenger's rival goal", () => {
+  it('wins when their secret rival (via avengerTargetMap) is actually lynched', () => {
+    const avenger = createPlayer(1n, 'A', ROLE_BIT.Avenger, 'Neutral');
+    const rival = createPlayer(2n, 'R', ROLE_BIT.Villager, 'Village');
+    const other = createPlayer(3n, 'O', ROLE_BIT.Villager, 'Village');
+    avenger.choice = rival.id;
+    other.choice = rival.id;
+    const avengerTargetMap = new Map([[avenger.id, rival.id]]);
+
+    const { events } = resolveLynchVotes([avenger, rival, other], {
+      lynchAttempt: 1,
+      avengerTargetMap,
+    });
+
+    expect(avenger.won).toBe(true);
+    expect(rival.isDead).toBe(true);
+    expect(
+      events.some(
+        (e) =>
+          e.type === 'AvengerRivalLynched' && e.avengerId === avenger.id && e.targetId === rival.id,
+      ),
+    ).toBe(true);
+  });
+
+  it('does not win when someone else entirely is lynched', () => {
+    const avenger = createPlayer(1n, 'A', ROLE_BIT.Avenger, 'Neutral');
+    const rival = createPlayer(2n, 'R', ROLE_BIT.Villager, 'Village');
+    const other = createPlayer(3n, 'O', ROLE_BIT.Villager, 'Village');
+    avenger.choice = other.id;
+    rival.choice = other.id;
+    const avengerTargetMap = new Map([[avenger.id, rival.id]]);
+
+    resolveLynchVotes([avenger, rival, other], { lynchAttempt: 1, avengerTargetMap });
+
+    expect(avenger.won).toBe(false);
+  });
+
+  it('does not win without an avengerTargetMap at all (defensive default)', () => {
+    const avenger = createPlayer(1n, 'A', ROLE_BIT.Avenger, 'Neutral');
+    const rival = createPlayer(2n, 'R', ROLE_BIT.Villager, 'Village');
+    avenger.choice = rival.id;
+
+    resolveLynchVotes([avenger, rival], { lynchAttempt: 1 });
+
+    expect(avenger.won).toBe(false);
   });
 });
 

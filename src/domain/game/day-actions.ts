@@ -69,6 +69,43 @@ export function resolveGunnerShot(players: Player[]): GameEvent[] {
   return events;
 }
 
+/**
+ * The Archangel's Sacred Bullet: a repeatable day shot, only available once `archangelBullets`
+ * (mirroring `Game.archangelBulletsMap`, populated whenever 3 innocent villagers die consecutively
+ * - see `Game.trackArchangelStreak()`) holds at least one charge for them. Unlike the Gunner's
+ * bullet, a shot that misses a Werewolf is entirely harmless and silent - the target never even
+ * learns they were fired upon - since a "sacred" bullet has no effect on anyone but a wolf.
+ */
+export function resolveArchangelShot(
+  players: Player[],
+  archangelBullets: Map<bigint, number>,
+): GameEvent[] {
+  const events: GameEvent[] = [];
+
+  const archangel = players.find(
+    (p) => p.role === ROLE_BIT.Archangel && !p.isDead && p.choice !== null && p.choice !== ABSTAIN,
+  );
+  if (!archangel) return events;
+
+  const bullets = archangelBullets.get(archangel.id) ?? 0;
+  if (bullets <= 0) return events;
+
+  const target = players.find((p) => p.id === archangel.choice);
+  if (!target) return events;
+
+  archangelBullets.set(archangel.id, bullets - 1);
+
+  const hit = getTeamForRole(target.role) === 'Wolf';
+  events.push({ type: 'ArchangelShotFired', archangelId: archangel.id, targetId: target.id, hit });
+  if (hit) {
+    events.push(
+      ...killPlayer(players, target.id, 'Shoot', { killerIds: [archangel.id], isNight: false }),
+    );
+  }
+
+  return events;
+}
+
 export function resolveSpumpkinDetonate(
   players: Player[],
   random: () => number = Math.random,

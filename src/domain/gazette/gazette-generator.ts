@@ -6,8 +6,6 @@ export interface GazetteStory {
   lines: string[];
 }
 
-export const LAST_GAZETTES_BY_CHAT = new Map<string, GazetteStory>();
-
 /**
  * Generates an epic, hilarious theatrical story ("La Gazette du Village")
  * explicitly featuring player names and funny event breakdowns.

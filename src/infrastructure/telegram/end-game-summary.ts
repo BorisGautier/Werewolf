@@ -11,6 +11,7 @@
 import { ROLE_META, roleName } from '../../domain/roles/role.js';
 import type { Player } from '../../domain/game/player.js';
 import type { Translator } from '../i18n/translator.js';
+import { mentionOrPlain } from './mention.js';
 
 export type ShowRolesEndMode = 'NONE' | 'LIVING' | 'ALL';
 
@@ -47,7 +48,8 @@ export function buildEndGameSummary(
   });
   const aliveCount = players.filter((p) => !p.isDead).length;
   const outcomeKey = (p: Player) => t.translate(language, p.won ? 'Won' : 'Lost');
-  const displayName = (p: Player) => `${p.name}${donorBadges.get(p.id) ?? ''}`;
+  const displayName = (p: Player) =>
+    `${mentionOrPlain(p.id, p.name, p.isBot)}${donorBadges.get(p.id) ?? ''}`;
   const ptsSuffix = (p: Player) => {
     const pts = playerScores.get(p.id);
     if (pts === undefined) return '';

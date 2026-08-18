@@ -34,18 +34,23 @@ export const NIGHT_TARGET_ROLES: readonly Role[] = [
   ROLE_BIT.Tracker,
   ROLE_BIT.Priestess,
   ROLE_BIT.Mimic,
-  ROLE_BIT.Archangel,
   ROLE_BIT.Necromancer,
   ROLE_BIT.Reflector,
   ROLE_BIT.Crow,
   ...WOLF_ROLES,
 ];
 
-/** Roles offered a plain "pick a living player" day menu (the lynch vote itself is handled separately). */
+/**
+ * Roles offered a plain "pick a living player" day menu (the lynch vote itself is handled
+ * separately). The Archangel only actually gets this menu while they hold at least one Sacred
+ * Bullet (`Game.archangelBulletsMap`) - see the extra gate in `GameLoop.sendDayMenus()`, since that
+ * depends on live game state this static list can't express.
+ */
 export const DAY_TARGET_ROLES: readonly Role[] = [
   ROLE_BIT.Gunner,
   ROLE_BIT.Spumpkin,
   ROLE_BIT.Detective,
+  ROLE_BIT.Archangel,
 ];
 
 /** The five single-button "click to activate" day abilities. */

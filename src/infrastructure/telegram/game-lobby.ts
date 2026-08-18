@@ -17,6 +17,7 @@ import { GameAlreadyRunningError, GameManager } from '../../application/game-man
 import { Game, GameError } from '../../domain/game/game.aggregate.js';
 import type { GameMode } from '../../domain/game/game-mode.js';
 import { ROLE_BIT, ROLE_META, roleName } from '../../domain/roles/role.js';
+import { SYNTHETIC_BOT_ID_FLOOR, type Player } from '../../domain/game/player.js';
 import { WOLF_ROLES } from '../../domain/game/game-balancing.js';
 import { GameRepository } from '../persistence/game.repository.js';
 import {
@@ -31,6 +32,7 @@ import { groupBans } from '../monitoring/metrics.js';
 import type { Logger } from '../logging/logger.js';
 import type { GameLoop } from './game-loop.js';
 import { aboutLocaleKey } from './role-info.js';
+import { mentionHtml, mentionOrPlain } from './mention.js';
 import {
   activeLobbies,
   botPlayersAdded,
@@ -47,6 +49,10 @@ import {
 const WARNING_SECONDS: readonly number[] = [60, 30, 10];
 const ANNOUNCE_JOINED_EVERY_SECONDS = 30;
 const JOIN_BUTTON_CALLBACK = 'werewolf:join';
+/** Every successful join pushes the countdown out by this many seconds - deliberately separate
+ * from (and not gated by) `/extend`'s once-per-player limit and `AllowExtend` setting: someone
+ * actually joining is real evidence the lobby is still filling up, not a manual stall request. */
+const JOIN_EXTEND_SECONDS = 30;
 
 interface LobbySession {
   game: Game;
@@ -54,7 +60,7 @@ interface LobbySession {
   language: string;
   secondsLeft: number;
   forceStarted: boolean;
-  playersJoinedSinceAnnounce: string[];
+  playersJoinedSinceAnnounce: { id: bigint; name: string }[];
   interval: ReturnType<typeof setInterval>;
   /** Non-admins may only /extend the join countdown once each - mirrors `HaveExtended`. */
   haveExtended: Set<bigint>;
@@ -167,8 +173,9 @@ export class GameLobbyManager {
     const messageKey = mode === 'Chaos' ? 'PlayerStartedChaosGame' : 'PlayerStartedGame';
     await this.bot.api.sendMessage(
       chatNumber(chatId),
-      this.t.translate(language, messageKey, starter.name),
+      this.t.translate(language, messageKey, mentionHtml(starter.id, starter.name)),
       {
+        parse_mode: 'HTML',
         reply_markup: keyboard,
       },
     );
@@ -340,7 +347,9 @@ export class GameLobbyManager {
       throw err;
     }
 
-    session.playersJoinedSinceAnnounce.push(uniqueName);
+    session.secondsLeft += JOIN_EXTEND_SECONDS;
+
+    session.playersJoinedSinceAnnounce.push({ id: telegramUser.id, name: uniqueName });
     const sentPm = await this.sendToUser(
       telegramUser.id,
       language,
@@ -359,8 +368,8 @@ export class GameLobbyManager {
       await this.bot.api
         .sendMessage(
           chatNumber(chatId),
-          this.t.translate(language, 'MustStartPmFirstGroup', name),
-          keyboard ? { reply_markup: keyboard } : {},
+          this.t.translate(language, 'MustStartPmFirstGroup', mentionHtml(telegramUser.id, name)),
+          { parse_mode: 'HTML', ...(keyboard ? { reply_markup: keyboard } : {}) },
         )
         .catch(() => null);
     }
@@ -461,13 +470,20 @@ export class GameLobbyManager {
     }
 
     // Mirrors `Extensions.cs`'s `GetName()` appending a donor-tier medal wherever a player's name
-    // is shown - here in the /players roster.
+    // is shown - here in the /players roster. Once the game has actually started (not just
+    // joining), each name is also tagged (alive)/(dead) so a glance at /players tells you who's
+    // still in it without having to scroll back through the whole night's messages.
+    const showStatus = game.phase !== 'Joining';
     const names =
       (
         await Promise.all(
           game.players.map(async (p) => {
             const dbPlayer = await this.players.findByTelegramId(p.id);
-            return `${p.name}${donorBadge(dbPlayer?.donationLevel ?? 0)}`;
+            const badge = donorBadge(dbPlayer?.donationLevel ?? 0);
+            const status = showStatus
+              ? ` (${this.t.translate(language, p.isDead ? 'Dead' : 'Alive')})`
+              : '';
+            return `${mentionOrPlain(p.id, p.name, p.isBot)}${badge}${status}`;
           }),
         )
       ).join('\n') || '-';
@@ -512,7 +528,7 @@ export class GameLobbyManager {
       },
       'Player fled game',
     );
-    await this.send(chatId, language, 'FledGame', player.name);
+    await this.send(chatId, language, 'FledGame', mentionHtml(player.id, player.name));
   }
 
   /**
@@ -533,7 +549,7 @@ export class GameLobbyManager {
         { chatId: chatId.toString(), targetId: target.id.toString(), targetName: target.name },
         'Player smitten by admin',
       );
-      await this.send(chatId, group.language, 'PlayerSmitten', target.name);
+      await this.send(chatId, group.language, 'PlayerSmitten', mentionHtml(target.id, target.name));
     }
     return removed;
   }
@@ -558,7 +574,7 @@ export class GameLobbyManager {
         chatId,
         session.language,
         'HaveJoined',
-        session.playersJoinedSinceAnnounce.join(', '),
+        session.playersJoinedSinceAnnounce.map((p) => mentionHtml(p.id, p.name)).join(', '),
       );
       session.playersJoinedSinceAnnounce = [];
     }
@@ -608,7 +624,7 @@ export class GameLobbyManager {
     );
     const undelivered = session.game.players
       .filter((p, index) => !p.isBot && !delivered[index])
-      .map((p) => p.name);
+      .map((p) => mentionHtml(p.id, p.name));
     if (undelivered.length > 0) {
       pmFailures.inc(undelivered.length);
       const botUsername = this.bot.botInfo?.username ?? '';
@@ -622,7 +638,7 @@ export class GameLobbyManager {
         .sendMessage(
           chatNumber(session.chatId),
           this.t.translate(session.language, 'PMFailed', undelivered.join(', ')),
-          keyboard ? { reply_markup: keyboard } : {},
+          { parse_mode: 'HTML', ...(keyboard ? { reply_markup: keyboard } : {}) },
         )
         .catch(() => null);
     }
@@ -673,7 +689,7 @@ export class GameLobbyManager {
     if (role === ROLE_BIT.Mason) {
       const coMasons = game.players.filter((p) => p.id !== player.id && p.role === ROLE_BIT.Mason);
       if (coMasons.length > 0) {
-        const names = coMasons.map((p) => p.name).join(', ');
+        const names = coMasons.map((p) => mentionOrPlain(p.id, p.name, p.isBot)).join(', ');
         teamInfo =
           language === 'fr'
             ? `\n\n👷 <b>Vos confrères Maçons sont :</b> ${names}`
@@ -692,7 +708,7 @@ export class GameLobbyManager {
         const names = pack
           .map(
             (p) =>
-              `${p.name} (${ROLE_META[roleName(p.role)].emoji} ${this.t.translate(language, `Role_${roleName(p.role)}`)})`,
+              `${mentionOrPlain(p.id, p.name, p.isBot)} (${ROLE_META[roleName(p.role)].emoji} ${this.t.translate(language, `Role_${roleName(p.role)}`)})`,
           )
           .join('\n• ');
         teamInfo =
@@ -708,7 +724,7 @@ export class GameLobbyManager {
     } else if (role === ROLE_BIT.Cultist) {
       const cult = game.players.filter((p) => p.id !== player.id && p.role === ROLE_BIT.Cultist);
       if (cult.length > 0) {
-        const names = cult.map((p) => p.name).join(', ');
+        const names = cult.map((p) => mentionOrPlain(p.id, p.name, p.isBot)).join(', ');
         teamInfo =
           language === 'fr'
             ? `\n\n🔮 <b>Vos Frères du Culte sont :</b> ${names}`
@@ -716,18 +732,26 @@ export class GameLobbyManager {
       }
     } else if (role === ROLE_BIT.Hitman && game.hitmanTargetMap.has(player.id)) {
       const targetId = game.hitmanTargetMap.get(player.id)!;
-      const targetName = game.players.find((p) => p.id === targetId)?.name ?? '???';
+      const targetPlayer = game.players.find((p) => p.id === targetId);
+      const targetName = targetPlayer
+        ? mentionOrPlain(targetPlayer.id, targetPlayer.name, targetPlayer.isBot)
+        : '???';
       teamInfo =
         language === 'fr'
           ? `\n\n🎯 <b>Votre cible d'assassinat est :</b> ${targetName}`
           : `\n\n🎯 <b>Your assassination target is:</b> ${targetName}`;
     } else if (role === ROLE_BIT.Avenger && game.avengerTargetMap.has(player.id)) {
       const targetId = game.avengerTargetMap.get(player.id)!;
-      const targetName = game.players.find((p) => p.id === targetId)?.name ?? '???';
+      const targetPlayer = game.players.find((p) => p.id === targetId);
+      const targetName = targetPlayer
+        ? mentionOrPlain(targetPlayer.id, targetPlayer.name, targetPlayer.isBot)
+        : '???';
       teamInfo =
         language === 'fr'
           ? `\n\n💀 <b>Votre rival juré est :</b> ${targetName}`
           : `\n\n💀 <b>Your sworn rival is:</b> ${targetName}`;
+    } else if (role === ROLE_BIT.Beholder) {
+      teamInfo = describeBeholderReveal(player.id, game.players, language);
     }
 
     const roleMsg = `${this.t.translate(language, 'YourRoleIs', `${emoji} ${displayName}`)}${description}${teamInfo}`;
@@ -763,7 +787,7 @@ export class GameLobbyManager {
 
     let addedCount = 0;
     const existingCount = session.game.players.length;
-    const startId = 990001n + BigInt(existingCount);
+    const startId = SYNTHETIC_BOT_ID_FLOOR + 1n + BigInt(existingCount);
 
     for (let i = 0; i < count; i++) {
       if (session.game.players.length >= 35) break;
@@ -794,7 +818,9 @@ export class GameLobbyManager {
     ...args: unknown[]
   ): Promise<void> {
     try {
-      await this.bot.api.sendMessage(chatNumber(chatId), this.t.translate(language, key, ...args));
+      await this.bot.api.sendMessage(chatNumber(chatId), this.t.translate(language, key, ...args), {
+        parse_mode: 'HTML',
+      });
     } catch (err) {
       this.logger.error(
         { chatId: chatId.toString(), err: (err as Error).message },
@@ -813,6 +839,7 @@ export class GameLobbyManager {
       await this.bot.api.sendMessage(
         chatNumber(telegramId),
         this.t.translate(language, key, ...args),
+        { parse_mode: 'HTML' },
       );
       return true;
     } catch (err) {
@@ -845,4 +872,28 @@ function formatGroupTitle(
 
 function chatNumber(id: bigint): number {
   return Number(id);
+}
+
+/**
+ * The Beholder's whole ability: "You will be told who the seer is (the real one, not the fool)".
+ * The Seer's identity is fixed at role-deal time and never changes, so this is safe to compute
+ * once, right alongside the rest of the role-reveal PM, rather than needing its own
+ * night-resolution step. Exported as a pure function (rather than inlined in `notifyRole()`) so it
+ * has its own test seam independent of the lobby's full timer-driven start flow.
+ */
+export function describeBeholderReveal(
+  beholderId: bigint,
+  players: readonly Player[],
+  language: string,
+): string {
+  const seer = players.find((p) => p.id !== beholderId && p.role === ROLE_BIT.Seer);
+  if (!seer) {
+    return language === 'fr'
+      ? `\n\n🔭 <b>Il n'y a pas de Voyante dans cette partie.</b>`
+      : `\n\n🔭 <b>There is no Seer in this game.</b>`;
+  }
+  const seerName = mentionOrPlain(seer.id, seer.name, seer.isBot);
+  return language === 'fr'
+    ? `\n\n🔭 <b>La véritable Voyante de cette partie est :</b> ${seerName}`
+    : `\n\n🔭 <b>The true Seer in this game is:</b> ${seerName}`;
 }

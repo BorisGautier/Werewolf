@@ -8,6 +8,12 @@ export const ABSTAIN: bigint = -1n;
 /** Sentinel for the Arsonist's "spark" action (burn every doused player), mirroring `Choice == -2`. */
 export const SPARK: bigint = -2n;
 
+/** Every synthetic AI/bot player id (see `GameLobbyManager.addBotPlayers`) is `990001n` or above -
+ * never a real Telegram user id. Exported so persistence code can defensively exclude bots from
+ * leaderboard/stats queries even if a bad row ever slips into the `Player` table (e.g. from before
+ * bots were excluded from `awardPoints`). */
+export const SYNTHETIC_BOT_ID_FLOOR: bigint = 990000n;
+
 /**
  * Port of the gameplay-relevant fields of `Werewolf Node/Models/IPlayer.cs`, plus the subset of
  * the original's achievement-tracking counters/flags that turned out to need real-time state
@@ -40,6 +46,10 @@ export interface Player {
   choice: bigint | null;
   /** Secondary target (e.g. Cupid's second lover), mirrors `Choice2`. */
   choice2: bigint | null;
+  /** A third, independent target slot - currently only the Trapper Wolf's once-per-game ambush
+   * choice, kept separate from `choice`/`choice2` since those are already spoken for by the shared
+   * wolf-pack kill vote a Trapper Wolf also takes part in every night. */
+  choice3: bigint | null;
 
   votes: number;
   votedBy: Set<bigint>;
@@ -74,9 +84,8 @@ export interface Player {
   dayCult: number;
   /** Augur mechanic: roles they've already been shown, so they never see the same one twice. */
   sawRoles: Role[];
-  /** Thief/Doppelganger/Hitman/Avenger mechanic: id of the target player. */
+  /** Wild Child/Doppelganger/Thief mechanic: id of the role-model target player. */
   roleModel: bigint | null;
-  targetId: bigint | null;
   isCursedByCrow: boolean;
 
   // --- Achievement-tracking counters/flags (mirrors the original's per-player achievement fields) ---
@@ -155,6 +164,7 @@ export function createPlayer(
     hasUsedAbility: false,
     choice: null,
     choice2: null,
+    choice3: null,
     votes: 0,
     votedBy: new Set(),
     nonVoteCount: 0,
@@ -177,7 +187,6 @@ export function createPlayer(
     dayCult: 0,
     sawRoles: [],
     roleModel: null,
-    targetId: null,
     isCursedByCrow: false,
     hasBeenVoted: false,
     foolCorrectSeeCount: 0,

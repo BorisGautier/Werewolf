@@ -53,6 +53,7 @@ const KILL_METHOD_TO_PRISMA: Record<KillMethod, PrismaKillMethod> = {
   Spotted: PrismaKillMethod.SPOTTED,
   Burn: PrismaKillMethod.BURN,
   VisitBurning: PrismaKillMethod.VISIT_BURNING,
+  ViperPoison: PrismaKillMethod.VIPER_POISON,
 };
 
 export function killMethodToPrisma(method: KillMethod): PrismaKillMethod {

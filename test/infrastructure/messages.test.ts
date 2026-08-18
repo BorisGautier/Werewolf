@@ -3,6 +3,12 @@ import { ROLE_BIT } from '../../src/domain/roles/role.js';
 import { createPlayer } from '../../src/domain/game/player.js';
 import { describeEvent } from '../../src/infrastructure/telegram/messages.js';
 
+/** Matches `mentionHtml()`'s output - every non-bot player name in a message is now a real
+ * Telegram text-mention, not plain text (see `src/infrastructure/telegram/mention.ts`). */
+function mention(id: bigint, name: string): string {
+  return `<a href="tg://user?id=${id}">${name}</a>`;
+}
+
 describe('describeEvent - PlayerDied flavor text', () => {
   it("builds the Harlot's found-the-wolves'-victim message with the found victim's name, not a role reveal", () => {
     const harlot = createPlayer(1n, 'Harlot', ROLE_BIT.Harlot, 'Village');
@@ -16,7 +22,11 @@ describe('describeEvent - PlayerDied flavor text', () => {
     );
 
     expect(messages).toEqual([
-      { audience: 'group', key: 'HarlotFuckedVictimPublic', args: ['Harlot', 'Victim'] },
+      {
+        audience: 'group',
+        key: 'HarlotFuckedVictimPublic',
+        args: [mention(1n, 'Harlot'), mention(2n, 'Victim')],
+      },
     ]);
   });
 
@@ -32,7 +42,11 @@ describe('describeEvent - PlayerDied flavor text', () => {
     );
 
     expect(messages).toEqual([
-      { audience: 'group', key: 'HarlotFuckedKilledPublic', args: ['Harlot', 'Victim'] },
+      {
+        audience: 'group',
+        key: 'HarlotFuckedKilledPublic',
+        args: [mention(1n, 'Harlot'), mention(2n, 'Victim')],
+      },
     ]);
   });
 
@@ -45,7 +59,9 @@ describe('describeEvent - PlayerDied flavor text', () => {
       true,
     );
 
-    expect(messages).toEqual([{ audience: 'group', key: 'GAGuardedKiller', args: ['GA'] }]);
+    expect(messages).toEqual([
+      { audience: 'group', key: 'GAGuardedKiller', args: [mention(1n, 'GA')] },
+    ]);
   });
 
   it('distinguishes the Serial Killer spotting a digging Grave Digger from the wolf pack spotting them', () => {
@@ -66,10 +82,10 @@ describe('describeEvent - PlayerDied flavor text', () => {
     );
 
     expect(skMessages).toEqual([
-      { audience: 'group', key: 'KillerSpottedDiggerPublic', args: ['GD1'] },
+      { audience: 'group', key: 'KillerSpottedDiggerPublic', args: [mention(1n, 'GD1')] },
     ]);
     expect(wolfMessages).toEqual([
-      { audience: 'group', key: 'WolvesSpottedDiggerPublic', args: ['GD2'] },
+      { audience: 'group', key: 'WolvesSpottedDiggerPublic', args: [mention(2n, 'GD2')] },
     ]);
   });
 
@@ -83,7 +99,11 @@ describe('describeEvent - PlayerDied flavor text', () => {
     );
 
     expect(messages).toEqual([
-      { audience: 'group', key: 'PlayerFoundDeadWithRole', args: ['V', '👱 Villager'] },
+      {
+        audience: 'group',
+        key: 'PlayerFoundDeadWithRole',
+        args: [mention(1n, 'V'), '👱 Villager'],
+      },
     ]);
   });
 });
@@ -100,7 +120,7 @@ describe('describeEvent - Guardian Angel PMs', () => {
     );
 
     expect(messages).toEqual([
-      { audience: 1n, key: 'GuardSaved', args: ['T'] },
+      { audience: 1n, key: 'GuardSaved', args: [mention(2n, 'T')] },
       { audience: 2n, key: 'GuardSavedYou', args: [] },
     ]);
   });
@@ -116,7 +136,7 @@ describe('describeEvent - Guardian Angel PMs', () => {
     );
 
     expect(messages).toEqual([
-      { audience: 1n, key: 'GuardSavedFromFire', args: ['T'] },
+      { audience: 1n, key: 'GuardSavedFromFire', args: [mention(2n, 'T')] },
       { audience: 2n, key: 'GuardSavedYouFromFire', args: [] },
     ]);
   });
@@ -128,7 +148,9 @@ describe('describeEvent - Guardian Angel PMs', () => {
       true,
     );
 
-    expect(messages).toEqual([{ audience: 3n, key: 'GuardBlockedSnowWolf', args: ['T'] }]);
+    expect(messages).toEqual([
+      { audience: 3n, key: 'GuardBlockedSnowWolf', args: [mention(2n, 'T')] },
+    ]);
   });
 
   it('picks GuardWolf/GuardKiller/GAFell for the GA dying while protecting, by the target role', () => {
@@ -144,7 +166,7 @@ describe('describeEvent - Guardian Angel PMs', () => {
     ).toEqual([{ audience: 1n, key: 'GuardKiller', args: [] }]);
     expect(
       describeEvent({ type: 'GuardianAngelDiedProtecting', gaId: 1n, targetId: 4n }, [gd], true),
-    ).toEqual([{ audience: 1n, key: 'GAFell', args: ['GD'] }]);
+    ).toEqual([{ audience: 1n, key: 'GAFell', args: [mention(4n, 'GD')] }]);
   });
 
   it('the four attacker-side "blocked" flag events carry no message of their own (silent state-flagging)', () => {
@@ -171,7 +193,7 @@ describe('describeEvent - freeze flavor and Chemist PMs', () => {
 
     expect(messages).toEqual([
       { audience: 2n, key: 'HarlotFrozen', args: [] },
-      { audience: 1n, key: 'SuccessfulFreeze', args: ['T'] },
+      { audience: 1n, key: 'SuccessfulFreeze', args: [mention(2n, 'T')] },
     ]);
   });
 
@@ -186,7 +208,7 @@ describe('describeEvent - freeze flavor and Chemist PMs', () => {
     );
 
     expect(messages).toEqual([
-      { audience: 1n, key: 'ChemistSuccess', args: ['T'] },
+      { audience: 1n, key: 'ChemistSuccess', args: [mention(2n, 'T')] },
       { audience: 2n, key: 'ChemistVisitYouSuccess', args: [] },
     ]);
   });
@@ -202,8 +224,8 @@ describe('describeEvent - freeze flavor and Chemist PMs', () => {
     );
 
     expect(messages).toEqual([
-      { audience: 1n, key: 'ChemistFail', args: ['T'] },
-      { audience: 2n, key: 'ChemistVisitYouFail', args: ['Ch'] },
+      { audience: 1n, key: 'ChemistFail', args: [mention(2n, 'T')] },
+      { audience: 2n, key: 'ChemistVisitYouFail', args: [mention(1n, 'Ch')] },
     ]);
   });
 
@@ -219,8 +241,8 @@ describe('describeEvent - freeze flavor and Chemist PMs', () => {
         true,
       ),
     ).toEqual([
-      { audience: 1n, key: 'ChemistFell', args: ['GD'] },
-      { audience: 2n, key: 'ChemistFellDigger', args: ['Ch'] },
+      { audience: 1n, key: 'ChemistFell', args: [mention(2n, 'GD')] },
+      { audience: 2n, key: 'ChemistFellDigger', args: [mention(1n, 'Ch')] },
     ]);
     expect(
       describeEvent(
@@ -229,8 +251,8 @@ describe('describeEvent - freeze flavor and Chemist PMs', () => {
         true,
       ),
     ).toEqual([
-      { audience: 1n, key: 'ChemistSK', args: ['SK'] },
-      { audience: 3n, key: 'ChemistVisitYouSK', args: ['Ch'] },
+      { audience: 1n, key: 'ChemistSK', args: [mention(3n, 'SK')] },
+      { audience: 3n, key: 'ChemistVisitYouSK', args: [mention(1n, 'Ch')] },
     ]);
   });
 });
