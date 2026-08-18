@@ -210,7 +210,7 @@ describe('cosmetic game mode role bias', () => {
   });
 
   it('Wolf Pack mode deals noticeably more wolves on average than Normal mode', () => {
-    const countWolves = (mode?: GameMode) => {
+    const countWolves = (mode: GameMode) => {
       let total = 0;
       for (let i = 0; i < TRIALS; i++) {
         const { rolesToAssign } = balance({
