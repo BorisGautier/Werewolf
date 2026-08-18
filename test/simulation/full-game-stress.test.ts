@@ -295,7 +295,9 @@ async function runOneGame(
       case 'targetRole': {
         const target = alive.find((p) => roleName(p.role) === bias.role);
         const btn = target
-          ? buttons.find((b) => b.callback_data === `vote:${target.id.toString()}`)
+          ? buttons.find(
+              (b) => b.callback_data === `vote:${game.dayNumber}:${target.id.toString()}`,
+            )
           : undefined;
         if (btn) {
           for (const p of alive) votes.set(p.id, btn.callback_data);
@@ -533,11 +535,10 @@ describe('full game stress simulation', () => {
     // `Tanner`/`TannerWinByLynch` and `Tied` are proven separately by the dedicated scenario
     // tests below instead of relied on here: a live Pacifist always declares peace the moment
     // it's offered (this harness always uses every day-ability the instant it's available),
-    // which eats the very first lynch of any game that deals one, and `randomLynchOnTie`
-    // defaults to `true` (matching real production groups unless an admin opts out via
-    // `/config`) so a genuine `Tied` almost never survives as `Tied` in the general campaign.
-    // Neither is a campaign design flaw worth "fixing" by scaling further - it's just not
-    // where those two outcomes are reliably reachable, so they get their own targeted test.
+    // which eats the very first lynch of any game that deals one, so a genuine `Tied` isn't
+    // reliably reachable from the general campaign's random role/vote mix. Neither is a campaign
+    // design flaw worth "fixing" by scaling further - it's just not where those two outcomes are
+    // reliably reachable, so they get their own targeted test.
     const expectedElsewhere = new Set(['Tanner']);
     const campaignMissingWinTeams = missingWinTeams.filter((t) => !expectedElsewhere.has(t));
     const campaignMissingLynchOutcomes = missingLynchOutcomes.filter(

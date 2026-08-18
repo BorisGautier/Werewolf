@@ -61,6 +61,35 @@ export function resetLynchState(players: readonly Player[]): void {
 }
 
 /**
+ * Read-only preview of who the vote currently condemns, without mutating `players` or resolving
+ * anything - `p.votes` only gets its real value once `resolveLynchVotes` below actually tallies,
+ * so a caller that needs to know the outcome *before* that (e.g. the Judge's pardon prompt, which
+ * has to fire once the timer ends but before the lynch is finalized) can't just read `p.votes`
+ * directly - reads back whatever the *last* resolved round left there, not this one's live
+ * `choice`s. Mirrors `resolveLynchVotes`'s own tally math (the Mayor's double vote, the Crow's
+ * curse) so the two never disagree about who's tied.
+ */
+export function previewLynchTally(players: readonly Player[]): {
+  tied: bigint[];
+  maxVotes: number;
+} {
+  const votes = new Map<bigint, number>();
+  for (const voter of alivePlayers(players)) {
+    if (voter.choice === null || voter.choice === ABSTAIN) continue;
+    const weight = voter.role === ROLE_BIT.Mayor && voter.hasUsedAbility ? 2 : 1;
+    votes.set(voter.choice, (votes.get(voter.choice) ?? 0) + weight);
+  }
+  for (const p of players) {
+    if (p.isCursedByCrow) votes.set(p.id, (votes.get(p.id) ?? 0) + 2);
+  }
+  const maxVotes = Math.max(0, ...votes.values());
+  const tied = [...votes.entries()]
+    .filter(([, v]) => v === maxVotes && maxVotes > 0)
+    .map(([id]) => id);
+  return { tied, maxVotes };
+}
+
+/**
  * Tallies votes, applies idle-kills for players who failed to vote twice in a
  * row (on the first attempt only), and resolves the lynch. Mutates `players`
  * in place.

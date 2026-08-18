@@ -117,7 +117,7 @@ export class ScenarioRunner {
   }
 
   private testArsonistScenario(): ScenarioResult {
-    const name = 'Incendiaire (Arsonist Douse & SPARK)';
+    const name = 'Pyromane (Arsonist Douse & SPARK)';
     try {
       const arsonist = createPlayer(1n, 'ArsonistBot', ROLE_BIT.Arsonist, 'Neutral');
       const victim = createPlayer(2n, 'VictimBot', ROLE_BIT.Villager, 'Village');

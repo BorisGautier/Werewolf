@@ -22,8 +22,7 @@ export const TITLE_CATALOG: readonly PlayerTitle[] = [
     titleKey: 'Title_MadChemist',
     defaultTitle: 'Le Chimiste Fou',
     descriptionKey: 'TitleDesc_MadChemist',
-    defaultDescription:
-      'Éliminer 3 Loups-Garous avec la Potion Mortelle de la Sorcière ou du Chimiste.',
+    defaultDescription: 'Éliminer 3 Loups-Garous avec la Potion Mortelle du Chimiste.',
   },
   {
     id: 'broken_heart',
@@ -39,7 +38,7 @@ export const TITLE_CATALOG: readonly PlayerTitle[] = [
     titleKey: 'Title_Pyromaniac',
     defaultTitle: 'Le Maître du Bûcher',
     descriptionKey: 'TitleDesc_Pyromaniac',
-    defaultDescription: 'Brûler au moins 3 personnes simultanément en tant qu’Incendiaire.',
+    defaultDescription: 'Brûler au moins 3 personnes simultanément en tant que Pyromane.',
   },
   {
     id: 'silent_executioner',
