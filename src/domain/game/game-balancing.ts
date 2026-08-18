@@ -78,6 +78,99 @@ const KILL_STOPPING_ROLES: readonly Role[] = [ROLE_BIT.Troublemaker, ROLE_BIT.Sa
 
 const MAX_BALANCE_ATTEMPTS = 500;
 
+/**
+ * Which roles each cosmetic mode leans into (mirrors the "key roles" already advertised by
+ * `/modes` - `modes-guide.ts`'s `MODES_DATA_FR`, which promised a themed distribution the balancer
+ * never actually delivered on). Each listed role gets a few extra copies pushed into the candidate
+ * pool in `getRoleList()` before the existing shuffle/slice/re-balance loop runs, so the mode's
+ * theme reliably shows up without bypassing the strength/variance checks that keep every mode
+ * winnable. `Normal`/`Chaos` are intentionally absent - neither mode biases the pool at all.
+ */
+const MODE_ROLE_BIAS: Partial<Record<GameMode, readonly Role[]>> = {
+  Bloodbath: [
+    ROLE_BIT.SerialKiller,
+    ROLE_BIT.Arsonist,
+    ROLE_BIT.AlphaWolf,
+    ROLE_BIT.Gunner,
+    ROLE_BIT.Hunter,
+    ROLE_BIT.Chemist,
+  ],
+  DarkMagic: [
+    ROLE_BIT.Sorcerer,
+    ROLE_BIT.Chemist,
+    ROLE_BIT.Necromancer,
+    ROLE_BIT.Seer,
+    ROLE_BIT.Oracle,
+    ROLE_BIT.Augur,
+    ROLE_BIT.Reflector,
+  ],
+  WolfPack: [
+    ROLE_BIT.BerserkerWolf,
+    ROLE_BIT.HypnotistWolf,
+    ROLE_BIT.TrapperWolf,
+    ROLE_BIT.HowlerWolf,
+    ROLE_BIT.ChameleonWolf,
+    ROLE_BIT.ViperWolf,
+    ROLE_BIT.SnowWolf,
+  ],
+  CursedVillage: [
+    ROLE_BIT.Cursed,
+    ROLE_BIT.Cultist,
+    ROLE_BIT.CultistHunter,
+    ROLE_BIT.Avenger,
+    ROLE_BIT.Crow,
+  ],
+  Infection: [
+    ROLE_BIT.Cultist,
+    ROLE_BIT.CultistHunter,
+    ROLE_BIT.AlphaWolf,
+    ROLE_BIT.Doppelganger,
+    ROLE_BIT.WildChild,
+    ROLE_BIT.Thief,
+  ],
+  Anarchy: [
+    ROLE_BIT.Tanner,
+    ROLE_BIT.Jester,
+    ROLE_BIT.Hitman,
+    ROLE_BIT.Avenger,
+    ROLE_BIT.Thief,
+    ROLE_BIT.Arsonist,
+    ROLE_BIT.SerialKiller,
+  ],
+  HolyWar: [
+    ROLE_BIT.Priestess,
+    ROLE_BIT.Archangel,
+    ROLE_BIT.GuardianAngel,
+    ROLE_BIT.WiseElder,
+    ROLE_BIT.Cultist,
+    ROLE_BIT.Wolf,
+    ROLE_BIT.AlphaWolf,
+  ],
+  Assassins: [
+    ROLE_BIT.Hitman,
+    ROLE_BIT.Avenger,
+    ROLE_BIT.Gunner,
+    ROLE_BIT.Detective,
+    ROLE_BIT.CultistHunter,
+  ],
+};
+
+/**
+ * How many extra copies of each of a mode's biased roles get added to the candidate pool. A flat
+ * count regardless of player count over-represents the bias in a large game: `getRoleList()`
+ * slices `playerCount` roles out of the pool, so the same handful of extra entries make up a much
+ * bigger share of a 40-player slice than a 15-player one, which was pushing WolfPack/Anarchy games
+ * above ~30 players past `balance()`'s 500-attempt retry cap (`UnbalanceableGameError`) - too many
+ * high-strength "enemy" roles biased in at once for the village-vs-enemy variance check to ever
+ * satisfy. Tapering down for larger games keeps the intended bias at full strength for the common
+ * (small/medium) case while staying safely balanceable at the engine's largest supported sizes.
+ */
+function modeRoleBiasCopies(playerCount: number): number {
+  if (playerCount <= 12) return 3;
+  if (playerCount <= 20) return 2;
+  return 1;
+}
+
 export class UnbalanceableGameError extends Error {
   constructor(playerCount: number) {
     super(`Unable to create a balanced game. Please try again.\nPlayer count: ${playerCount}`);
@@ -112,7 +205,7 @@ export interface BalanceOptions {
 }
 
 export function balance(options: BalanceOptions): BalanceResult {
-  const { playerCount, chaos, burningOverkill, validationMode = false } = options;
+  const { playerCount, chaos, burningOverkill, mode, validationMode = false } = options;
 
   const disabledRoles =
     hasFlag(options.disabledRoleFlags, 1n) || validationMode
@@ -130,7 +223,7 @@ export function balance(options: BalanceOptions): BalanceResult {
       throw new UnbalanceableGameError(playerCount);
     }
 
-    rolesToAssign = getRoleList(playerCount, disabledRoles);
+    rolesToAssign = getRoleList(playerCount, disabledRoles, mode);
     while (rolesToAssign.length < playerCount) rolesToAssign.push(ROLE_BIT.Villager);
 
     possibleRoles = [...rolesToAssign];
@@ -244,12 +337,20 @@ export function tryBalance(disabledRoleFlags: RoleFlags, maxPlayers: number): bo
 }
 
 /** Mirrors `GetRoleList`: builds the candidate role pool for a given player count. */
-export function getRoleList(playerCount: number, disabledRoles: readonly Role[]): Role[] {
+export function getRoleList(
+  playerCount: number,
+  disabledRoles: readonly Role[],
+  mode?: GameMode,
+): Role[] {
   const rolesToAssign: Role[] = [];
 
-  // Max wolf population: 1 wolf per 5 players, capped at 5.
+  // Max wolf population: 1 wolf per 5 players, capped at 5 - Wolf Pack mode raises both the ratio
+  // and the cap, so several distinct wolf subtypes can actually coexist in the same game.
   let possibleWolves = WOLF_ROLES_WITH_SNOW.filter((r) => !disabledRoles.includes(r));
-  const wolfSlots = Math.min(Math.max(Math.floor(playerCount / 5), 1), 5);
+  const wolfSlots =
+    mode === 'WolfPack'
+      ? Math.min(Math.max(Math.floor(playerCount / 3), 2), 6)
+      : Math.min(Math.max(Math.floor(playerCount / 5), 1), 5);
   let wolfToAdd = possibleWolves[randomInt(possibleWolves.length)]!;
   for (let i = 0; i < wolfSlots; i++) {
     rolesToAssign.push(wolfToAdd);
@@ -286,6 +387,15 @@ export function getRoleList(playerCount: number, disabledRoles: readonly Role[])
   // Pad with villagers for larger games.
   for (let i = 0; i < Math.floor(playerCount / 4); i++) {
     rolesToAssign.push(ROLE_BIT.Villager);
+  }
+
+  // A mode's themed roles get extra copies pushed in here, after the base pool is built and
+  // regardless of any earlier player-count gate (e.g. Cultist/Cultist Hunter normally only appear
+  // above 10 players - Cursed Village/Infection still want them in a 6-player game, so both are
+  // listed explicitly in `MODE_ROLE_BIAS` for those two modes rather than relying on that gate).
+  const biasCopies = modeRoleBiasCopies(playerCount);
+  for (const role of (mode && MODE_ROLE_BIAS[mode]) || []) {
+    for (let i = 0; i < biasCopies; i++) rolesToAssign.push(role);
   }
 
   return rolesToAssign.filter((r) => !disabledRoles.includes(r));

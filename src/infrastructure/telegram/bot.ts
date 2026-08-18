@@ -1,4 +1,4 @@
-import { exec } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import * as os from 'node:os';
 import { Bot, GrammyError, InlineKeyboard, type Context } from 'grammy';
 import { GameManager } from '../../application/game-manager.js';
@@ -8,7 +8,6 @@ import type { Translator } from '../i18n/translator.js';
 import type { GameMode } from '../../domain/game/game-mode.js';
 import { getRankForPoints } from '../../domain/scoring/rank.js';
 import { TITLE_CATALOG, getTitleById } from '../../domain/titles/title.js';
-import { LAST_GAZETTES_BY_CHAT } from '../../domain/gazette/gazette-generator.js';
 import { AchievementRepository } from '../persistence/achievement.repository.js';
 import { AdminRepository } from '../persistence/admin.repository.js';
 import { GameRepository } from '../persistence/game.repository.js';
@@ -20,6 +19,7 @@ import { GameLobbyManager } from './game-lobby.js';
 import { GameLoop } from './game-loop.js';
 import { AlertService } from '../monitoring/alert-service.js';
 import { registerModesGuideCommands } from './modes-guide.js';
+import { GroupChatListener } from './group-chat-listener.js';
 import { ConfigMenu } from './config-menu.js';
 import { runWithTraceContext } from '../monitoring/tracing.js';
 import {
@@ -72,6 +72,7 @@ export async function isGroupAdminOrAnonymous(ctx: Context): Promise<boolean> {
 import { ReportRepository } from '../persistence/report.repository.js';
 import { TournamentRepository } from '../persistence/tournament.repository.js';
 import { TournamentCommandHandler } from './tournament-commands.js';
+import { escapeHtml, mentionHtml, mentionOrPlain } from './mention.js';
 
 export interface BotDependencies {
   translator: Translator;
@@ -90,6 +91,13 @@ export interface BotDependencies {
 }
 
 const INVITE_LINK_PATTERN = /^(https?:\/\/)?t(elegram)?\.me\/(\+|joinchat\/)([a-zA-Z0-9_-]+)$/;
+
+/** The one place `DEV_USER_IDS` gets checked - every dev-only command below calls this instead of
+ * redefining its own `env.devUserIds.includes(...)` closure, so a new dev-only command can't miss
+ * the check the way `/botgame`/`/addbots` originally did. */
+function isDevUser(env: Env, telegramId: bigint): boolean {
+  return env.devUserIds.includes(telegramId);
+}
 
 /**
  * Composition root for the Telegram bot itself.
@@ -228,7 +236,10 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
   // Registered before the generic `callback_query:data` catch-all further down (which doesn't
   // call next()) so its own `stopwaiting:...` callback data actually gets a chance to match.
   registerWaitlistCommands(bot, deps);
-  registerModesGuideCommands(bot);
+  registerModesGuideCommands(bot, lobby);
+
+  const groupChatListener = new GroupChatListener(env.geminiApiKey, deps.groupRepository);
+  groupChatListener.register(bot, gameLoop);
 
   const alertService = new AlertService(bot, env, logger);
 
@@ -241,7 +252,7 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
   });
 
   bot.command(['testscenarios', 'testsuite', 'auditsuite'], async (ctx) => {
-    if (!ctx.from || !env.devUserIds.includes(BigInt(ctx.from.id))) return;
+    if (!ctx.from || !isDevUser(env, BigInt(ctx.from.id))) return;
     await ctx.reply('🧪 Running Automated Scenario Audit Suite...');
     const runner = new (await import('../testing/scenario-runner.js')).ScenarioRunner();
     const results = await runner.runAllScenarios();
@@ -253,7 +264,7 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
 
   bot.command('testgif', async (ctx) => {
     if (!ctx.from) return;
-    if (!env.devUserIds.includes(BigInt(ctx.from.id))) return;
+    if (!isDevUser(env, BigInt(ctx.from.id))) return;
     const category = (
       (ctx.match as string | undefined) ?? ''
     ).trim() as import('../persistence/gif-pack.repository.js').GifCategory;
@@ -443,27 +454,37 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     const winrate =
       playerStats.played > 0 ? ((playerStats.won / playerStats.played) * 100).toFixed(1) : '0.0';
 
-    const cardLines = [
-      `👤 <b>CARTE DE PROFIL — ${ctx.from.first_name.toUpperCase()}</b>`,
-      `━━━━━━━━━━━━━━━━━━━━━━`,
-      `🏅 <b>Rang :</b> ${rank.emoji} ${displayRankTitle}`,
-      `👑 <b>Titre Équipé :</b> ${titleText}`,
-      `⭐ <b>Points de Classement :</b> ${player?.points ?? 0} pts`,
-      `🎮 <b>Parties Jouées :</b> ${playerStats.played}`,
-      `🏆 <b>Victoires :</b> ${playerStats.won} (${winrate}% winrate)`,
-      `💎 <b>Palier Donateur :</b> ${donorBadge(player?.donationLevel ?? 0) || (isFr ? 'Membre' : 'Member')}`,
-      `━━━━━━━━━━━━━━━━━━━━━━`,
-      isFr
-        ? `💡 Utilise /titles pour changer ton titre équipé !`
-        : `💡 Use /titles to change your equipped title!`,
-    ];
+    const cardLines = isFr
+      ? [
+          `👤 <b>CARTE DE PROFIL — ${ctx.from.first_name.toUpperCase()}</b>`,
+          `━━━━━━━━━━━━━━━━━━━━━━`,
+          `🏅 <b>Rang :</b> ${rank.emoji} ${displayRankTitle}`,
+          `👑 <b>Titre Équipé :</b> ${titleText}`,
+          `⭐ <b>Points de Classement :</b> ${player?.points ?? 0} pts`,
+          `🎮 <b>Parties Jouées :</b> ${playerStats.played}`,
+          `🏆 <b>Victoires :</b> ${playerStats.won} (${winrate}% de victoires)`,
+          `💎 <b>Palier Donateur :</b> ${donorBadge(player?.donationLevel ?? 0) || 'Membre'}`,
+          `━━━━━━━━━━━━━━━━━━━━━━`,
+          `💡 Utilise /titles pour changer ton titre équipé !`,
+        ]
+      : [
+          `👤 <b>PROFILE CARD — ${ctx.from.first_name.toUpperCase()}</b>`,
+          `━━━━━━━━━━━━━━━━━━━━━━`,
+          `🏅 <b>Rank:</b> ${rank.emoji} ${displayRankTitle}`,
+          `👑 <b>Equipped Title:</b> ${titleText}`,
+          `⭐ <b>Ranking Points:</b> ${player?.points ?? 0} pts`,
+          `🎮 <b>Games Played:</b> ${playerStats.played}`,
+          `🏆 <b>Wins:</b> ${playerStats.won} (${winrate}% winrate)`,
+          `💎 <b>Donor Tier:</b> ${donorBadge(player?.donationLevel ?? 0) || 'Member'}`,
+          `━━━━━━━━━━━━━━━━━━━━━━`,
+          `💡 Use /titles to change your equipped title!`,
+        ];
 
     await ctx.reply(cardLines.join('\n'), { parse_mode: 'HTML' });
   });
 
   bot.command('gazette', async (ctx) => {
-    const chatId = ctx.chat?.id ? ctx.chat.id.toString() : '';
-    const gazette = LAST_GAZETTES_BY_CHAT.get(chatId);
+    const gazette = ctx.chat ? gameLoop.getLastGazette(BigInt(ctx.chat.id)) : undefined;
     if (!gazette) {
       await ctx.reply(
         '📜 <i>Aucune gazette récente pour ce groupe. Jouez une partie pour éditer la première gazette !</i>',
@@ -594,9 +615,11 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     const claimedRole = text.charAt(0).toUpperCase() + text.slice(1);
     game.claimsMap.set(userId, claimedRole);
 
+    const playerMention = mentionHtml(userId, player.name);
+    const safeClaimedRole = escapeHtml(claimedRole);
     const announcement = isFr
-      ? `📢 <b>CLAIM :</b> <a href="tg://user?id=${userId}">${player.name}</a> affirme être <b>${claimedRole}</b> !`
-      : `📢 <b>CLAIM:</b> <a href="tg://user?id=${userId}">${player.name}</a> claims to be <b>${claimedRole}</b>!`;
+      ? `📢 <b>CLAIM :</b> ${playerMention} affirme être <b>${safeClaimedRole}</b> !`
+      : `📢 <b>CLAIM:</b> ${playerMention} claims to be <b>${safeClaimedRole}</b>!`;
 
     await ctx.api.sendMessage(Number(game.chatId), announcement, { parse_mode: 'HTML' });
   });
@@ -604,27 +627,38 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
   bot.command('claims', async (ctx) => {
     if (!ctx.chat) return;
     const chatId = BigInt(ctx.chat.id);
+    const group = await deps.groupRepository.getOrCreate(chatId, ctx.chat.title ?? null, null);
+    const isFr = group.language !== 'en';
     const game =
       gameLoop.getGame(chatId) ??
       (ctx.from ? deps.gameManager.findByPlayer(BigInt(ctx.from.id)) : undefined);
 
     if (!game || game.phase === 'Ended' || game.phase === 'Joining') {
-      await ctx.reply("Il n'y a pas de partie en cours dans ce groupe.");
+      await ctx.reply(
+        isFr
+          ? "Il n'y a pas de partie en cours dans ce groupe."
+          : 'No game currently running in this group.',
+      );
       return;
     }
 
     const lines: string[] = [];
     for (const p of game.players) {
       const claim = game.claimsMap.get(p.id);
-      const status = p.isDead ? '💀 mort' : '🙂 en vie';
+      const status = p.isDead ? (isFr ? '💀 mort' : '💀 dead') : isFr ? '🙂 en vie' : '🙂 alive';
+      const pMention = mentionOrPlain(p.id, p.name, p.isBot);
       if (claim) {
-        lines.push(`• <b>${p.name}</b> (${status}) : <b>${claim}</b>`);
+        lines.push(`• <b>${pMention}</b> (${status}) : <b>${escapeHtml(claim)}</b>`);
       } else {
-        lines.push(`• <b>${p.name}</b> (${status}) : <i>(Aucun claim)</i>`);
+        lines.push(
+          `• <b>${pMention}</b> (${status}) : <i>${isFr ? '(Aucun claim)' : '(No claim)'}</i>`,
+        );
       }
     }
 
-    const title = '📜 <b>RELEVÉ DES CLAIMS DE LA PARTIE :</b>\n\n';
+    const title = isFr
+      ? '📜 <b>RELEVÉ DES CLAIMS DE LA PARTIE :</b>\n\n'
+      : "📜 <b>THIS GAME'S CLAIMS RECAP:</b>\n\n";
     await ctx.reply(title + lines.join('\n'), { parse_mode: 'HTML' });
   });
 
@@ -688,11 +722,11 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     const alertMsg = deps.translator.translate(
       'en',
       'ReportAdminNotification',
-      reporterName,
+      mentionHtml(reporterId, reporterName),
       reporterId.toString(),
-      reportedName,
+      mentionHtml(reportedId, reportedName),
       reportedId.toString(),
-      reason,
+      escapeHtml(reason),
     );
 
     for (const adminId of adminIds) {
@@ -703,7 +737,10 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
       }
     }
 
-    await ctx.reply(deps.translator.translate(language, 'ReportReceived', reportedName));
+    await ctx.reply(
+      deps.translator.translate(language, 'ReportReceived', mentionHtml(reportedId, reportedName)),
+      { parse_mode: 'HTML' },
+    );
   });
 
   bot.command('accuse', async (ctx) => {
@@ -717,9 +754,22 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     }
 
     const parts = text.split(' ');
-    const accused = parts[0]!;
-    const motive = parts.slice(1).join(' ').trim() || undefined;
-    const accuser = ctx.from.first_name;
+    const accusedRaw = parts[0]!;
+    const motive = parts.slice(1).join(' ').trim()
+      ? escapeHtml(parts.slice(1).join(' ').trim())
+      : undefined;
+    const accuser = mentionHtml(
+      ctx.from.id,
+      `${ctx.from.first_name} ${ctx.from.last_name ?? ''}`.trim(),
+    );
+
+    let accused = escapeHtml(accusedRaw);
+    if (accusedRaw.startsWith('@')) {
+      const targetPlayer = await deps.playerRepository.findByUsername(accusedRaw.slice(1));
+      if (targetPlayer) {
+        accused = mentionHtml(targetPlayer.telegramId, targetPlayer.displayName ?? accusedRaw);
+      }
+    }
 
     const templates = [
       `🎭 <b>TIRADE D'ACCUSATION SPECTACULAIRE !</b> 📜\n\n<i>${accuser} pointe un doigt accusateur et tremblant vers <b>${accused}</b> !</i>\n\n💬 « Regardez-le ! Ses mains tremblent comme les feuilles d'un saule pleureur ! ${motive ? `Il affirme que "${motive}", mais ` : ''}Hier soir, je l'ai vu rôder près de la porcherie... <b>${accused} est un Loup-Garou, c'est une certitude !</b> » 🐺🔥`,
@@ -746,9 +796,15 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
 
     const lines = ['⚠️ <b>Pending Player Reports:</b>\n'];
     for (const r of pending) {
-      const reporter = r.reporter?.displayName ?? r.reporterId.toString();
-      const reported = r.reported?.displayName ?? r.reportedId.toString();
-      lines.push(`• <b>#${r.id}</b>: ${reporter} ➡️ ${reported} - <i>${r.reason}</i>`);
+      const reporter = mentionHtml(
+        r.reporterId,
+        r.reporter?.displayName ?? r.reporterId.toString(),
+      );
+      const reported = mentionHtml(
+        r.reportedId,
+        r.reported?.displayName ?? r.reportedId.toString(),
+      );
+      lines.push(`• <b>#${r.id}</b>: ${reporter} ➡️ ${reported} - <i>${escapeHtml(r.reason)}</i>`);
     }
 
     await ctx.reply(lines.join('\n'), { parse_mode: 'HTML' });
@@ -757,30 +813,67 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
   const START_COMMAND_MODE_MAP: Record<string, GameMode> = {
     startgame: 'Normal',
     startnormal: 'Normal',
+    start_normal: 'Normal',
+    startclassic: 'Normal',
+    start_classic: 'Normal',
+
     startchaos: 'Chaos',
+    start_chaos: 'Chaos',
+
     startbloodbath: 'Bloodbath',
+    start_bloodbath: 'Bloodbath',
+
     startdarkmagic: 'DarkMagic',
+    start_darkmagic: 'DarkMagic',
+
     startwolfpack: 'WolfPack',
+    start_wolfpack: 'WolfPack',
+
     startcursed: 'CursedVillage',
+    start_cursed: 'CursedVillage',
+    startcursedvillage: 'CursedVillage',
+    start_cursed_village: 'CursedVillage',
+
     startinfection: 'Infection',
+    start_infection: 'Infection',
+
     startanarchy: 'Anarchy',
+    start_anarchy: 'Anarchy',
+
     startholywar: 'HolyWar',
+    start_holywar: 'HolyWar',
+
     startassassins: 'Assassins',
+    start_assassins: 'Assassins',
   };
 
   bot.command(
     [
       'startgame',
       'startnormal',
+      'start_normal',
+      'startclassic',
+      'start_classic',
       'startchaos',
+      'start_chaos',
       'startbloodbath',
+      'start_bloodbath',
       'startdarkmagic',
+      'start_darkmagic',
       'startwolfpack',
+      'start_wolfpack',
       'startcursed',
+      'start_cursed',
+      'startcursedvillage',
+      'start_cursed_village',
       'startinfection',
+      'start_infection',
       'startanarchy',
+      'start_anarchy',
       'startholywar',
+      'start_holywar',
       'startassassins',
+      'start_assassins',
     ],
     async (ctx) => {
       if (!ctx.chat || !ctx.from) return;
@@ -883,8 +976,23 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
   // Every night/day/lynch menu button (see game-loop.ts) - registered after the join button so
   // that more specific handler only intercepts its own exact callback data, and this one gets
   // everything else.
+  // Callback buttons (night/day/lynch menus) aren't covered by SpamGuard (that only watches
+  // slash commands) - a scripted client mashing a button can otherwise fire unlimited
+  // `handleCallback` calls per second. This is a silent per-user cooldown, not a ban: it just
+  // drops taps that arrive faster than a human plausibly taps, while still acknowledging the
+  // callback so the Telegram client's loading spinner doesn't hang.
+  const lastCallbackAt = new Map<bigint, number>();
+  const CALLBACK_COOLDOWN_MS = 350;
+
   bot.on('callback_query:data', async (ctx) => {
     if (!ctx.from || !ctx.chat) return;
+    const callerId = BigInt(ctx.from.id);
+    const now = Date.now();
+    if (now - (lastCallbackAt.get(callerId) ?? 0) < CALLBACK_COOLDOWN_MS) {
+      await ctx.answerCallbackQuery().catch(() => null);
+      return;
+    }
+    lastCallbackAt.set(callerId, now);
     const text = await gameLoop.handleCallback(
       BigInt(ctx.from.id),
       BigInt(ctx.chat.id),
@@ -920,7 +1028,11 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
   });
 
   bot.command(['addbots', 'addbot'], async (ctx) => {
-    if (!ctx.chat || ctx.chat.type === 'private') return;
+    if (!ctx.chat || ctx.chat.type === 'private' || !ctx.from) return;
+    if (!isDevUser(env, BigInt(ctx.from.id))) {
+      await ctx.reply('⛔ Cette commande est réservée aux développeurs du bot.');
+      return;
+    }
     const count = parseInt((ctx.match as string | undefined) ?? '', 10) || 4;
     const added = await lobby.addBotPlayers(BigInt(ctx.chat.id), count);
     if (added > 0) {
@@ -936,6 +1048,10 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
 
   bot.command('botgame', async (ctx) => {
     if (!ctx.chat || ctx.chat.type === 'private' || !ctx.from) return;
+    if (!isDevUser(env, BigInt(ctx.from.id))) {
+      await ctx.reply('⛔ Cette commande est réservée aux développeurs du bot.');
+      return;
+    }
     const name = `${ctx.from.first_name} ${ctx.from.last_name ?? ''}`.trim();
     await lobby.startGame(
       BigInt(ctx.chat.id),
@@ -1266,7 +1382,14 @@ function registerModerationCommands(
       await deps.adminRepository.ban(target.id, reason, BigInt(ctx.from.id));
       bansApplied.inc();
       await lobby.smite(BigInt(ctx.chat.id), target);
-      await ctx.reply(deps.translator.translate(group.language, 'BanConfirmed', target.name));
+      await ctx.reply(
+        deps.translator.translate(
+          group.language,
+          'BanConfirmed',
+          mentionHtml(target.id, target.name),
+        ),
+        { parse_mode: 'HTML' },
+      );
     }
   });
 
@@ -1294,7 +1417,12 @@ function registerModerationCommands(
     for (const target of targets) {
       const unbanned = await deps.adminRepository.unban(target.id);
       const key = unbanned ? 'UnbanConfirmed' : 'UnbanNotFound';
-      await ctx.reply(deps.translator.translate(group.language, key, target.name));
+      await ctx.reply(
+        deps.translator.translate(group.language, key, mentionHtml(target.id, target.name)),
+        {
+          parse_mode: 'HTML',
+        },
+      );
     }
   });
 
@@ -1385,7 +1513,14 @@ function registerModerationCommands(
 
     const ban = await deps.adminRepository.getBan(target.id);
     if (!ban) {
-      await ctx.reply(deps.translator.translate(group.language, 'GetBanNotBanned', target.name));
+      await ctx.reply(
+        deps.translator.translate(
+          group.language,
+          'GetBanNotBanned',
+          mentionHtml(target.id, target.name),
+        ),
+        { parse_mode: 'HTML' },
+      );
       return;
     }
     const expires = ban.expiresAt
@@ -1398,12 +1533,13 @@ function registerModerationCommands(
       deps.translator.translate(
         group.language,
         'GetBanStatus',
-        target.name,
-        ban.reason,
+        mentionHtml(target.id, target.name),
+        escapeHtml(ban.reason),
         ban.bannedBy?.toString() ?? '?',
         expires,
         firstSeen,
       ),
+      { parse_mode: 'HTML' },
     );
   });
 
@@ -1440,7 +1576,7 @@ function registerModerationCommands(
       ? deps.translator.translate(
           group.language,
           'UserProfileBanned',
-          ban.reason,
+          escapeHtml(ban.reason),
           ban.expiresAt
             ? ban.expiresAt.toISOString()
             : deps.translator.translate(group.language, 'GetBanPermanent'),
@@ -1451,7 +1587,7 @@ function registerModerationCommands(
       deps.translator.translate(
         group.language,
         'UserProfile',
-        player.displayName ?? target.name,
+        mentionHtml(target.id, player.displayName ?? target.name),
         player.username ?? '-',
         player.languageCode ?? '-',
         `${played} (won: ${won})`,
@@ -1460,6 +1596,7 @@ function registerModerationCommands(
         player.tempBanCount.toString(),
         banStatus,
       ),
+      { parse_mode: 'HTML' },
     );
   });
 }
@@ -1469,7 +1606,7 @@ async function isGlobalAdminCheck(
   deps: BotDependencies,
   telegramId: bigint,
 ): Promise<boolean> {
-  if (env.devUserIds.includes(telegramId)) return true;
+  if (isDevUser(env, telegramId)) return true;
   return deps.adminRepository.isGlobalAdmin(telegramId);
 }
 
@@ -1542,13 +1679,25 @@ function registerAchievementCommands(bot: Bot, env: Env, deps: BotDependencies):
       const added = await deps.achievementRepository.unlock(target.id, code);
       const key = added ? 'AchAdded' : 'AchAlreadyHad';
       await ctx.reply(
-        deps.translator.translate(language, key, ACHIEVEMENTS[code].name, target.name),
+        deps.translator.translate(
+          language,
+          key,
+          ACHIEVEMENTS[code].name,
+          mentionHtml(target.id, target.name),
+        ),
+        { parse_mode: 'HTML' },
       );
     } else {
       const removed = await deps.achievementRepository.remove(target.id, code);
       const key = removed ? 'AchRemoved' : 'AchDidntHave';
       await ctx.reply(
-        deps.translator.translate(language, key, ACHIEVEMENTS[code].name, target.name),
+        deps.translator.translate(
+          language,
+          key,
+          ACHIEVEMENTS[code].name,
+          mentionHtml(target.id, target.name),
+        ),
+        { parse_mode: 'HTML' },
       );
     }
   });
@@ -1621,7 +1770,7 @@ function registerDevCommands(
   maintenance: { on: boolean },
   startTime: Date,
 ): void {
-  const isDev = (telegramId: bigint) => env.devUserIds.includes(telegramId);
+  const isDev = (telegramId: bigint) => isDevUser(env, telegramId);
 
   bot.command('leavegroup', async (ctx) => {
     if (!ctx.from) return;
@@ -1761,12 +1910,24 @@ function registerDevCommands(
     await ctx.reply(
       'Pulling latest code and rebuilding - the process will restart shortly if this succeeds...',
     );
-    exec('git pull && npm run build', { cwd: process.cwd() }, (err) => {
-      if (err) {
-        logger.error({ err }, 'Update failed');
+    // execFile (argument array, no shell) instead of exec('git pull && npm run build') - no
+    // string is ever interpreted by a shell, so there's no metacharacter-injection surface even
+    // in principle, regardless of whether user input could ever reach this (it can't today).
+    execFile('git', ['pull'], { cwd: process.cwd() }, (pullErr) => {
+      if (pullErr) {
+        logger.error({ err: pullErr }, 'Update failed: git pull');
         return;
       }
-      process.exit(0);
+      // npm's own executable is a .cmd/.ps1 shim on Windows, which execFile can't launch
+      // directly without a shell - `shell: true` is safe here since every argument is a static
+      // hardcoded string, never user input.
+      execFile('npm', ['run', 'build'], { cwd: process.cwd(), shell: true }, (buildErr) => {
+        if (buildErr) {
+          logger.error({ err: buildErr }, 'Update failed: npm run build');
+          return;
+        }
+        process.exit(0);
+      });
     });
   });
 
@@ -1800,7 +1961,7 @@ function registerDevCommands(
  * submission replaces the need for it).
  */
 function registerGifCommands(bot: Bot, env: Env, deps: BotDependencies): void {
-  const isDev = (telegramId: bigint) => env.devUserIds.includes(telegramId);
+  const isDev = (telegramId: bigint) => isDevUser(env, telegramId);
 
   bot.command('customgif', async (ctx) => {
     if (!ctx.from) return;
@@ -1944,7 +2105,7 @@ const DONATE_PAYLOAD_PREFIX = 'donate:';
  * unlocks the custom gif pack feature (see `registerGifCommands`), 2 and 3 are cosmetic-only.
  */
 function registerDonationCommands(bot: Bot, env: Env, deps: BotDependencies): void {
-  const isDev = (telegramId: bigint) => env.devUserIds.includes(telegramId);
+  const isDev = (telegramId: bigint) => isDevUser(env, telegramId);
 
   bot.command('donate', async (ctx) => {
     if (!ctx.from || !ctx.chat) return;
@@ -2013,10 +2174,11 @@ function registerDonationCommands(bot: Bot, env: Env, deps: BotDependencies): vo
     );
   });
 
-  // Register Telegram Bot Command Menu for Auto-Complete UI (Scoped & Prioritized)
+  // Register Telegram Bot Command Menu for Auto-Complete UI (Scoped & Prioritized).
+  // `/botgame`/`/addbots` are deliberately absent - they're dev-only (see isDevUser above),
+  // advertising them in the public autocomplete menu would just mislead everyone else.
   const groupCommands = [
     { command: 'startgame', description: '🐺 Lancer une partie classique' },
-    { command: 'botgame', description: '🤖 Partie solo avec 5 bots IA Gemini 2.5' },
     { command: 'join', description: '✋ Rejoindre la partie en attente' },
     { command: 'forcestart', description: '⚡ Lancer la partie sans attendre' },
     { command: 'claim', description: '📢 Déclarer publiquement son rôle (ex: /claim Voyante)' },
@@ -2057,10 +2219,65 @@ function registerDonationCommands(bot: Bot, env: Env, deps: BotDependencies): vo
     { command: 'donate', description: "⭐ Faire un don d'Étoiles et devenir Donateur" },
   ];
 
+  // English variants, registered against `language_code: 'en'` (see below) - Telegram shows these
+  // instead of the French default to any user whose own Telegram app is set to English, regardless
+  // of this particular group's `/setlang` configuration (the native command menu is a per-user
+  // Telegram-client setting, orthogonal to our own per-group language).
+  const groupCommandsEn: typeof groupCommands = [
+    { command: 'startgame', description: '🐺 Start a classic game' },
+    { command: 'join', description: '✋ Join the pending game' },
+    { command: 'forcestart', description: '⚡ Start the game without waiting' },
+    { command: 'claim', description: '📢 Publicly declare your role (e.g. /claim Seer)' },
+    { command: 'claims', description: '📜 Recap of every claim made this game' },
+    { command: 'players', description: '👥 List of living & dead players' },
+    { command: 'leaderboard', description: '🏆 Global leaderboard of top players' },
+    { command: 'profile', description: '👤 View your profile card and rank' },
+    { command: 'titles', description: '👑 Choose and equip your honor title' },
+    { command: 'setlang', description: '🌐 Change the bot language (FR / EN)' },
+    { command: 'config', description: '⚙️ Configure the group options and roles' },
+    { command: 'modes', description: '📘 Browse the game modes guide' },
+    { command: 'stats', description: '📊 View your game statistics' },
+    { command: 'rolelist', description: '📜 Guide and description of every role' },
+    { command: 'accuse', description: '👉 Publicly accuse a player' },
+    { command: 'tournoi', description: '🏆 Main tournament menu' },
+    { command: 'creerequipe', description: '🛡️ Create a tournament team' },
+    { command: 'rejoindreequipe', description: '🤝 Join a tournament team' },
+    { command: 'monequipe', description: '🚩 View your tournament team' },
+    { command: 'inscrirefournoi', description: '📝 Register your team for a tournament' },
+    { command: 'startchaos', description: '🌀 Chaos mode (chaotic roles)' },
+    { command: 'flee', description: '🏃 Leave the lobby before it starts' },
+    { command: 'extend', description: '⏳ Extend the lobby wait time' },
+    { command: 'help', description: '❓ Get help and the rules' },
+    { command: 'gazette', description: "📜 Read the last game's story recap" },
+    { command: 'report', description: '🚨 Report a player after the game' },
+    { command: 'waitlist', description: '🔔 Get notified when a new game starts' },
+  ];
+
+  const privateCommandsEn: typeof privateCommands = [
+    { command: 'start', description: '🚀 Start the bot' },
+    { command: 'role', description: '🕵️ Check your secret role privately' },
+    { command: 'profile', description: '👤 View your profile card and rank' },
+    { command: 'titles', description: '👑 Choose and equip your honor title' },
+    { command: 'leaderboard', description: '🏆 Global leaderboard of top players' },
+    { command: 'stats', description: '📊 View your game statistics' },
+    { command: 'setlang', description: '🌐 Change the bot language (FR / EN)' },
+    { command: 'help', description: '❓ Get help and the rules' },
+    { command: 'donate', description: '⭐ Donate Stars and become a Donor' },
+  ];
+
   void Promise.all([
     bot.api.setMyCommands(groupCommands, { scope: { type: 'all_group_chats' } }),
     bot.api.setMyCommands(privateCommands, { scope: { type: 'all_private_chats' } }),
     bot.api.setMyCommands(groupCommands),
+    bot.api.setMyCommands(groupCommandsEn, {
+      scope: { type: 'all_group_chats' },
+      language_code: 'en',
+    }),
+    bot.api.setMyCommands(privateCommandsEn, {
+      scope: { type: 'all_private_chats' },
+      language_code: 'en',
+    }),
+    bot.api.setMyCommands(groupCommandsEn, { language_code: 'en' }),
   ]).catch(() => {
     // Ignore network errors on startup
   });

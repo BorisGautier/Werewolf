@@ -5,6 +5,12 @@ import { buildEndGameSummary } from '../../src/infrastructure/telegram/end-game-
 import { getDefaultLocale, loadLocales } from '../../src/infrastructure/i18n/locale-loader.js';
 import { Translator } from '../../src/infrastructure/i18n/translator.js';
 
+/** Matches `mentionHtml()`'s output - every non-bot player name is now a real Telegram
+ * text-mention, not plain text (see `src/infrastructure/telegram/mention.ts`). */
+function mention(id: bigint, name: string): string {
+  return `<a href="tg://user?id=${id}">${name}</a>`;
+}
+
 let translator: Translator;
 
 beforeEach(async () => {
@@ -21,7 +27,7 @@ describe('buildEndGameSummary', () => {
 
     const text = buildEndGameSummary([a, b], 'NONE', 'en', translator, null);
 
-    expect(text).toBe('Players Alive: 1 / 2\nBob\nAlice');
+    expect(text).toBe(`Players Alive: 1 / 2\n${mention(2n, 'Bob')}\n${mention(1n, 'Alice')}`);
   });
 
   it('ALL mode lists every player with status, role, and outcome', () => {
@@ -39,9 +45,9 @@ describe('buildEndGameSummary', () => {
     const text = buildEndGameSummary([alive, dead, fled], 'ALL', 'en', translator, null);
 
     expect(text).toContain('Players Alive: 1 / 3');
-    expect(text).toContain('Bob: 💀 Dead - 🐺 Wolf Lost');
-    expect(text).toContain('Carol: Ran away - 👳 Seer Lost');
-    expect(text).toContain('Alice: 🙂 Alive - 👱 Villager Won');
+    expect(text).toContain(`${mention(2n, 'Bob')}: 💀 Dead - 🐺 Wolf Lost`);
+    expect(text).toContain(`${mention(3n, 'Carol')}: Ran away - 👳 Seer Lost`);
+    expect(text).toContain(`${mention(1n, 'Alice')}: 🙂 Alive - 👱 Villager Won`);
   });
 
   it('LIVING mode lists only survivors, grouped with their team label', () => {
@@ -53,7 +59,7 @@ describe('buildEndGameSummary', () => {
     const text = buildEndGameSummary([alive, dead], 'LIVING', 'en', translator, null);
 
     expect(text).toContain('Remaining living players, roles, and team:');
-    expect(text).toContain('Alice: 👱 Villager Village Team  Won');
+    expect(text).toContain(`${mention(1n, 'Alice')}: 👱 Villager Village Team  Won`);
     expect(text).not.toContain('Bob');
   });
 
@@ -88,8 +94,8 @@ describe('buildEndGameSummary', () => {
 
     const text = buildEndGameSummary([alice, bob], 'NONE', 'en', translator, null, badges);
 
-    expect(text).toContain('Alice 🥇');
+    expect(text).toContain(`${mention(1n, 'Alice')} 🥇`);
     expect(text).not.toContain('Bob 🥇');
-    expect(text).toContain('Bob');
+    expect(text).toContain(mention(2n, 'Bob'));
   });
 });

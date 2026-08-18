@@ -24,6 +24,14 @@ export interface VisitContext {
   dayNumber: number;
   thiefFull: boolean;
   random?: () => number;
+  /** Ids of every Reflector whose mirror is currently raised (see `Game.reflectorActiveSet`) -
+   * anyone who visits one of them here dies instead of succeeding, mirroring the Serial Killer's
+   * own "visiting me is fatal" branch below, but for *any* visitor rather than a hardcoded role. */
+  reflectorActive?: ReadonlySet<bigint>;
+  /** The id of whoever the Trapper Wolf ambushed tonight (see `resolveTrapperWolfNight` -
+   * a once-per-game ability). Any non-wolf visitor to this player has their action neutralized
+   * outright; the pack itself is immune to its own teammate's trap. */
+  trappedTargetId?: bigint | null;
 }
 
 export interface VisitOutcome {
@@ -46,6 +54,32 @@ export function visitPlayer(
 
   if (visited.isDead && !visited.burning && (thiefFull || visitor.role !== ROLE_BIT.Thief)) {
     return { result: 'AlreadyDead', events };
+  }
+
+  // The Reflector's raised mirror sends any visit - friendly or hostile - straight back at
+  // whoever made it, before any of the role-specific branches below even get a chance to run.
+  // Doesn't apply to the Reflector visiting someone else, only to being visited themselves, and a
+  // self-visit (shouldn't normally happen) is ignored rather than killing them off their own mirror.
+  if (ctx.reflectorActive?.has(visited.id) && visitor.id !== visited.id) {
+    events.push(
+      ...killPlayer(players, visitor.id, 'VisitKiller', {
+        killerIds: [visited.id],
+        diedByVisitingKiller: true,
+      }),
+      { type: 'ReflectorReflected', reflectorId: visited.id, attackerId: visitor.id },
+    );
+    return { result: 'VisitorDied', events };
+  }
+
+  // The Trapper Wolf's ambush: anyone but the pack itself who visits the trapped house tonight has
+  // their action neutralized outright - checked before every role-specific branch below, including
+  // the Serial Killer's usual "never misses" guarantee.
+  if (
+    ctx.trappedTargetId === visited.id &&
+    !WOLF_ROLES.includes(visitor.role) &&
+    visitor.role !== ROLE_BIT.SnowWolf
+  ) {
+    return { result: 'Fail', events };
   }
 
   // A Serial Killer never misses their target (they might stumble into a dug grave, handled below).

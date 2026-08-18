@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ROLE_BIT, addFlag, ROLE_VALID } from '../../src/domain/roles/role.js';
 import { Game, GameError } from '../../src/domain/game/game.aggregate.js';
+import type { Player } from '../../src/domain/game/player.js';
 
 function joinedGame(playerCount = 8) {
   const game = new Game({ chatId: 1n, mode: 'Normal', minPlayers: 5 });
@@ -8,6 +9,21 @@ function joinedGame(playerCount = 8) {
     game.addPlayer(BigInt(i), `Player${i}`);
   }
   return game;
+}
+
+/**
+ * `game.start()` already ran `checkRoleChanges()` once (inside `enterNight()`) against whatever
+ * real random roles `balance()` just dealt - if that happened to include e.g. a Crown Prince with
+ * no Mayor alive, or an Apprentice Seer with no Seer, it already silently promoted them and bumped
+ * `changedRolesCount` before this override even runs. Reset it too, or a test asserting on that
+ * counter later would occasionally see stale state left over from an unrelated promotion.
+ */
+function pinToVillager(players: Iterable<Player>): void {
+  for (const p of players) {
+    p.role = ROLE_BIT.Villager;
+    p.team = 'Village';
+    p.changedRolesCount = 0;
+  }
 }
 
 describe('Game (joining phase)', () => {
@@ -73,10 +89,8 @@ describe('Game (full day/night/lynch cycle)', () => {
     const [wolf, ...rest] = game.players;
     wolf!.role = ROLE_BIT.Wolf;
     wolf!.team = 'Wolf';
-    for (const p of rest) {
-      p.role = ROLE_BIT.Villager;
-      p.team = 'Village';
-    }
+    wolf!.changedRolesCount = 0;
+    pinToVillager(rest);
 
     game.startDay();
     expect(game.phase).toBe('Day');
@@ -227,10 +241,7 @@ describe('Game (full day/night/lynch cycle)', () => {
   it('cannot resolve a lynch or advance phases once the game has ended', () => {
     const game = joinedGame(5);
     game.start();
-    for (const p of game.players) {
-      p.role = ROLE_BIT.Villager;
-      p.team = 'Village';
-    }
+    pinToVillager(game.players);
     // Kill everyone but one villager: last one standing -> Village wins.
     const [a, ...rest] = game.players;
     for (const victim of rest) {
@@ -246,10 +257,7 @@ describe('Game (full day/night/lynch cycle)', () => {
   it('demotes the Hunter to Villager when their final shot kills the Wise Elder', () => {
     const game = joinedGame(5);
     game.start();
-    for (const p of game.players) {
-      p.role = ROLE_BIT.Villager;
-      p.team = 'Village';
-    }
+    pinToVillager(game.players);
     const hunter = game.players[0]!;
     hunter.role = ROLE_BIT.Hunter;
     const wiseElder = game.players[1]!;
@@ -269,10 +277,7 @@ describe('Game (full day/night/lynch cycle)', () => {
   it("doesn't demote a Hunter who kills anyone other than the Wise Elder", () => {
     const game = joinedGame(5);
     game.start();
-    for (const p of game.players) {
-      p.role = ROLE_BIT.Villager;
-      p.team = 'Village';
-    }
+    pinToVillager(game.players);
     const hunter = game.players[0]!;
     hunter.role = ROLE_BIT.Hunter;
     const target = game.players[1]!;

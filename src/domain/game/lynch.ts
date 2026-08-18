@@ -40,6 +40,10 @@ export interface LynchOptions {
   judgePardon?: boolean;
   judgeId?: bigint;
   random?: () => number;
+  /** Mirrors `Game.avengerTargetMap` (avengerId -> their secret rival's id, assigned at game
+   * start) - the Avenger's win condition ("if that rival is executed by village lynch vote")
+   * needs it, since the target lives here rather than on the Avenger's own `Player` record. */
+  avengerTargetMap?: ReadonlyMap<bigint, bigint>;
 }
 
 export interface LynchResult {
@@ -116,10 +120,12 @@ export function resolveLynchVotes(players: Player[], options: LynchOptions): Lyn
     }
   }
 
-  // Apply Crow curse (+2 penalty votes)
+  // Apply Crow curse (+2 penalty votes) - a one-shot hex that only affects the *next* lynching
+  // (see `resolveCrowNight` in night-resolution.ts), so it's cleared again right after applying it.
   players.forEach((p) => {
     if (p.isCursedByCrow) {
       p.votes += 2;
+      p.isCursedByCrow = false;
     }
   });
 
@@ -159,15 +165,6 @@ export function resolveLynchVotes(players: Player[], options: LynchOptions): Lyn
         .map((p) => p.id);
       events.push(...killPlayer(players, lynched.id, 'Lynch', { killerIds, isNight: false }));
 
-      // Check CrownPrince promotion if Mayor died
-      if (lynched.role === ROLE_BIT.Mayor) {
-        const cp = players.find((p) => !p.isDead && p.role === ROLE_BIT.CrownPrince);
-        if (cp) {
-          cp.role = ROLE_BIT.Mayor;
-          cp.hasUsedAbility = true;
-        }
-      }
-
       // Jester lynch victory
       if (lynched.role === ROLE_BIT.Jester) {
         lynched.won = true;
@@ -187,8 +184,13 @@ export function resolveLynchVotes(players: Player[], options: LynchOptions): Lyn
       players
         .filter((p) => !p.isDead && p.role === ROLE_BIT.Avenger)
         .forEach((avenger) => {
-          if (avenger.targetId === lynched!.id) {
+          if (options.avengerTargetMap?.get(avenger.id) === lynched!.id) {
             avenger.won = true;
+            events.push({
+              type: 'AvengerRivalLynched',
+              avengerId: avenger.id,
+              targetId: lynched!.id,
+            });
           }
         });
 

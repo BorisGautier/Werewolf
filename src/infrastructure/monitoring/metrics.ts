@@ -813,8 +813,27 @@ const startTime = Date.now();
  * Default port: 9090 (configurable via METRICS_PORT env var).
  */
 export function startMetricsServer(logger: WinstonLogger, port = 9090): void {
+  // /metrics leaks command names, error rates, and other internal-shape details - harmless on a
+  // private scrape network, but worth gating if this port is ever reachable beyond that. Opt-in
+  // via METRICS_TOKEN so deployments that already isolate this port at the network level aren't
+  // forced to change anything.
+  const metricsToken = process.env.METRICS_TOKEN;
+  if (!metricsToken) {
+    logger.warn(
+      'METRICS_TOKEN is not set - the /metrics endpoint is unauthenticated. Set METRICS_TOKEN and require an `Authorization: Bearer <token>` header if this port is reachable outside a trusted scrape network.',
+    );
+  }
+
   const server = createServer(async (req, res) => {
     if (req.url === '/metrics' && req.method === 'GET') {
+      if (metricsToken) {
+        const authHeader = req.headers.authorization ?? '';
+        if (authHeader !== `Bearer ${metricsToken}`) {
+          res.writeHead(401);
+          res.end('Unauthorized');
+          return;
+        }
+      }
       try {
         const metrics = await registry.metrics();
         res.writeHead(200, { 'Content-Type': registry.contentType });

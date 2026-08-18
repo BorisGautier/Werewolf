@@ -133,6 +133,15 @@ export class DatabaseBackupManager {
    * Restores a database backup from file.
    */
   async restoreBackup(filename: string): Promise<boolean> {
+    // `filename` reaches here from an admin API request body - `path.basename()` alone only
+    // strips directory components, it doesn't strip shell metacharacters (quotes, `$`, backticks,
+    // `;`) that the commands below interpolate into a real shell string. A backup can only ever
+    // be *created* by this class itself with a timestamp-derived name, so nothing malicious can
+    // land in `this.backupDir` today - this allowlist is defense in depth against that changing,
+    // or against a filename that merely happens to exist but was never meant to be "restorable".
+    if (!/^[\w.-]+\.(sql\.gz|sql|json)$/.test(filename)) {
+      throw new Error(`Invalid backup filename: ${filename}`);
+    }
     const filepath = path.join(this.backupDir, path.basename(filename));
     if (!fs.existsSync(filepath)) {
       throw new Error(`Backup file ${filename} does not exist.`);
