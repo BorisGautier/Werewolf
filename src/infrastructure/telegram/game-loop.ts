@@ -52,6 +52,8 @@ import {
 } from './role-menus.js';
 import { buildEndGameSummary } from './end-game-summary.js';
 import { calculateGamePoints } from '../../domain/scoring.js';
+import { calculateRolePerformanceBonus } from '../../domain/role-performance.js';
+import { previewLynchTally } from '../../domain/game/lynch.js';
 import {
   archivistReports,
   botNightActions,
@@ -82,6 +84,12 @@ import {
 } from '../monitoring/metrics.js';
 
 const NIGHT_ONE_MIN_SECONDS = 120;
+
+/** How long the Hunter gets to pick their final dying shot. Deliberately its own short constant
+ * rather than reusing `group.dayTimerSeconds` (120s+ by default) - picking one target from a list
+ * is a single quick decision, not a discussion phase, and making the whole village wait out a full
+ * day timer just for that one click was needlessly slow. */
+const HUNTER_SHOT_SECONDS = 30;
 
 /** Guardian Angel event types that count as a "save" for the GotYourBack achievement. */
 const GA_SAVE_EVENT_TYPES: ReadonlySet<GameEvent['type']> = new Set([
@@ -244,7 +252,23 @@ export class GameLoop {
     if (await this.handleHunterShots(game, group, events, 'Night')) return;
     if (game.phase === 'Ended') return this.finish(game);
 
+    await this.sendNightRecap(game, group);
     await this.runDay(game);
+  }
+
+  /** Unprompted end-of-night summary: who's still alive, who died overnight - the same alive/dead
+   * status `/players` already shows, just sent automatically once the night's events (including any
+   * Hunter dying shot) have fully settled, so the village doesn't have to type `/players` to see
+   * where things stand before the day begins. */
+  private async sendNightRecap(game: Game, group: GroupWithConfig): Promise<void> {
+    const language = group.language;
+    const names = game.players
+      .map((p) => {
+        const status = this.t.translate(language, p.isDead ? 'Dead' : 'Alive');
+        return `${mentionOrPlain(p.id, p.name, p.isBot)} (${status})`;
+      })
+      .join('\n');
+    await this.send(game.chatId, language, 'NightRecap', game.dayNumber, names);
   }
 
   private nightSeconds(game: Game, group: GroupWithConfig): number {
@@ -573,11 +597,10 @@ export class GameLoop {
       );
 
       if (judge) {
-        const maxVotes = Math.max(0, ...game.players.map((p) => p.votes));
-        const tied = game.players.filter((p) => p.votes === maxVotes && maxVotes > 0);
-        if (tied.length === 1 && tied[0]!.id !== judge.id) {
-          const condemned = tied[0]!;
-          judge.choice = null;
+        const { tied, maxVotes } = previewLynchTally(game.players);
+        if (tied.length === 1 && tied[0] !== judge.id) {
+          const condemned = game.players.find((p) => p.id === tied[0])!;
+          judge.judgePardonChoice = null;
           const pardonKeyboard = new InlineKeyboard()
             .text(
               group.language === 'fr' ? '⚖️ Accorder la Grâce' : '⚖️ Grant Pardon',
@@ -589,8 +612,8 @@ export class GameLoop {
           const condemnedMention = mentionOrPlain(condemned.id, condemned.name, condemned.isBot);
           const promptMsg =
             group.language === 'fr'
-              ? `⚖️ <b>DROIT DE GRÂCE DU JUGE !</b>\n\nLe village vient de condamner <b>${condemnedMention}</b> au gibet avec ${condemned.votes} vote(s) !\n\nVoulez-vous exercer votre Droit de Grâce (unique) pour annuler cette exécution ?`
-              : `⚖️ <b>JUDGE'S PARDON!</b>\n\nThe village has condemned <b>${condemnedMention}</b> to the gallows with ${condemned.votes} vote(s)!\n\nDo you want to use your unique Right of Pardon to save them?`;
+              ? `⚖️ <b>DROIT DE GRÂCE DU JUGE !</b>\n\nLe village vient de condamner <b>${condemnedMention}</b> au gibet avec ${maxVotes} vote(s) !\n\nVoulez-vous exercer votre Droit de Grâce (unique) pour annuler cette exécution ?`
+              : `⚖️ <b>JUDGE'S PARDON!</b>\n\nThe village has condemned <b>${condemnedMention}</b> to the gallows with ${maxVotes} vote(s)!\n\nDo you want to use your unique Right of Pardon to save them?`;
 
           await this.bot.api
             .sendMessage(chatNumber(judge.id), promptMsg, {
@@ -600,12 +623,12 @@ export class GameLoop {
             .catch(() => null);
 
           if (judge.isBot) {
-            if (Math.random() < 0.35) judge.choice = 1n;
+            if (Math.random() < 0.35) judge.judgePardonChoice = true;
           } else {
             await this.phaseSleep(game.chatId, 10000);
           }
 
-          if (judge.choice === 1n) {
+          if (judge.judgePardonChoice === true) {
             judgePardon = true;
             judgeId = judge.id;
           }
@@ -631,14 +654,20 @@ export class GameLoop {
     seconds: number,
   ): Promise<void> {
     const alive = alivePlayers(game.players);
-    const keyboard = targetKeyboard(alive, 'vote', group.language, this.t);
+    // The day number is embedded in the callback data itself (not just checked against
+    // `game.phase`) so a stale vote button left over from an earlier day's lynch message can never
+    // be mistaken for a vote in today's - `game.phase` alone can't tell the two apart, since it's
+    // back to 'Lynch' again every single day and a message's inline keyboard never expires or gets
+    // cleared on its own once that round resolves.
+    const voteAction = `vote:${game.dayNumber}`;
+    const keyboard = targetKeyboard(alive, voteAction, group.language, this.t);
     await this.send(game.chatId, group.language, 'LynchTime', formatDuration(seconds));
 
     if (group.pmLynchVote) {
       await this.send(game.chatId, group.language, 'PmLynchVoteStarted');
       for (const actor of alive) {
         const targetsForActor = alive.filter((p) => p.id !== actor.id);
-        const actorKeyboard = targetKeyboard(targetsForActor, 'vote', group.language, this.t);
+        const actorKeyboard = targetKeyboard(targetsForActor, voteAction, group.language, this.t);
         await this.sendPm(actor.id, group.language, 'AskTarget', actorKeyboard);
       }
     } else {
@@ -735,7 +764,7 @@ export class GameLoop {
         'AskHunterShot',
         targetKeyboard(targets, 'shoot', group.language, this.t, false),
       );
-      await sleep(group.dayTimerSeconds * 1000);
+      await sleep(HUNTER_SHOT_SECONDS * 1000);
       hunter.pendingHunterShot = null; // the window's closed - a late "shoot:" callback shouldn't land
 
       const targetId = hunter.choice;
@@ -821,10 +850,24 @@ export class GameLoop {
           // silently plant a fake row that then pollutes the leaderboard, player-count stats, and
           // rank distribution with an account nobody actually owns.
           const realPlayers = game.players.filter((p) => !p.isBot);
+          const earlyDeathIds = new Set<bigint>();
+          if (batches[0]) {
+            for (const event of batches[0]) {
+              if (event.type === 'PlayerDied' || event.type === 'LoverDiedOfGrief')
+                earlyDeathIds.add(event.playerId);
+            }
+          }
+          const rolePerformanceBonus = calculateRolePerformanceBonus({
+            players: game.players,
+            eventBatches: batches,
+          });
           const scores = calculateGamePoints(
             realPlayers,
             game.winningTeam ?? null,
             firstLynchVictimId(batches),
+            undefined,
+            earlyDeathIds,
+            rolePerformanceBonus,
           );
           const grp = await this.groups.getOrCreate(game.chatId, null, null);
           const lang = grp.language;
@@ -1008,9 +1051,28 @@ export class GameLoop {
     rest: string[],
   ): Promise<string | null> {
     switch (action) {
-      case 'vote':
+      case 'vote': {
         if (game.phase !== 'Lynch') return null;
-        return this.applyLynchVote(game, playerId, rest[0]!);
+        // Reject a vote button left over from an earlier day's lynch message - `game.phase` alone
+        // can't tell it apart from today's, since it reads 'Lynch' every single day and an old
+        // message's keyboard never expires on its own (see `sendLynchVoteMenu`'s `voteAction`).
+        const [voteDayNumber, rawTarget] = rest;
+        if (Number(voteDayNumber) !== game.dayNumber) return null;
+        return this.applyLynchVote(game, playerId, rawTarget!);
+      }
+      case 'judge_pardon':
+      case 'judge_skip': {
+        // Fires from the Judge's private pardon prompt (see the Lynch-phase block in `runLynch()`)
+        // - still within that same `Lynch` phase, before `game.resolveLynch()` reads `judge.choice`
+        // back to decide whether the pardon actually happened.
+        if (game.phase !== 'Lynch') return null;
+        const judge = game.players.find(
+          (p) => p.id === playerId && p.role === ROLE_BIT.Judge && !p.hasUsedAbility,
+        );
+        if (!judge) return null;
+        judge.judgePardonChoice = action === 'judge_pardon';
+        return 'ChoiceRecorded';
+      }
       case 'nt':
         if (game.phase !== 'Night') return null;
         return this.applyChoice(game, playerId, 'choice', rest[0]!);

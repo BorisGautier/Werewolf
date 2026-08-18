@@ -61,4 +61,44 @@ describe('calculateGamePoints', () => {
     expect(result.breakdown.afkPenalty).toBe(-15);
     expect(result.points).toBe(-20); // 5 participation - 10 defeat - 15 AFK penalty
   });
+
+  it('waives the defeat penalty and grants a bigger consolation for a Night 1 death', () => {
+    const p1 = createMockPlayer(1n, 'EarlyVictim', 'Village', true);
+    const earlyDeathIds = new Set<bigint>([1n]);
+
+    const results = calculateGamePoints([p1], 'Wolf', null, undefined, earlyDeathIds);
+    const result = results[0]!;
+
+    expect(result.breakdown.defeatPenalty).toBe(0);
+    expect(result.breakdown.consolation).toBe(5);
+    expect(result.points).toBe(10); // 5 participation + 0 defeat + 5 consolation
+  });
+
+  it('still applies the normal defeat penalty for a death that is not an early Night 1 kill', () => {
+    const p1 = createMockPlayer(1n, 'LateVictim', 'Village', true);
+
+    const results = calculateGamePoints([p1], 'Wolf', null, undefined, new Set());
+    const result = results[0]!;
+
+    expect(result.breakdown.defeatPenalty).toBe(-10);
+    expect(result.points).toBe(-5);
+  });
+
+  it('adds the role-performance bonus/malus on top of the win/lose score', () => {
+    const p1 = createMockPlayer(1n, 'Alice', 'Village', false);
+    const rolePerformanceBonus = new Map<bigint, number>([[1n, 4]]);
+
+    const results = calculateGamePoints(
+      [p1],
+      'Village',
+      null,
+      undefined,
+      undefined,
+      rolePerformanceBonus,
+    );
+    const result = results[0]!;
+
+    expect(result.breakdown.rolePerformance).toBe(4);
+    expect(result.points).toBe(29); // 5 participation + 20 living village win + 4 role performance
+  });
 });

@@ -42,7 +42,7 @@
     "TannerWin": ["Le Tanneur a obtenu exactement ce qu'il voulait : être pendu. Le Tanneur gagne !"],
     "CultWins": ["Le culte a converti tout le village. Le culte gagne !"],
     "SerialKillerWins": ["Le Tueur en série est le dernier survivant. Le Tueur en série gagne !"],
-    "ArsonistWins": ["L'Incendiaire a brûlé tout le village. L'Incendiaire gagne !"],
+    "ArsonistWins": ["Le Pyromane a brûlé tout le village. Le Pyromane gagne !"],
     "LoversWin": ["Envers et contre tout, les deux amoureux ont survécu ensemble. Les amoureux gagnent !"],
     "NoWinner": ["La partie s'est terminée sans vainqueur."],
     "PlayersAlive": ["Joueurs en vie"],
@@ -59,7 +59,7 @@
     "TannerTeamEnd": ["Equipe Tanneur"],
     "NeutralTeamEnd": ["Equipe neutre"],
     "SerialKillerTeamEnd": ["Equipe Tueur en série"],
-    "ArsonistTeamEnd": ["Équipe de l'Incendiaire"],
+    "ArsonistTeamEnd": ["Équipe du Pyromane"],
     "ThiefTeamEnd": ["Équipe du Voleur"],
     "GameAlreadyRunning": ["Une partie est déjà en cours dans ce groupe."],
     "NoGameRunning": ["Il n'y a pas de partie en cours dans ce groupe."],
@@ -78,6 +78,7 @@
     "ForceStarted": ["Un admin a forcé le démarrage de la partie !"],
     "ForceStartNotAdmin": ["Seul un admin du groupe peut forcer le démarrage."],
     "PlayersInGame": ["Joueurs dans cette partie ({0}) :\n{1}"],
+    "NightRecap": ["🌙 <b>Récap de la Nuit {0}</b>\n\n{1}"],
     "YourRoleIs": ["Ton rôle pour cette partie est : {0}"],
     "PMFailed": ["Je n'ai pas pu envoyer de message privé à : {0}. Ces joueurs doivent d'abord démarrer une conversation avec moi pour recevoir leur rôle et les menus de nuit."],
     "GameStarting": ["Attribution des rôles et envoi des messages à chaque joueur, patiente quelques secondes..."],
@@ -153,7 +154,7 @@
     "GuardWolf": ["Vous avez tenté de protéger un être maléfique, il vous a mangé."],
     "GuardKiller": ["En amateur de sensations fortes, vous vouliez protéger le Tueur en série… celui-ci ne s'est pas laissé faire et vous a plumé comme un poulet. Vous êtes mort, lamentablement mort..."],
     "GAFell": ["Le destin n'était pas de votre côté ce soir… Vous vouliez juste protéger {0}, mais vous êtes tombé dans une tombe ouverte après avoir marché dans un piège à ours et êtes mort ! Pourquoi le fossoyeur prend-t-il même la peine de sécuriser des tombes ?"],
-    "YouWereDoused": ["Quelqu'un t'a arrosé(e) d'essence ! Espère que l'Incendiaire ne frappe pas à nouveau..."],
+    "YouWereDoused": ["Quelqu'un t'a arrosé(e) d'essence ! Espère que le Pyromane ne frappe pas à nouveau..."],
 
     "AskGunner": ["Qui veux-tu abattre ?"],
     "AskSpumpkin": ["Près de qui veux-tu détoner ?"],
@@ -461,7 +462,7 @@
     "CfgLangPackDefault": ["Défaut"],
 
     "CfgThiefFull": ["Le Voleur peut voler chaque nuit (pas seulement la nuit 1)"],
-    "CfgBurningOverkill": ["Le feu de l'Incendiaire peut tuer malgré la protection de la Garde du Corps"],
+    "CfgBurningOverkill": ["Le feu du Pyromane peut tuer malgré la protection de la Garde du Corps"],
     "CfgShowRolesOnDeath": ["Révéler le rôle d'un joueur à sa mort"],
     "CfgShowIds": ["Afficher les identifiants Telegram dans les listes de joueurs"],
     "CfgShufflePlayerList": ["Mélanger l'ordre de la liste des joueurs"],
@@ -475,10 +476,10 @@
     "CfgAllowFlee": ["Autoriser /flee en cours de partie"],
     "CfgAllowNsfw": ["Autoriser le contenu NSFW"],
     "CfgAllowTanner": ["Autoriser le rôle Tanneur"],
-    "CfgAllowFool": ["Autoriser le rôle Bouffon"],
+    "CfgAllowFool": ["Autoriser le rôle Fou"],
     "CfgAllowCult": ["Autoriser le Culte"],
     "CfgAllowThief": ["Autoriser le rôle Voleur"],
-    "CfgAllowArsonist": ["Autoriser le rôle Incendiaire"],
+    "CfgAllowArsonist": ["Autoriser le rôle Pyromane"],
     "CfgMuteDead": ["Muter les joueurs morts pendant la partie"],
     "CfgTagAllOnStart": ["Taguer tous les membres de la communauté au lancement d'une partie"],
     "MustStartPmFirstGroup": ["⚠️ {0}, tu dois d'abord démarrer le bot en MP pour pouvoir recevoir ton rôle et jouer !"],
@@ -492,7 +493,7 @@
     "Role_Detective": ["Détective"],
     "Role_Wolf": ["Loup-Garou"],
     "Role_Cursed": ["Maudit"],
-    "Role_Gunner": ["Chasseur de Précision"],
+    "Role_Gunner": ["Fusilier"],
     "Role_Tanner": ["Tanneur"],
     "Role_Fool": ["Fou"],
     "Role_WildChild": ["Enfant Sauvage"],
@@ -500,19 +501,19 @@
     "Role_ApprenticeSeer": ["Apprentie Voyante"],
     "Role_Cultist": ["Cultiste"],
     "Role_CultistHunter": ["Chasseur de Cultistes"],
-    "Role_Mason": ["Maçon"],
+    "Role_Mason": ["Franc-Maçon"],
     "Role_Doppelganger": ["Sosie"],
     "Role_Cupid": ["Cupidon"],
     "Role_Hunter": ["Chasseur"],
     "Role_SerialKiller": ["Tueur en série"],
-    "Role_Sorcerer": ["Sorcier"],
+    "Role_Sorcerer": ["Sorcière"],
     "Role_AlphaWolf": ["Loup Alpha"],
-    "Role_WolfCub": ["Loup Loulou"],
+    "Role_WolfCub": ["Louveteau"],
     "Role_Blacksmith": ["Forgeron"],
     "Role_ClumsyGuy": ["Maladroit"],
     "Role_Mayor": ["Maire"],
     "Role_Prince": ["Prince"],
-    "Role_Lycan": ["Lycanthe"],
+    "Role_Lycan": ["Lycan"],
     "Role_Pacifist": ["Pacifiste"],
     "Role_WiseElder": ["Sage Ancien"],
     "Role_Oracle": ["Oracle"],
@@ -524,7 +525,7 @@
     "Role_SnowWolf": ["Loup des Neiges"],
     "Role_GraveDigger": ["Fossoyeur"],
     "Role_Augur": ["Augure"],
-    "Role_Arsonist": ["Incendiaire"],
+    "Role_Arsonist": ["Pyromane"],
     "Role_Spumpkin": ["Citrouille"],
     "Role_Watchman": ["Gardien de Nuit"],
     "Role_Judge": ["Juge"],
@@ -606,7 +607,7 @@
       "En tant que Tyrannœil, vous serez prévenu de l'identité de la véritable Voyante (mais pas de celle du Fou). Vous saurez également s'il n'y a pas de Voyante."
     ],
     "AboutGunner": [
-      "Vous êtes le Chasseur, vous possédez deux balles d'argent. Pendant la journée, vous pourrez choisir d'abattre un autre joueur. Cependant tous les joueurs vous entendront, et connaîtront votre rôle. Vous n'avez que deux balles… Faites-en bon usage !"
+      "Vous êtes le Fusilier, vous possédez deux balles d'argent. Pendant la journée, vous pourrez choisir d'abattre un autre joueur. Cependant tous les joueurs vous entendront, et connaîtront votre rôle. Vous n'avez que deux balles… Faites-en bon usage !"
     ],
     "AboutTraitor": [
       "Sale traître ! Si vous survivez assez longtemps et que tous les loups viennent à mourir, vous en deviendrez un et pourrez dévorer vos anciens camarades !"
@@ -642,7 +643,7 @@
       "Il y a de l'amour dans l'air ! En tant que Cupidon, vous pouvez choisir deux joueurs en début de partie. Ils tomberont éperdument amoureux ! Si l'un des deux meurt, l'autre mourra de chagrin.\\nRemarque : Les amoureux savent qui est leur âme sœur mais pas son rôle. S'ils sont les deux derniers survivants, ils gagnent, mais si l'un des deux survit et qu'ils sont d'équipes différentes (ex : Loup et Franc-Maçon), ils gagneront également."
     ],
     "AboutHunter": [
-      "Vous êtes la gâchette folle ! Le Fusilier est un peu paranoïaque, et peut tuer ses visiteurs nocturnes. Si les loups vous attaquent, vous avez une chance d'en abattre un. Si vous mourez, vous aurez la possibilité de tuer un autre joueur.\\nRemarque : Contre un loup seul, le Fusilier a 30% de chance de l'abattre et survivre. Ajoutez 20% par loup supplémentaire, mais dans ce cas, vous ne survivrez pas.\\nSi les Cultistes tentent de vous convertir, ils auront 50% de chance de réussir. S'ils échouent, vous aurez 50% de chance de tuer l'un d'entre eux !"
+      "Vous êtes la gâchette folle ! Le Chasseur est un peu paranoïaque, et peut tuer ses visiteurs nocturnes. Si les loups vous attaquent, vous avez une chance d'en abattre un. Si vous mourez, vous aurez la possibilité de tuer un autre joueur.\\nRemarque : Contre un loup seul, le Chasseur a 30% de chance de l'abattre et survivre. Ajoutez 20% par loup supplémentaire, mais dans ce cas, vous ne survivrez pas.\\nSi les Cultistes tentent de vous convertir, ils auront 50% de chance de réussir. S'ils échouent, vous aurez 50% de chance de tuer l'un d'entre eux !"
     ],
     "AboutSerialKiller": [
       "Cet asile était sympathique, mais rien ne vaut la liberté. Vous êtes à présent prêt à tuer de nouveau ! Le Céréales Killer est un joueur solitaire… et gagne s'il est le dernier en vie (sauf amoureux). Vous pouvez tuer tous les joueurs : loups, Chasseur, Fusilier, Ange Gardien… Si les loups vous attaquent vous en tuerez un au hasard et survivrez."
@@ -681,7 +682,7 @@
       "L'Oracle peut découvrir quel rôle un joueur n'a PAS, parmi les rôles des joueurs encore en vie."
     ],
     "AboutWolfMan": [
-      "Vous êtes l'Homoursporc. Simple villageois, vous passez tellement de temps dans la forêt que la Voyante vous confondra avec un Loup ! Mince…"
+      "Vous êtes l'Homme-Loup. Simple villageois, vous passez tellement de temps dans la forêt que la Voyante vous confondra avec un Loup ! Mince…"
     ],
     "AboutLycan": ["Le Lycan est un loup, mais apparaît comme un villageois aux yeux de la Voyante."],
     "AboutWiseElder": [
@@ -691,7 +692,7 @@
       "Par défaut, le Voleur 😈 peut voler le rôle d'un joueur lors de la première nuit et le transformer en Villageois. Si l'option [Voleur à chaque tour] est activée, il a chaque nuit 50% de chances de voler son rôle à un joueur, et s'il y parvient, ce joueur devient voleur à sa place !"
     ],
     "AboutTroublemaker": [
-      "Perturbé par son trop-plein d'hormones, le Trouble-Fête est un adolescent un peu bruyant. Ses cris incessants et sa propension à pousser n'importe quel instrument de musique à un volume déraisonnable sont difficiles à supporter pour le reste du village. Pour le pousser à s'arrêter, la population est prête à exécuter DEUX personnes !"
+      "Perturbé par son trop-plein d'hormones, le Fauteur de troubles est un adolescent un peu bruyant. Ses cris incessants et sa propension à pousser n'importe quel instrument de musique à un volume déraisonnable sont difficiles à supporter pour le reste du village. Pour le pousser à s'arrêter, la population est prête à exécuter DEUX personnes !"
     ],
     "AboutChemist": [
       "Le Chimiste est un ancien professeur un peu timbré, qui aime jouer avec ses mixtures. Sa passion ? Concocter deux potions dont une mortelle, et trouver quelqu'un avec qui boire… Bonne chance s'il s'invite chez vous !"

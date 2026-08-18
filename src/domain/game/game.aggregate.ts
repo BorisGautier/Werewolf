@@ -172,7 +172,7 @@ export class Game {
     this.mode = options.mode;
     this.disabledRoleFlags = options.disabledRoleFlags ?? 0n;
     this.burningOverkill = options.burningOverkill ?? false;
-    this.randomLynchOnTie = options.randomLynchOnTie ?? true;
+    this.randomLynchOnTie = options.randomLynchOnTie ?? false;
     this.minPlayers = options.minPlayers ?? 5;
     this.maxPlayers = options.maxPlayers ?? 35;
     this.thiefFull = options.thiefFull ?? false;

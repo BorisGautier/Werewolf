@@ -324,7 +324,11 @@ describe('GameLoop', () => {
     await vi.advanceTimersByTimeAsync(5000); // day resolves, into Lynch
 
     for (const voter of game.players.filter((p) => p.id !== jester.id)) {
-      await loop.handleCallback(voter.id, game.chatId, `vote:${jester.id.toString()}`);
+      await loop.handleCallback(
+        voter.id,
+        game.chatId,
+        `vote:${game.dayNumber}:${jester.id.toString()}`,
+      );
     }
     await vi.advanceTimersByTimeAsync(5000); // lynch resolves - Jester wins
 
@@ -369,7 +373,7 @@ describe('GameLoop', () => {
       const confirmation = await loop.handleCallback(
         voter.id,
         game.chatId,
-        `vote:${wolf.id.toString()}`,
+        `vote:${game.dayNumber}:${wolf.id.toString()}`,
       );
       expect(confirmation).toBeTruthy();
     }
@@ -409,7 +413,11 @@ describe('GameLoop', () => {
         const voteTarget = game.players.find((p) => !p.isDead && p.id !== wolf.id);
         if (voteTarget) {
           for (const voter of game.players.filter((p) => !p.isDead)) {
-            await loop.handleCallback(voter.id, game.chatId, `vote:${voteTarget.id.toString()}`);
+            await loop.handleCallback(
+              voter.id,
+              game.chatId,
+              `vote:${game.dayNumber}:${voteTarget.id.toString()}`,
+            );
           }
         }
         await vi.advanceTimersByTimeAsync(5000);
@@ -488,7 +496,11 @@ describe('GameLoop', () => {
         const voteTarget = game.players.find((p) => !p.isDead && p.id !== wolf.id);
         if (voteTarget) {
           for (const voter of game.players.filter((p) => !p.isDead)) {
-            await loop.handleCallback(voter.id, game.chatId, `vote:${voteTarget.id.toString()}`);
+            await loop.handleCallback(
+              voter.id,
+              game.chatId,
+              `vote:${game.dayNumber}:${voteTarget.id.toString()}`,
+            );
           }
         }
         await vi.advanceTimersByTimeAsync(5000);
@@ -529,7 +541,11 @@ describe('GameLoop', () => {
         const voteTarget = game.players.find((p) => !p.isDead && p.id !== wolf.id);
         if (voteTarget) {
           for (const voter of game.players.filter((p) => !p.isDead)) {
-            await loop.handleCallback(voter.id, game.chatId, `vote:${voteTarget.id.toString()}`);
+            await loop.handleCallback(
+              voter.id,
+              game.chatId,
+              `vote:${game.dayNumber}:${voteTarget.id.toString()}`,
+            );
           }
         }
         await vi.advanceTimersByTimeAsync(5000);
@@ -570,7 +586,11 @@ describe('GameLoop', () => {
         const voteTarget = game.players.find((p) => !p.isDead && p.id !== wolf.id);
         if (voteTarget) {
           for (const voter of game.players.filter((p) => !p.isDead)) {
-            await loop.handleCallback(voter.id, game.chatId, `vote:${voteTarget.id.toString()}`);
+            await loop.handleCallback(
+              voter.id,
+              game.chatId,
+              `vote:${game.dayNumber}:${voteTarget.id.toString()}`,
+            );
           }
         }
         await vi.advanceTimersByTimeAsync(5000);
@@ -641,7 +661,11 @@ describe('GameLoop', () => {
 
     // Everyone votes to lynch the Hunter.
     for (const voter of game.players.filter((p) => !p.isDead)) {
-      await loop.handleCallback(voter.id, game.chatId, `vote:${hunter.id.toString()}`);
+      await loop.handleCallback(
+        voter.id,
+        game.chatId,
+        `vote:${game.dayNumber}:${hunter.id.toString()}`,
+      );
     }
     await vi.advanceTimersByTimeAsync(0);
     await vi.advanceTimersByTimeAsync(5000); // lynch resolves - the Hunter dies and must shoot
@@ -657,7 +681,7 @@ describe('GameLoop', () => {
     );
     expect(confirmation).toBeTruthy();
 
-    await vi.advanceTimersByTimeAsync(5000); // the shot window
+    await vi.advanceTimersByTimeAsync(30000); // the shot window (HUNTER_SHOT_SECONDS)
 
     expect(finalTarget.isDead).toBe(true);
     expect(hunter.pendingHunterShot).toBeNull();
@@ -698,7 +722,11 @@ describe('GameLoop', () => {
 
     // Everyone votes to lynch the Hunter.
     for (const voter of game.players.filter((p) => !p.isDead)) {
-      await loop.handleCallback(voter.id, game.chatId, `vote:${hunter.id.toString()}`);
+      await loop.handleCallback(
+        voter.id,
+        game.chatId,
+        `vote:${game.dayNumber}:${hunter.id.toString()}`,
+      );
     }
     await vi.advanceTimersByTimeAsync(0);
     await vi.advanceTimersByTimeAsync(5000); // lynch resolves - the Hunter dies and must shoot
@@ -709,7 +737,7 @@ describe('GameLoop', () => {
 
     // The Hunter shoots the Wolf with their dying breath - the last threat, so Village should win.
     await loop.handleCallback(hunter.id, hunter.id, `shoot:${wolf.id.toString()}`);
-    await vi.advanceTimersByTimeAsync(5000); // the shot window
+    await vi.advanceTimersByTimeAsync(30000); // the shot window (HUNTER_SHOT_SECONDS)
 
     expect(wolf.isDead).toBe(true);
     expect(game.phase).toBe('Ended');
@@ -728,7 +756,11 @@ describe('GameLoop', () => {
     await vi.advanceTimersByTimeAsync(0);
     await vi.advanceTimersByTimeAsync(5000); // day resolves, into Lynch
 
-    await loop.handleCallback(voter.id, game.chatId, `vote:${wolf.id.toString()}`);
+    await loop.handleCallback(
+      voter.id,
+      game.chatId,
+      `vote:${game.dayNumber}:${wolf.id.toString()}`,
+    );
 
     expect(
       sendMessage.mock.calls.some(
@@ -753,7 +785,11 @@ describe('GameLoop', () => {
     await vi.advanceTimersByTimeAsync(0);
     await vi.advanceTimersByTimeAsync(5000);
 
-    await loop.handleCallback(voter.id, game.chatId, `vote:${wolf.id.toString()}`);
+    await loop.handleCallback(
+      voter.id,
+      game.chatId,
+      `vote:${game.dayNumber}:${wolf.id.toString()}`,
+    );
 
     expect(
       sendMessage.mock.calls.some(
@@ -765,6 +801,150 @@ describe('GameLoop', () => {
         (call) => typeof call[1] === 'string' && call[1].includes('voted to lynch'),
       ),
     ).toBe(false);
+  });
+
+  it('rejects a vote button left over from an earlier day, even while the game is in Lynch again today', async () => {
+    // Regression test: a vote callback used to only check `game.phase === 'Lynch'`, which is true
+    // every single day - it never checked whether the button itself was from *today's* lynch. An
+    // old message's inline keyboard never expires on its own, so a player could still tap a stale
+    // vote button from a previous day and have it silently accepted as a fresh vote, effectively
+    // "voting" using an outdated message once a new day had already begun.
+    const { loop, gameManager } = createHarness();
+    const game = dealtGame(gameManager);
+    const wolf = game.players[0]!;
+    const voter = game.players[1]!;
+
+    loop.start(game, 42);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000); // night resolves
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000); // day resolves, into today's Lynch
+
+    expect(game.dayNumber).toBe(1);
+    const staleVoteFromDay1 = `vote:1:${wolf.id.toString()}`;
+
+    // Fast-forward to a later day still in the Lynch phase (mirrors what a second day's lynch
+    // looks like from the callback handler's point of view, without needing a full second
+    // night/day cycle just to get there).
+    game.dayNumber = 2;
+
+    const result = await loop.handleCallback(voter.id, game.chatId, staleVoteFromDay1);
+
+    expect(result).toBeNull();
+    expect(voter.choice).toBeNull();
+
+    // A freshly-generated day-2 vote button, by contrast, still works normally.
+    const freshVote = await loop.handleCallback(
+      voter.id,
+      game.chatId,
+      `vote:2:${wolf.id.toString()}`,
+    );
+    expect(freshVote).toBeTruthy();
+    expect(voter.choice).toBe(wolf.id);
+  });
+
+  it('prompts the Judge with the real live vote count and honors a pardon', async () => {
+    // Regression test: the pre-prompt tally used to read `p.votes`, which only gets its real
+    // value once `resolveLynchVotes` runs *after* this check - so it was always stale/zero at
+    // this point, meaning `tied.length === 1` could never be true and the prompt never fired at
+    // all in a real game (only in a scenario-runner test that calls the domain function directly,
+    // bypassing this code entirely).
+    const { loop, gameManager, sendMessage } = createHarness();
+    const game = gameManager.create(1n, { mode: 'Normal', minPlayers: 5 });
+    game.addPlayer(1n, 'Judge');
+    game.addPlayer(2n, 'Villager2');
+    game.addPlayer(3n, 'Villager3');
+    game.addPlayer(4n, 'Villager4');
+    game.addPlayer(5n, 'Villager5');
+    game.addPlayer(6n, 'Wolfy');
+    game.start();
+    for (const p of game.players) {
+      p.role = ROLE_BIT.Villager;
+      p.team = 'Village';
+      p.changedRolesCount = 0;
+    }
+    const judge = game.players[0]!;
+    judge.role = ROLE_BIT.Judge;
+    const wolf = game.players[5]!;
+    wolf.role = ROLE_BIT.Wolf;
+    wolf.team = 'Wolf';
+    const condemned = game.players[1]!;
+
+    loop.start(game, 42);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000); // night resolves
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000); // day resolves, into Lynch
+
+    // A clear (non-tied) majority, including the Judge's own vote, condemns `condemned`.
+    for (const voter of [judge, ...game.players.filter((p) => !p.isDead && p.id !== judge.id)]) {
+      await loop.handleCallback(
+        voter.id,
+        game.chatId,
+        `vote:${game.dayNumber}:${condemned.id.toString()}`,
+      );
+    }
+
+    await vi.advanceTimersByTimeAsync(0); // lynch timer fires, Judge gets prompted
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(
+      sendMessage.mock.calls.some(
+        (call) => typeof call[1] === 'string' && call[1].includes('6 vote(s)'),
+      ),
+    ).toBe(true);
+
+    await loop.handleCallback(judge.id, judge.id, 'judge_pardon');
+    await vi.advanceTimersByTimeAsync(10000); // the pardon-decision window
+
+    expect(condemned.isDead).toBe(false);
+    expect(judge.hasUsedAbility).toBe(true);
+  });
+
+  it("still counts the Judge's own lynch vote correctly when they decline to pardon", async () => {
+    const { loop, gameManager } = createHarness();
+    const game = gameManager.create(1n, { mode: 'Normal', minPlayers: 5 });
+    game.addPlayer(1n, 'Judge');
+    game.addPlayer(2n, 'Villager2');
+    game.addPlayer(3n, 'Villager3');
+    game.addPlayer(4n, 'Villager4');
+    game.addPlayer(5n, 'Villager5');
+    game.addPlayer(6n, 'Wolfy');
+    game.start();
+    for (const p of game.players) {
+      p.role = ROLE_BIT.Villager;
+      p.team = 'Village';
+      p.changedRolesCount = 0;
+    }
+    const judge = game.players[0]!;
+    judge.role = ROLE_BIT.Judge;
+    const wolf = game.players[5]!;
+    wolf.role = ROLE_BIT.Wolf;
+    wolf.team = 'Wolf';
+    const condemned = game.players[1]!;
+
+    loop.start(game, 42);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000);
+
+    for (const voter of [judge, ...game.players.filter((p) => !p.isDead && p.id !== judge.id)]) {
+      await loop.handleCallback(
+        voter.id,
+        game.chatId,
+        `vote:${game.dayNumber}:${condemned.id.toString()}`,
+      );
+    }
+
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000);
+
+    await loop.handleCallback(judge.id, judge.id, 'judge_skip');
+    await vi.advanceTimersByTimeAsync(10000);
+
+    expect(condemned.isDead).toBe(true);
+    expect(condemned.votedBy.has(judge.id)).toBe(true);
   });
 
   it("under a Howler Wolf's howl, announces only a running vote count, never the target", async () => {
@@ -780,7 +960,11 @@ describe('GameLoop', () => {
     await vi.advanceTimersByTimeAsync(0);
     await vi.advanceTimersByTimeAsync(5000);
 
-    await loop.handleCallback(voter.id, game.chatId, `vote:${wolf.id.toString()}`);
+    await loop.handleCallback(
+      voter.id,
+      game.chatId,
+      `vote:${game.dayNumber}:${wolf.id.toString()}`,
+    );
 
     expect(
       sendMessage.mock.calls.some(
@@ -815,7 +999,7 @@ describe('GameLoop', () => {
     const result = await loop.handleCallback(
       victim.id,
       game.chatId,
-      `vote:${otherTarget.id.toString()}`,
+      `vote:${game.dayNumber}:${otherTarget.id.toString()}`,
     );
     expect(result).toBeNull();
     expect(victim.choice).toBe(forcedTarget.id);
@@ -837,7 +1021,11 @@ describe('GameLoop', () => {
 
     const villagers = game.players.filter((p) => p.id !== wolf.id);
     for (const voter of villagers) {
-      await loop.handleCallback(voter.id, game.chatId, `vote:${wolf.id.toString()}`);
+      await loop.handleCallback(
+        voter.id,
+        game.chatId,
+        `vote:${game.dayNumber}:${wolf.id.toString()}`,
+      );
     }
 
     await vi.advanceTimersByTimeAsync(5000); // lynch resolves
@@ -871,7 +1059,11 @@ describe('GameLoop', () => {
 
     const villagers = game.players.filter((p) => p.id !== wolf.id);
     for (const voter of villagers) {
-      await loop.handleCallback(voter.id, game.chatId, `vote:${wolf.id.toString()}`);
+      await loop.handleCallback(
+        voter.id,
+        game.chatId,
+        `vote:${game.dayNumber}:${wolf.id.toString()}`,
+      );
     }
 
     await vi.advanceTimersByTimeAsync(5000);
@@ -901,7 +1093,11 @@ describe('GameLoop', () => {
 
     const villagers = game.players.filter((p) => p.id !== wolf.id);
     for (const voter of villagers) {
-      await loop.handleCallback(voter.id, game.chatId, `vote:${wolf.id.toString()}`);
+      await loop.handleCallback(
+        voter.id,
+        game.chatId,
+        `vote:${game.dayNumber}:${wolf.id.toString()}`,
+      );
     }
 
     await vi.advanceTimersByTimeAsync(5000);

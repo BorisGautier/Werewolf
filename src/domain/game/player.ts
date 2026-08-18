@@ -8,10 +8,17 @@ export const ABSTAIN: bigint = -1n;
 /** Sentinel for the Arsonist's "spark" action (burn every doused player), mirroring `Choice == -2`. */
 export const SPARK: bigint = -2n;
 
-/** Every synthetic AI/bot player id (see `GameLobbyManager.addBotPlayers`) is `990001n` or above -
- * never a real Telegram user id. Exported so persistence code can defensively exclude bots from
- * leaderboard/stats queries even if a bad row ever slips into the `Player` table (e.g. from before
- * bots were excluded from `awardPoints`). */
+/** Starting point for synthetic AI/bot player ids (see `GameLobbyManager.addBotPlayers`, which
+ * assigns `SYNTHETIC_BOT_ID_FLOOR + 1n` upward for each bot added to a lobby). This is only ever
+ * used to *generate* fresh bot ids that don't collide with whichever real players already joined -
+ * it is NOT a reliable ceiling for telling a bot id apart from a real one after the fact. A real
+ * Telegram user id is a 64-bit number that today commonly runs into the hundreds of millions to
+ * low billions, so a low numeric threshold like this one would wrongly classify most real players
+ * as bots rather than the other way around. (An earlier attempt at exactly that - filtering
+ * `getTopPlayers`/`getPlayerRank`/admin player counts by `telegramId < SYNTHETIC_BOT_ID_FLOOR` -
+ * shipped a real bug: it silently excluded almost every real player from the leaderboard and admin
+ * dashboard. Removed; the actual, reliable guard against bots earning points or DB rows is
+ * `GameLoop`'s `!p.isBot` filter before ever calling `awardPoints()`, not a numeric id guess.) */
 export const SYNTHETIC_BOT_ID_FLOOR: bigint = 990000n;
 
 /**
@@ -87,6 +94,12 @@ export interface Player {
   /** Wild Child/Doppelganger/Thief mechanic: id of the role-model target player. */
   roleModel: bigint | null;
   isCursedByCrow: boolean;
+  /** Judge mechanic: their answer to the private pardon prompt (`null` = hasn't answered yet).
+   * Deliberately separate from `choice` - the Judge already used that field for their own normal
+   * lynch vote earlier in the same round, and overwriting it here would both lose that vote and
+   * make `resolveLynchVotes`'s final tally misread the pardon sentinel as a vote for whichever
+   * player happens to hold that id. */
+  judgePardonChoice: boolean | null;
 
   // --- Achievement-tracking counters/flags (mirrors the original's per-player achievement fields) ---
   /** Ever received at least one lynch vote, across any attempt this game (Inconspicuous). */
@@ -188,6 +201,7 @@ export function createPlayer(
     sawRoles: [],
     roleModel: null,
     isCursedByCrow: false,
+    judgePardonChoice: null,
     hasBeenVoted: false,
     foolCorrectSeeCount: 0,
     foolCorrectlySeenBH: false,
