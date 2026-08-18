@@ -244,7 +244,13 @@ describe('cosmetic game mode role bias', () => {
       for (let playerCount = 20; playerCount <= 35; playerCount++) {
         for (let trial = 0; trial < 10; trial++) {
           expect(() =>
-            balance({ disabledRoleFlags: 0n, playerCount, chaos: false, burningOverkill: true, mode }),
+            balance({
+              disabledRoleFlags: 0n,
+              playerCount,
+              chaos: false,
+              burningOverkill: true,
+              mode,
+            }),
           ).not.toThrow();
         }
       }

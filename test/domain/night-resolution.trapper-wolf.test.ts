@@ -48,12 +48,17 @@ describe('resolveTrapperWolfNight', () => {
     const events = resolveTrapperWolfNight([trapper, target]);
 
     expect(trapper.hasUsedAbility).toBe(true);
-    expect(events).toEqual([{ type: 'TrapperWolfTrapSet', trapperId: trapper.id, targetId: target.id }]);
+    expect(events).toEqual([
+      { type: 'TrapperWolfTrapSet', trapperId: trapper.id, targetId: target.id },
+    ]);
   });
 });
 
 describe('visitPlayer - Trapper Wolf ambush', () => {
-  function ctxWithTrap(players: ReturnType<typeof createPlayer>[], trappedId: bigint): VisitContext {
+  function ctxWithTrap(
+    players: ReturnType<typeof createPlayer>[],
+    trappedId: bigint,
+  ): VisitContext {
     return { players, dayNumber: 1, thiefFull: true, trappedTargetId: trappedId };
   }
 

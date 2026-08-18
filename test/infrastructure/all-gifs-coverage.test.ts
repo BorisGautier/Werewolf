@@ -3,7 +3,10 @@ import {
   GIF_CATEGORIES,
   type GifCategory,
 } from '../../src/infrastructure/persistence/gif-pack.repository.js';
-import { KILL_METHOD_GIF_CATEGORY, WIN_TEAM_GIF_CATEGORY } from '../../src/infrastructure/telegram/game-loop.js';
+import {
+  KILL_METHOD_GIF_CATEGORY,
+  WIN_TEAM_GIF_CATEGORY,
+} from '../../src/infrastructure/telegram/game-loop.js';
 import { LocalGifPack } from '../../src/infrastructure/telegram/local-gif-pack.js';
 import type { KillMethod } from '../../src/domain/game/kill-method.js';
 import type { Team } from '../../src/domain/game/team.js';

@@ -186,7 +186,11 @@ export function resolveLynchVotes(players: Player[], options: LynchOptions): Lyn
         .forEach((avenger) => {
           if (options.avengerTargetMap?.get(avenger.id) === lynched!.id) {
             avenger.won = true;
-            events.push({ type: 'AvengerRivalLynched', avengerId: avenger.id, targetId: lynched!.id });
+            events.push({
+              type: 'AvengerRivalLynched',
+              avengerId: avenger.id,
+              targetId: lynched!.id,
+            });
           }
         });
 

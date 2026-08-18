@@ -257,7 +257,7 @@ describe('resolveLynchVotes', () => {
 });
 
 describe("resolveLynchVotes - Avenger's rival goal", () => {
-  it("wins when their secret rival (via avengerTargetMap) is actually lynched", () => {
+  it('wins when their secret rival (via avengerTargetMap) is actually lynched', () => {
     const avenger = createPlayer(1n, 'A', ROLE_BIT.Avenger, 'Neutral');
     const rival = createPlayer(2n, 'R', ROLE_BIT.Villager, 'Village');
     const other = createPlayer(3n, 'O', ROLE_BIT.Villager, 'Village');
@@ -274,7 +274,8 @@ describe("resolveLynchVotes - Avenger's rival goal", () => {
     expect(rival.isDead).toBe(true);
     expect(
       events.some(
-        (e) => e.type === 'AvengerRivalLynched' && e.avengerId === avenger.id && e.targetId === rival.id,
+        (e) =>
+          e.type === 'AvengerRivalLynched' && e.avengerId === avenger.id && e.targetId === rival.id,
       ),
     ).toBe(true);
   });

@@ -548,7 +548,7 @@ describe('Hitman win condition', () => {
     expect(hitman.won).toBe(false);
   });
 
-  it("does not credit the win to a player who no longer actually holds the Hitman role", () => {
+  it('does not credit the win to a player who no longer actually holds the Hitman role', () => {
     const game = startedGame([
       [1n, 'ExHitman'],
       [2n, 'Target'],
@@ -639,7 +639,7 @@ describe('Avenger win condition', () => {
 });
 
 describe('Priestess blessing carries the blind-pack effect into the next night', () => {
-  it('blocks tonight\'s wolf attack on the blessed player, then blinds the pack entirely the following night', () => {
+  it("blocks tonight's wolf attack on the blessed player, then blinds the pack entirely the following night", () => {
     const game = startedGame([
       [1n, 'Wolf'],
       [2n, 'Priestess'],
@@ -661,9 +661,7 @@ describe('Priestess blessing carries the blind-pack effect into the next night',
 
     expect(blessed.isDead).toBe(false);
     expect(
-      nightOneEvents.some(
-        (e) => e.type === 'PriestessBlessingSaved' && e.targetId === blessed.id,
-      ),
+      nightOneEvents.some((e) => e.type === 'PriestessBlessingSaved' && e.targetId === blessed.id),
     ).toBe(true);
     expect(game.wolfPackBlinded).toBe(true);
 
@@ -708,9 +706,9 @@ describe("Archangel's Sacred Bullet streak", () => {
     const events = game.killPlayer(game.players[3]!.id, 'Idle', { killerIds: [] });
 
     expect(game.archangelBulletsMap.get(archangel.id)).toBe(1);
-    expect(events.some((e) => e.type === 'ArchangelBulletGranted' && e.archangelId === archangel.id)).toBe(
-      true,
-    );
+    expect(
+      events.some((e) => e.type === 'ArchangelBulletGranted' && e.archangelId === archangel.id),
+    ).toBe(true);
 
     // The bullet is real: the Archangel can now spend it on the day-action phase.
     game.phase = 'Day';
@@ -775,9 +773,9 @@ describe("Trapper Wolf's ambush", () => {
     const events = game.resolveNightActions();
 
     expect(trapper.hasUsedAbility).toBe(true);
-    expect(
-      events.some((e) => e.type === 'TrapperWolfTrapSet' && e.targetId === trapped.id),
-    ).toBe(true);
+    expect(events.some((e) => e.type === 'TrapperWolfTrapSet' && e.targetId === trapped.id)).toBe(
+      true,
+    );
     // The Harlot's visit to the trapped house fails outright - she neither dies nor is blocked by
     // any other rule, she's simply neutralized.
     expect(harlot.isDead).toBe(false);
@@ -786,7 +784,7 @@ describe("Trapper Wolf's ambush", () => {
 });
 
 describe("Chameleon Wolf's disguise", () => {
-  it('clears the previous night\'s disguise before a fresh one can be set', () => {
+  it("clears the previous night's disguise before a fresh one can be set", () => {
     const game = startedGame([
       [1n, 'ChameleonWolf'],
       [2n, 'Seer'],
@@ -900,9 +898,9 @@ describe("Howler Wolf's howl", () => {
 
     expect(howler.hasUsedAbility).toBe(true);
     expect(game.anonymousLynchVotes).toBe(true);
-    expect(
-      nightEvents.some((e) => e.type === 'HowlerWolfHowled' && e.howlerId === howler.id),
-    ).toBe(true);
+    expect(nightEvents.some((e) => e.type === 'HowlerWolfHowled' && e.howlerId === howler.id)).toBe(
+      true,
+    );
 
     // Stays active through the day and the entire lynch phase that follows.
     game.startDay();

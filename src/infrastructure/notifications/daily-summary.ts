@@ -38,7 +38,10 @@ export class DailySummaryNotifier {
           distinct: ['playerId'],
         }),
         this.prisma.player.count({
-          where: { createdAt: { gte: dayStart, lt: dayEnd }, telegramId: { lt: SYNTHETIC_BOT_ID_FLOOR } },
+          where: {
+            createdAt: { gte: dayStart, lt: dayEnd },
+            telegramId: { lt: SYNTHETIC_BOT_ID_FLOOR },
+          },
         }),
         this.prisma.game.findMany({
           where: { endedAt: { gte: dayStart, lt: dayEnd } },

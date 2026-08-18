@@ -159,7 +159,8 @@ function resolvePerceivedRole(
 ): Role {
   if (target.role === ROLE_BIT.Mimic) {
     const imitatedId = mimicTargetMap.get(target.id);
-    const imitated = imitatedId !== undefined ? players.find((p) => p.id === imitatedId) : undefined;
+    const imitated =
+      imitatedId !== undefined ? players.find((p) => p.id === imitatedId) : undefined;
     return imitated?.role ?? target.role;
   }
   if (target.role === ROLE_BIT.ChameleonWolf) {
@@ -181,7 +182,12 @@ export function resolveClairvoyanceNight(
     const target = players.find((p) => p.id === seer.choice);
     if (!target) continue;
     if (target.role === ROLE_BIT.WolfMan) target.trustworthy = true;
-    const perceivedRole = resolvePerceivedRole(players, target, mimicTargetMap, chameleonAppearanceMap);
+    const perceivedRole = resolvePerceivedRole(
+      players,
+      target,
+      mimicTargetMap,
+      chameleonAppearanceMap,
+    );
     events.push({
       type: 'SeerVision',
       playerId: seer.id,

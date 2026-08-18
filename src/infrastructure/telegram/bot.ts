@@ -635,7 +635,9 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
 
     if (!game || game.phase === 'Ended' || game.phase === 'Joining') {
       await ctx.reply(
-        isFr ? "Il n'y a pas de partie en cours dans ce groupe." : 'No game currently running in this group.',
+        isFr
+          ? "Il n'y a pas de partie en cours dans ce groupe."
+          : 'No game currently running in this group.',
       );
       return;
     }

@@ -170,7 +170,9 @@ export class ScenarioRunner {
 
       if (deadP.isDead) throw new Error('Resurrected target is still marked dead');
       if (deadP.team !== 'Neutral') {
-        throw new Error(`Resurrected target's team was not switched to Neutral (got ${deadP.team})`);
+        throw new Error(
+          `Resurrected target's team was not switched to Neutral (got ${deadP.team})`,
+        );
       }
       if (!events.some((e) => e.type === 'PlayerResurrected' && e.playerId === deadP.id)) {
         throw new Error('No PlayerResurrected event was emitted for the target');

@@ -39,7 +39,9 @@ describe('resolveMimicNight', () => {
     const events = resolveMimicNight([mimic, target]);
 
     expect(mimic.hasUsedAbility).toBe(true);
-    expect(events).toEqual([{ type: 'MimicChoseDisguise', mimicId: mimic.id, targetId: target.id }]);
+    expect(events).toEqual([
+      { type: 'MimicChoseDisguise', mimicId: mimic.id, targetId: target.id },
+    ]);
   });
 
   it('ignores a second choice once the disguise is already locked in', () => {
@@ -74,7 +76,7 @@ describe('resolveClairvoyanceNight - Mimic interaction', () => {
     expect(vision).toMatchObject({ targetId: mimic.id, shownRole: ROLE_BIT.Wolf });
   });
 
-  it('shows the Mimic\'s own role when nobody imitated has been locked in yet', () => {
+  it("shows the Mimic's own role when nobody imitated has been locked in yet", () => {
     const seer = createPlayer(1n, 'S', ROLE_BIT.Seer, 'Village');
     const mimic = createPlayer(2n, 'M', ROLE_BIT.Mimic, 'Village');
     seer.choice = mimic.id;

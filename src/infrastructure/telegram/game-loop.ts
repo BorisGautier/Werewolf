@@ -1530,7 +1530,9 @@ export class GameLoop {
       // the dedicated Sacred Bullet clip, so skip the generic fallback for that death entirely.
       if (
         event.method === 'Shoot' &&
-        event.killerIds.some((id) => game.players.find((p) => p.id === id)?.role === ROLE_BIT.Archangel)
+        event.killerIds.some(
+          (id) => game.players.find((p) => p.id === id)?.role === ROLE_BIT.Archangel,
+        )
       ) {
         return;
       }

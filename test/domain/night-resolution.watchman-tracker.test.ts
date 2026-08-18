@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { ROLE_BIT } from '../../src/domain/roles/role.js';
 import { ABSTAIN, createPlayer } from '../../src/domain/game/player.js';
-import { resolveTrackerNight, resolveWatchmanNight } from '../../src/domain/game/night-resolution.js';
+import {
+  resolveTrackerNight,
+  resolveWatchmanNight,
+} from '../../src/domain/game/night-resolution.js';
 
 describe('resolveWatchmanNight', () => {
   it('does nothing when the Watchman is dead, frozen, absent, or has not chosen', () => {

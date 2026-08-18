@@ -60,7 +60,12 @@ describe('AiPlayerAgent', () => {
         chatHistory: [],
         targetMessage:
           i % 2 === 0
-            ? { senderId: 1001n, senderName: 'Marc', text: 'why are you so suspicious?', timestamp: Date.now() }
+            ? {
+                senderId: 1001n,
+                senderName: 'Marc',
+                text: 'why are you so suspicious?',
+                timestamp: Date.now(),
+              }
             : undefined,
         livingPlayerNames: ['Marc', '🤖 Alex (IA)', '🤖 Beatrice (IA)'],
         gameContext: { knownInformation: ['Your living Wolf teammates are: Beatrice'] },
