@@ -23,6 +23,7 @@ import { ROLE_BIT, roleName, type Role, type RoleName } from '../../domain/roles
 import { WOLF_ROLES } from '../../domain/game/game-balancing.js';
 import { ABSTAIN, SPARK, alivePlayers, type Player } from '../../domain/game/player.js';
 import type { GameEvent } from '../../domain/game/game-event.js';
+import type { KillMethod } from '../../domain/game/kill-method.js';
 import type { Team } from '../../domain/game/team.js';
 import { WEATHER_DETAILS } from '../../domain/game/village-weather.js';
 import { generateGazette, type GazetteStory } from '../../domain/gazette/gazette-generator.js';
@@ -301,13 +302,65 @@ export class GameLoop {
         targetKeyboard(targets, 'nt', language, this.t),
       );
 
-      if (WOLF_ROLES.includes(actor.role) && game.wolfCubKilled) {
+      // The bonus second-kill menu: either a Wolf Cub died last night, or a Berserker Wolf's pack
+      // -mate was lynched yesterday and their rage (`Game.berserkerRage`) is still active tonight.
+      if (WOLF_ROLES.includes(actor.role) && (game.wolfCubKilled || game.berserkerRage)) {
         await this.sendPm(
           actor.id,
           language,
           'AskWolfPack',
           targetKeyboard(targets, 'nt2', language, this.t),
         );
+      }
+
+      // The Trapper Wolf's own once-per-game ambush choice, on top of (not instead of) their
+      // regular pack-kill vote above - kept on its own `choice3` slot so the two never collide.
+      if (actor.role === ROLE_BIT.TrapperWolf && !actor.hasUsedAbility) {
+        await this.sendPm(
+          actor.id,
+          language,
+          'AskTrapperWolf',
+          targetKeyboard(targets, 'nt3', language, this.t),
+        );
+      }
+
+      // The Chameleon Wolf's disguise choice, repeatable every night (no `hasUsedAbility` gate),
+      // also on its own `choice3` slot.
+      if (actor.role === ROLE_BIT.ChameleonWolf) {
+        await this.sendPm(
+          actor.id,
+          language,
+          'AskChameleonWolf',
+          targetKeyboard(targets, 'nt3', language, this.t),
+        );
+      }
+
+      // The Viper Wolf's once-per-game poison, same `choice3` slot pattern as the Trapper Wolf.
+      if (actor.role === ROLE_BIT.ViperWolf && !actor.hasUsedAbility) {
+        await this.sendPm(
+          actor.id,
+          language,
+          'AskViperWolf',
+          targetKeyboard(targets, 'nt3', language, this.t),
+        );
+      }
+
+      // The Howler Wolf's once-per-game howl - which player is picked is irrelevant (mirrors the
+      // Reflector's own "the choice doesn't matter" toggle), only whether they acted at all.
+      if (actor.role === ROLE_BIT.HowlerWolf && !actor.hasUsedAbility) {
+        await this.sendPm(
+          actor.id,
+          language,
+          'AskHowlerWolf',
+          targetKeyboard(targets, 'nt3', language, this.t),
+        );
+      }
+
+      // The Hypnotist Wolf's once-per-game forced vote: a two-step pick (victim, then who they're
+      // forced to vote for), mirroring Cupid's own two-step lover pairing - too shaped for the
+      // single-target `choice3` slot every other wolf subtype's ability uses.
+      if (actor.role === ROLE_BIT.HypnotistWolf && !actor.hasUsedAbility) {
+        await this.sendHypnotistFirstMenu(actor, targets, language);
       }
     }
 
@@ -389,6 +442,21 @@ export class GameLoop {
     );
   }
 
+  /** First step of the Hypnotist Wolf's two-step pick: which player's vote to hijack. */
+  private async sendHypnotistFirstMenu(
+    actor: Player,
+    targets: readonly Player[],
+    language: string,
+  ): Promise<void> {
+    if (targets.length === 0) return;
+    await this.sendPm(
+      actor.id,
+      language,
+      'AskHypnotistWolf',
+      targetKeyboard(targets, 'hyp1', language, this.t, false),
+    );
+  }
+
   // ------------------------------------------------------------------ Day
 
   private async runDay(game: Game): Promise<void> {
@@ -400,6 +468,13 @@ export class GameLoop {
       { chatId: game.chatId.toString(), dayNumber: game.dayNumber, mode: game.mode },
       'Day phase started',
     );
+
+    // A Howler Wolf's howl overnight (see `Game.anonymousLynchVotes`) - a neutral, identity-free
+    // heads-up so the village understands why today's lynch votes won't name names, without ever
+    // revealing whose howl caused it.
+    if (game.anonymousLynchVotes) {
+      await this.send(game.chatId, group.language, 'HowlerWolfEffectPublic');
+    }
 
     const seconds = group.dayTimerSeconds;
     dayPhaseDuration.observe(seconds);
@@ -437,6 +512,11 @@ export class GameLoop {
         continue;
       }
       if (!DAY_TARGET_ROLES.includes(actor.role)) continue;
+      // The Archangel only gets a menu once they actually hold a Sacred Bullet - see
+      // `Game.trackArchangelStreak()`, granted after 3 consecutive innocent-villager deaths.
+      if (actor.role === ROLE_BIT.Archangel && (game.archangelBulletsMap.get(actor.id) ?? 0) <= 0) {
+        continue;
+      }
 
       const targets = alivePlayers(game.players).filter((p) => p.id !== actor.id);
       if (targets.length === 0) continue;
@@ -454,12 +534,21 @@ export class GameLoop {
 
   private async runLynch(game: Game): Promise<void> {
     const group = await this.groups.getOrCreate(game.chatId, null, null);
-    game.startLynch();
+    // Any Viper Wolf poison injected earlier lands right here, "at sunset" - the day/lynch
+    // boundary (see `Game.startLynch()`). Broadcast and settle that before anything else, exactly
+    // like `runDay()` does for its own day-action deaths, in case it was a Hunter's final breath
+    // or the win condition itself.
+    const lynchStartEvents = game.startLynch();
     lynchesStarted.inc();
     this.logger.info(
       { chatId: game.chatId.toString(), dayNumber: game.dayNumber, mode: game.mode },
       'Lynch phase started',
     );
+    if (lynchStartEvents.length > 0) {
+      await this.broadcast(game, group, lynchStartEvents, 'Lynch');
+      if (await this.handleHunterShots(game, group, lynchStartEvents, 'Lynch')) return;
+      if (game.phase === 'Ended') return this.finish(game);
+    }
 
     await this.sendGifCategory(game.chatId, group, 'LynchStart');
     const attempts = game.lynchAttemptsPlanned;
@@ -527,7 +616,7 @@ export class GameLoop {
         judgePardon && judgeId !== undefined ? { judgePardon: true, judgeId } : undefined,
       );
       await this.sendSecretLynchSummary(game, group);
-      await this.broadcastLynchOutcome(game, group.language, result.resolution);
+      await this.broadcastLynchOutcome(game, group, result.resolution);
       await this.broadcast(game, group, result.events, 'Lynch');
       if (await this.handleHunterShots(game, group, result.events, 'Lynch')) return;
       if (game.phase === 'Ended') return this.finish(game);
@@ -565,9 +654,10 @@ export class GameLoop {
 
   private async broadcastLynchOutcome(
     game: Game,
-    language: string,
+    group: GroupWithConfig,
     resolution: { outcome: string; playerId?: bigint },
   ): Promise<void> {
+    const language = group.language;
     lynchesResolved.labels(resolution.outcome).inc();
     switch (resolution.outcome) {
       case 'Tied':
@@ -580,10 +670,12 @@ export class GameLoop {
       case 'PacifistPeace':
         pacifistPeaces.inc();
         await this.send(game.chatId, language, 'PacifistNoLynchNow');
+        void this.sendGifCategory(game.chatId, group, 'PacifistPeace');
         return;
       case 'PrinceSurvived': {
         const prince = resolution.playerId ? findName(game.players, resolution.playerId) : '';
         await this.send(game.chatId, language, 'PrinceSurvivedLynch', prince);
+        void this.sendGifCategory(game.chatId, group, 'PrinceSurvived');
         return;
       }
       case 'JudgePardoned': {
@@ -598,8 +690,7 @@ export class GameLoop {
         await this.bot.api
           .sendMessage(chatNumber(game.chatId), msg, { parse_mode: 'HTML' })
           .catch(() => null);
-        const grp = await this.groups.getOrCreate(game.chatId, null, null);
-        void this.sendGifCategory?.(game.chatId, grp, 'JudgePardon');
+        void this.sendGifCategory(game.chatId, group, 'JudgePardon');
         return;
       }
       default:
@@ -724,8 +815,14 @@ export class GameLoop {
 
       if (this.players) {
         try {
+          // AI/bot players (synthetic ids, never a real Telegram account - see
+          // `GameLobbyManager.addBotPlayers`) must never earn leaderboard points: `awardPoints`
+          // below upserts a `Player` row for whichever id it's given, so scoring a bot would
+          // silently plant a fake row that then pollutes the leaderboard, player-count stats, and
+          // rank distribution with an account nobody actually owns.
+          const realPlayers = game.players.filter((p) => !p.isBot);
           const scores = calculateGamePoints(
-            game.players,
+            realPlayers,
             game.winningTeam ?? null,
             firstLynchVictimId(batches),
           );
@@ -920,6 +1017,9 @@ export class GameLoop {
       case 'nt2':
         if (game.phase !== 'Night') return null;
         return this.applyChoice(game, playerId, 'choice2', rest[0]!);
+      case 'nt3':
+        if (game.phase !== 'Night') return null;
+        return this.applyChoice(game, playerId, 'choice3', rest[0]!);
       case 'dt':
         if (game.phase !== 'Day') return null;
         return this.applyChoice(game, playerId, 'choice', rest[0]!);
@@ -981,6 +1081,59 @@ export class GameLoop {
         lover2.loverId = lover1.id;
         return 'ChoiceRecorded';
       }
+      case 'hyp1': {
+        if (game.phase !== 'Night') return null;
+        const hypnotist = game.players.find(
+          (p) => p.id === playerId && p.role === ROLE_BIT.HypnotistWolf && !p.hasUsedAbility,
+        );
+        if (!hypnotist) return null;
+        const victim = game.players.find((p) => p.id === BigInt(rest[0]!));
+        if (!victim) return null;
+        const targets = alivePlayers(game.players).filter((p) => p.id !== victim.id);
+        if (targets.length > 0) {
+          await this.sendPm(
+            hypnotist.id,
+            language,
+            'AskHypnotistWolfSecond',
+            targetKeyboard(targets, `hyp2:${victim.id.toString()}`, language, this.t, false),
+          );
+        }
+        return 'ChoiceRecorded';
+      }
+      case 'hyp2': {
+        if (game.phase !== 'Night') return null;
+        const hypnotist = game.players.find(
+          (p) => p.id === playerId && p.role === ROLE_BIT.HypnotistWolf && !p.hasUsedAbility,
+        );
+        if (!hypnotist) return null;
+        const victim = game.players.find((p) => p.id === BigInt(rest[0]!));
+        const forcedTarget = game.players.find((p) => p.id === BigInt(rest[1]!));
+        if (!victim || !forcedTarget || victim.id === forcedTarget.id) return null;
+        hypnotist.hasUsedAbility = true;
+        game.hypnotistForcedVoteMap.set(hypnotist.id, {
+          victimId: victim.id,
+          targetId: forcedTarget.id,
+        });
+        // No domain event/broadcast for this one - like Cupid's own two-step pairing right above,
+        // the effect is entirely set here in the infra layer, with no later `resolveNightActions()`
+        // pass to derive a confirmation from. A dedicated PM (rather than just the generic
+        // "Choice recorded" toast) still tells the Hypnotist Wolf their hex actually landed.
+        await this.sendPmRaw(
+          hypnotist.id,
+          this.t.translate(
+            language,
+            'HypnotistWolfForcedVoteMsg',
+            mentionOrPlain(victim.id, victim.name, victim.isBot),
+            mentionOrPlain(forcedTarget.id, forcedTarget.name, forcedTarget.isBot),
+          ),
+        );
+        // PM'd to the Hypnotist's own chat, not the group - like the PM confirmation just above,
+        // this ability is secret, so its gif can't broadcast publicly (see `sendGifForEvent`'s
+        // `secretAudience` handling for the same reasoning on the other wolf subtypes).
+        const group = await this.groups.getOrCreate(game.chatId, null, null);
+        void this.sendGifCategory(hypnotist.id, group, 'HypnotistWolfMindControl');
+        return 'ChoiceRecorded';
+      }
       default:
         return null;
     }
@@ -989,7 +1142,7 @@ export class GameLoop {
   private applyChoice(
     game: Game,
     playerId: bigint,
-    field: 'choice' | 'choice2',
+    field: 'choice' | 'choice2' | 'choice3',
     rawTarget: string,
   ): string | null {
     const actor = game.players.find((p) => p.id === playerId);
@@ -1012,12 +1165,20 @@ export class GameLoop {
   ): Promise<string | null> {
     const voter = game.players.find((p) => p.id === playerId);
     if (!voter || voter.isDead) return null;
+    // A Hypnotist Wolf's forced vote (see `Game.startLynch()`, which pre-fills it) can't be
+    // overridden by the victim themselves - they're not even aware it happened.
+    const isHypnotized = [...game.hypnotistForcedVoteMap.values()].some(
+      (v) => v.victimId === playerId,
+    );
+    if (isHypnotized) return null;
     const result = this.applyChoice(game, playerId, 'choice', rawTarget);
     if (result !== 'ChoiceRecorded') return result;
     game.registerLynchVoteCast(playerId);
 
     const group = await this.groups.getOrCreate(game.chatId, null, null);
-    if (group.secretLynch) {
+    // A Howler Wolf's howl (see `Game.anonymousLynchVotes`) forces the same anonymity as the
+    // group's own `secretLynch` config, just for this one lynch.
+    if (group.secretLynch || game.anonymousLynchVotes) {
       const voted = alivePlayers(game.players).filter((p) => p.choice !== null).length;
       await this.send(
         game.chatId,
@@ -1064,6 +1225,9 @@ export class GameLoop {
    * Read right after `game.resolveLynch()` - the tally resets at the top of the next attempt.
    */
   private async sendSecretLynchSummary(game: Game, group: GroupWithConfig): Promise<void> {
+    // A Howler Wolf's howl overrides any group config - full anonymity for this lynch, no breakdown
+    // at all, not even a vote-count-only one.
+    if (game.anonymousLynchVotes) return;
     if (!group.secretLynch || !group.secretLynchShowVotes) return;
 
     const voted = game.players.filter((p) => p.votes > 0).sort((a, b) => b.votes - a.votes);
@@ -1091,11 +1255,13 @@ export class GameLoop {
       case 'Mayor': {
         if (!game.useMayorReveal(playerId)) return 'AbilityAlreadyUsed';
         await this.send(game.chatId, group.language, 'MayorRevealedMsg', playerMention);
+        void this.sendGifCategory(game.chatId, group, 'MayorReveal');
         return 'MayorRevealedMsg';
       }
       case 'Pacifist': {
         if (!game.usePacifistPeace(playerId)) return 'AbilityAlreadyUsed';
         await this.send(game.chatId, group.language, 'PacifistDeclaredMsg', playerMention);
+        void this.sendGifCategory(game.chatId, group, 'PacifistPeace');
         return 'PacifistDeclaredMsg';
       }
       case 'Blacksmith': {
@@ -1103,6 +1269,7 @@ export class GameLoop {
         if (events.length === 0) return 'AbilityAlreadyUsed';
         this.logEvents(game.chatId, events);
         await this.send(game.chatId, group.language, 'BlacksmithSpreadMsg', playerMention);
+        void this.sendGifCategory(game.chatId, group, 'BlacksmithSilver');
         return 'BlacksmithSpreadMsg';
       }
       case 'Sandman': {
@@ -1110,11 +1277,13 @@ export class GameLoop {
         if (events.length === 0) return 'AbilityAlreadyUsed';
         this.logEvents(game.chatId, events);
         await this.send(game.chatId, group.language, 'SandmanUsedMsg', playerMention);
+        void this.sendGifCategory(game.chatId, group, 'SandmanSleep');
         return 'SandmanUsedMsg';
       }
       case 'Troublemaker': {
         if (!game.useTroublemakerDoubleLynch(playerId)) return 'AbilityAlreadyUsed';
         await this.send(game.chatId, group.language, 'TroubleDoubleLynchNow', playerMention);
+        void this.sendGifCategory(game.chatId, group, 'TroublemakerBrawl');
         return 'TroubleDoubleLynchNow';
       }
       default:
@@ -1343,17 +1512,81 @@ export class GameLoop {
     this.recordRoleAbilityMetrics(event);
     let category: GifCategory | null = null;
     let playerId: bigint | undefined;
+    // Most gifs broadcast publicly to the group, matching the flashy moment they celebrate. A
+    // handful of wolf-subtype abilities are secret, though - their own `describeEvent()` case PMs
+    // only the acting player, never the group - so their gif has to follow the same audience or it
+    // would out the ability (and that a matching role even exists) to everyone. Set below, per
+    // event, to override the default group send with a PM to this specific player instead.
+    let secretAudience: bigint | undefined;
 
     if (event.type === 'PlayerDied') {
-      category =
-        event.method === 'Burn'
-          ? 'BurnToDeath'
-          : event.method === 'SerialKilled'
-            ? 'SKKilled'
-            : 'VillagerDie';
+      // A grieving lover's death always arrives as a `PlayerDied('LoverDied')` right alongside its
+      // own `LoverDiedOfGrief` event (see `kill.ts`'s recursive killPlayer call) - the branch below
+      // already sends the dedicated `LoverDied` clip for that pair, so skip this one entirely
+      // rather than also firing a redundant generic `VillagerDie` gif for the same death.
+      if (event.method === 'LoverDied') return;
+      // A successful Archangel shot arrives as a `PlayerDied('Shoot')` right alongside its own
+      // `ArchangelShotFired` event (see `resolveArchangelShot`) - the branch below already sends
+      // the dedicated Sacred Bullet clip, so skip the generic fallback for that death entirely.
+      if (
+        event.method === 'Shoot' &&
+        event.killerIds.some((id) => game.players.find((p) => p.id === id)?.role === ROLE_BIT.Archangel)
+      ) {
+        return;
+      }
+      category = KILL_METHOD_GIF_CATEGORY[event.method] ?? 'VillagerDie';
+      playerId = event.playerId;
+    } else if (event.type === 'LoverDiedOfGrief') {
+      category = 'LoverDied';
       playerId = event.playerId;
     } else if (event.type === 'GameEnded') {
-      category = WIN_TEAM_GIF_CATEGORY[event.winningTeam] ?? null;
+      // Jester shares the Tanner `Team` (both win by getting themselves lynched), so
+      // `winningTeam` alone can't tell them apart - check who actually won to pick the right clip.
+      const jesterWon = game.players.some((p) => p.won && p.role === ROLE_BIT.Jester);
+      // A Hitman's win also reports as the generic 'Neutral' team (shared with Necromancer/
+      // Reflector/Avenger/Crow) - the dedicated HitmanTargetEliminated event fired right alongside
+      // this one already covers its own gif, so skip the generic team-win clip for that case
+      // entirely rather than sending both.
+      const hitmanWon = game.players.some((p) => p.won && p.role === ROLE_BIT.Hitman);
+      // Same reasoning as the Hitman check above - an Avenger's win also reports as the generic
+      // 'Neutral' team, and their own dedicated `AvengerRivalLynched` gif (fired the moment their
+      // rival was lynched, right before this `GameEnded` event) already covers it.
+      const avengerWon = game.players.some((p) => p.won && p.role === ROLE_BIT.Avenger);
+      if (hitmanWon || avengerWon) return;
+      category = jesterWon ? 'JesterWin' : (WIN_TEAM_GIF_CATEGORY[event.winningTeam] ?? null);
+    } else if (event.type === 'HitmanTargetEliminated') {
+      category = 'HitmanTargetEliminated';
+      playerId = event.hitmanId;
+    } else if (event.type === 'PlayerResurrected') {
+      category = 'NecromancerResurrect';
+      playerId = event.playerId;
+    } else if (event.type === 'ArchangelShotFired') {
+      if (!event.hit) return;
+      category = 'ArchangelBullet';
+      playerId = event.archangelId;
+    } else if (event.type === 'AvengerRivalLynched') {
+      category = 'AvengerRivalLynched';
+      playerId = event.avengerId;
+    } else if (event.type === 'TrapperWolfTrapSet') {
+      category = 'TrapperWolfTrap';
+      playerId = event.trapperId;
+      secretAudience = event.trapperId;
+    } else if (event.type === 'ChameleonDisguiseChosen') {
+      category = 'ChameleonWolfDisguise';
+      playerId = event.chameleonId;
+      secretAudience = event.chameleonId;
+    } else if (event.type === 'HowlerWolfHowled') {
+      category = 'HowlerWolfHowl';
+      playerId = event.howlerId;
+      secretAudience = event.howlerId;
+    } else if (event.type === 'BerserkerWolfEnraged') {
+      category = 'BerserkerWolfRage';
+      playerId = event.berserkerId;
+      secretAudience = event.berserkerId;
+    } else if (event.type === 'CrownPrinceSucceeded') {
+      category = 'CrownPrincePromote';
+      playerId = event.playerId;
+      secretAudience = event.playerId;
     }
     if (!category) return;
 
@@ -1363,11 +1596,12 @@ export class GameLoop {
     const media = fileId ?? this.localGifPack.resolve(category);
     if (!media) return;
 
+    const targetChatId = secretAudience ?? game.chatId;
     try {
-      await this.bot.api.sendAnimation(chatNumber(game.chatId), media);
+      await this.bot.api.sendAnimation(chatNumber(targetChatId), media);
     } catch (err) {
       this.logger.warn(
-        { err, chatId: game.chatId.toString(), category },
+        { err, chatId: targetChatId.toString(), category },
         'Failed to send gif pack animation',
       );
     }
@@ -1486,10 +1720,25 @@ export class GameLoop {
   }
 }
 
+/** Maps a `PlayerDied` event's `KillMethod` to its custom-gif-pack category - death methods with
+ * no dedicated clip (lynching, most night-visit outcomes, idle/flee/suicide, ...) fall back to the
+ * generic `VillagerDie` via `sendGifForEvent`'s `?? 'VillagerDie'`, same as before this map existed. */
+export const KILL_METHOD_GIF_CATEGORY: Partial<Record<KillMethod, GifCategory>> = {
+  Burn: 'BurnToDeath',
+  SerialKilled: 'SKKilled',
+  Eat: 'WolfAttack',
+  HunterShot: 'HunterShot',
+  Chemistry: 'WitchPotionKill',
+  FallGrave: 'GraveDiggerFall',
+  HunterCult: 'CultHunterKill',
+  Hunt: 'CultHunterKill',
+  ViperPoison: 'ViperWolfPoison',
+};
+
 /** Maps a `GameEnded` winning team to its custom-gif-pack category - mirrors `CustomGifData`'s
  * per-outcome fields. Team outcomes with no original equivalent (this port's `SKHunter` standoff
  * win, `Neutral`/`Thief`) are left out - they simply never trigger a gif, same as today. */
-const WIN_TEAM_GIF_CATEGORY: Partial<Record<Team, GifCategory>> = {
+export const WIN_TEAM_GIF_CATEGORY: Partial<Record<Team, GifCategory>> = {
   Village: 'VillagersWin',
   Wolf: 'WolvesWin',
   Tanner: 'TannerWin',
@@ -1529,7 +1778,6 @@ const NIGHT_PROMPT_KEY: Partial<Record<RoleName, string>> = {
   Tracker: 'AskTracker',
   Priestess: 'AskPriestess',
   Mimic: 'AskMimic',
-  Archangel: 'AskArchangel',
   Necromancer: 'AskNecromancer',
   Reflector: 'AskReflector',
   Crow: 'AskCrow',
@@ -1539,6 +1787,7 @@ const DAY_PROMPT_KEY: Partial<Record<RoleName, string>> = {
   Gunner: 'AskGunner',
   Spumpkin: 'AskSpumpkin',
   Detective: 'AskDetective',
+  Archangel: 'AskArchangel',
 };
 
 const ABILITY_BUTTON_KEY: Partial<Record<RoleName, string>> = {

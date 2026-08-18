@@ -48,6 +48,29 @@ function checkWildChild(players: Player[], checkBitten: boolean): GameEvent[] {
   return [];
 }
 
+/**
+ * Port of the Crown Prince's succession: "if the Mayor dies during the game, you immediately
+ * inherit the Mayor title and double vote weight" - no restriction to lynch deaths in the About
+ * text, so (unlike the old lynch.ts-only version this replaces) this runs through the same
+ * after-every-kill `checkRoleChanges()` pass as Apprentice Seer's promotion, catching a Mayor lost
+ * to a wolf attack, poison, a Gunner/Spumpkin/Archangel shot, or anything else. Deliberately never
+ * touches `hasUsedAbility` - the newly-crowned Prince has never used a Mayor's reveal/double-vote
+ * power yet (they had no ability of their own before this), so leaving it at its default `false`
+ * is what actually lets them use the power they just inherited.
+ */
+function checkCrownPrince(players: Player[]): GameEvent[] {
+  const crownPrince = players.find((p) => p.role === ROLE_BIT.CrownPrince && !p.isDead);
+  if (!crownPrince) return [];
+
+  const mayorAlive = players.some((p) => p.role === ROLE_BIT.Mayor && !p.isDead);
+  if (mayorAlive) return [];
+
+  crownPrince.role = ROLE_BIT.Mayor;
+  crownPrince.team = getTeamForRole(ROLE_BIT.Mayor);
+  crownPrince.changedRolesCount++;
+  return [{ type: 'CrownPrinceSucceeded', playerId: crownPrince.id }];
+}
+
 function checkDoppelganger(players: Player[], checkBitten: boolean): GameEvent[] {
   const dg = players.find((p) => p.role === ROLE_BIT.Doppelganger && !p.isDead);
   if (!dg || (checkBitten && dg.bitten)) return [];
@@ -90,6 +113,7 @@ export function checkRoleChanges(players: Player[], checkBitten = false): GameEv
 
   events.push(...checkWildChild(players, checkBitten));
   events.push(...checkDoppelganger(players, checkBitten));
+  events.push(...checkCrownPrince(players));
 
   return events;
 }

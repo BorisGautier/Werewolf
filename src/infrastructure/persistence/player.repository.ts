@@ -1,5 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
 import { getRankForPoints, type RankTier } from '../../domain/scoring/rank.js';
+import { SYNTHETIC_BOT_ID_FLOOR } from '../../domain/game/player.js';
 import {
   dbErrors,
   dbQueries,
@@ -223,6 +224,10 @@ export class PlayerRepository {
   async getTopPlayers(limit = 10) {
     return this.prisma.player.findMany({
       take: limit,
+      // Defense in depth against a synthetic bot id ever having a Player row (see
+      // `SYNTHETIC_BOT_ID_FLOOR`'s doc comment) - `awardPoints` is the actual place that's
+      // guarded against creating one, this just keeps the leaderboard clean even so.
+      where: { telegramId: { lt: SYNTHETIC_BOT_ID_FLOOR } },
       orderBy: [{ points: 'desc' }, { gamesWon: 'desc' }],
       select: {
         id: true,
@@ -249,7 +254,7 @@ export class PlayerRepository {
     if (!target) return null;
 
     const higherCount = await this.prisma.player.count({
-      where: { points: { gt: target.points } },
+      where: { points: { gt: target.points }, telegramId: { lt: SYNTHETIC_BOT_ID_FLOOR } },
     });
     return {
       rank: higherCount + 1,

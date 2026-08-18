@@ -256,11 +256,33 @@ describe('GameLobbyManager', () => {
     await lobby.join(chatId, user(2, 'Alice'));
     sendMessage.mockClear();
 
-    await vi.advanceTimersByTimeAsync(1000);
+    // Alice's join just pushed the 1s countdown out by JOIN_EXTEND_SECONDS (30s) - advance past
+    // the actual new deadline rather than the original bare joinTimeSeconds.
+    await vi.advanceTimersByTimeAsync(31_000);
 
     expect(sendMessage).toHaveBeenCalledWith(104, expect.stringContaining('cancelled'), {
       parse_mode: 'HTML',
     });
+    expect(gameManager.has(chatId)).toBe(false);
+  });
+
+  it('extends the join countdown by 30 seconds every time a player joins', async () => {
+    vi.useFakeTimers();
+    const { lobby, gameManager } = createHarness(10);
+    const chatId = 116n;
+
+    await lobby.startGame(chatId, 'Group', { id: 1n, name: 'Starter' }, 'Normal');
+
+    // 10s base countdown - still open with 1s left to go.
+    await vi.advanceTimersByTimeAsync(9000);
+    expect(gameManager.has(chatId)).toBe(true);
+
+    // A join right before the original deadline should push it 30s further out (1s + 30s = 31s left).
+    await lobby.join(chatId, user(2, 'Alice'));
+    await vi.advanceTimersByTimeAsync(30_000); // the original countdown would've ended long ago
+    expect(gameManager.has(chatId)).toBe(true); // still open thanks to the +30s extension
+
+    await vi.advanceTimersByTimeAsync(1000); // the last second of the extension elapses
     expect(gameManager.has(chatId)).toBe(false);
   });
 
@@ -341,6 +363,28 @@ describe('GameLobbyManager', () => {
 
     await vi.advanceTimersByTimeAsync(65000); // would've finished the lobby without the extension
     expect(gameManager.get(chatId)!.phase).toBe('Joining');
+  });
+
+  it('honors a group configured for the maximum 300-second extend cap, without clamping it down', async () => {
+    vi.useFakeTimers();
+    const { lobby, groupsStore, sendMessage } = createHarness(60);
+    const chatId = 117n;
+    groupsStore.set(
+      chatId.toString(),
+      fakeGroup(chatId, 'Group', { allowExtend: true, maxExtendSeconds: 300 }),
+    );
+
+    await lobby.startGame(chatId, 'Group', { id: 1n, name: 'Starter' }, 'Normal');
+    await lobby.join(chatId, user(2, 'Alice'));
+    sendMessage.mockClear();
+
+    await lobby.extend(chatId, 2n, false, 300); // not clamped - 300 is within maxExtendSeconds
+
+    expect(sendMessage).toHaveBeenCalledWith(
+      117,
+      expect.stringContaining('300'),
+      expect.anything(),
+    );
   });
 
   it('extend rejects a second request from the same non-admin player', async () => {

@@ -115,6 +115,8 @@ export function deathFlavorKey(
       return selfInflicted
         ? { key: 'ChemistFailPublic', includeRoleArg: false }
         : { key: 'ChemistSuccessPublic', includeRoleArg: true };
+    case 'ViperPoison':
+      return { key: 'ViperPoisonPublic', includeRoleArg: true };
     case 'VisitKiller': {
       const key = VISIT_KILLER_ROLE_KEY[role];
       return key ? { key, includeRoleArg: false } : null;

@@ -16,7 +16,7 @@ const DISABLEABLE_ROLES: readonly RoleName[] = ROLE_NAMES.filter(
 const ROLES_PER_PAGE = 8;
 
 const TIMER_PRESETS = [30, 60, 90, 120, 150, 180, 240, 300] as const;
-const EXTEND_PRESETS = [0, 30, 60, 90, 120] as const;
+const EXTEND_PRESETS = [0, 30, 60, 90, 120, 150, 180, 240, 300] as const;
 const MAX_PLAYER_PRESETS = [10, 15, 20, 25, 30, 35] as const;
 
 /** A boolean `Group` column exposed as a single on/off button on the options page. */

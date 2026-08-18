@@ -83,8 +83,20 @@ export class AiPlayerAgent {
     targetMessage?: ChatMessageEntry | undefined;
     livingPlayerNames: readonly string[];
     gameContext?: AiGameContext | undefined;
+    /** The group's configured language (`GroupWithConfig.language`, e.g. `'fr'`/`'en'`) - an AI
+     * persona used to always write in French regardless of this, even in an English-configured
+     * group. Defaults to `'fr'` to match that historical behavior when a caller doesn't pass one. */
+    language?: string | undefined;
   }): Promise<string> {
-    const { botName, botRole, chatHistory, targetMessage, livingPlayerNames, gameContext } = params;
+    const {
+      botName,
+      botRole,
+      chatHistory,
+      targetMessage,
+      livingPlayerNames,
+      gameContext,
+      language = 'fr',
+    } = params;
     const cleanName = botName.replaceAll('🤖', '').replaceAll('(IA)', '').trim();
     const persona = BOT_PERSONAS[cleanName] ?? {
       name: cleanName,
@@ -104,6 +116,7 @@ export class AiPlayerAgent {
           targetMessage,
           livingPlayerNames,
           gameContext,
+          language,
         });
 
         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${this.geminiApiKey}`;
@@ -139,6 +152,7 @@ export class AiPlayerAgent {
       targetMessage,
       livingPlayerNames,
       gameContext,
+      language,
     });
   }
 
@@ -150,7 +164,13 @@ export class AiPlayerAgent {
     targetMessage?: ChatMessageEntry | undefined;
     livingPlayerNames: readonly string[];
     gameContext?: AiGameContext | undefined;
+    language: string;
   }): string {
+    // Only the final reply text is ever shown to players - the rest of this prompt is internal
+    // reasoning scaffolding fed to the model, so it doesn't need translating. What matters is
+    // telling the model which language its *output* must be in, instead of hardcoding French
+    // regardless of the group's actual configured language.
+    const outputLanguageName = params.language === 'en' ? 'anglais (English)' : 'français';
     const recentMessages = params.chatHistory
       .slice(-10)
       .map((m) => `${m.senderName}: "${m.text}"`)
@@ -195,7 +215,7 @@ export class AiPlayerAgent {
       `3. ÉVITE ABSOLUMENT les phrases bateaux ou génériques comme "le village doit rester uni". Sois ULTRA PRÉCIS !\n` +
       `4. Tu peux décider de révéler ton rôle (ou de mentir et claim un faux rôle si tu es Loup/Tanneur) avec des expressions comme "/claim ${params.roleName}" ou "Je claim ${params.roleName} ! J'ai vu que...".\n` +
       `5. Si un joueur te demande quel est ton rôle ou t'accuse, réponds directement en te défendant, en claimant ton rôle ou en contre-attaquant un joueur vivant précis.\n` +
-      `6. Rédige UNE SEULE phrase directe et vivante en Français (max 25 mots). Ne mets pas ton nom en préfixe.`
+      `6. Rédige UNE SEULE phrase directe et vivante EN ${outputLanguageName.toUpperCase()} (max 25 mots), quelle que soit la langue du texte ci-dessus. Ne mets pas ton nom en préfixe.`
     );
   }
 
@@ -205,13 +225,16 @@ export class AiPlayerAgent {
     targetMessage?: ChatMessageEntry | undefined;
     livingPlayerNames: readonly string[];
     gameContext?: AiGameContext | undefined;
+    language: string;
   }): string {
-    const { targetMessage, livingPlayerNames, gameContext, botRole } = params;
+    const { targetMessage, livingPlayerNames, gameContext, botRole, language } = params;
+    const isFr = language !== 'en';
     const nameEnum = roleName(botRole);
 
     const otherPlayers = livingPlayerNames.filter((n) => !n.includes(params.cleanName));
     const randomTarget =
-      otherPlayers[Math.floor(Math.random() * otherPlayers.length)] ?? "quelqu'un";
+      otherPlayers[Math.floor(Math.random() * otherPlayers.length)] ??
+      (isFr ? "quelqu'un" : 'someone');
 
     // 1. Respond to questions about role / accusations with realistic claims / defenses
     if (targetMessage) {
@@ -221,27 +244,41 @@ export class AiPlayerAgent {
         lower.includes('rôle') ||
         lower.includes('role') ||
         lower.includes('tu es quoi') ||
+        lower.includes('what are you') ||
         lower.includes('claim')
       ) {
-        const claims = [
-          `/claim ${nameEnum} - Je suis ${nameEnum}, ne perdez pas votre vote sur moi !`,
-          `Je claim publiquement ${nameEnum}. Qui d'autre prétend l'être ici ?`,
-          `Je suis ${nameEnum}. Concentrons-nous plutôt sur ${randomTarget} qui esquive le débat !`,
-        ];
+        const claims = isFr
+          ? [
+              `/claim ${nameEnum} - Je suis ${nameEnum}, ne perdez pas votre vote sur moi !`,
+              `Je claim publiquement ${nameEnum}. Qui d'autre prétend l'être ici ?`,
+              `Je suis ${nameEnum}. Concentrons-nous plutôt sur ${randomTarget} qui esquive le débat !`,
+            ]
+          : [
+              `/claim ${nameEnum} - I'm ${nameEnum}, don't waste your vote on me!`,
+              `I'm publicly claiming ${nameEnum}. Who else claims to be one here?`,
+              `I'm ${nameEnum}. Let's focus on ${randomTarget} dodging the debate instead!`,
+            ];
         return claims[Math.floor(Math.random() * claims.length)]!;
       }
 
       if (
         lower.includes('loup') ||
+        lower.includes('wolf') ||
         lower.includes('suspect') ||
         lower.includes('vote') ||
         lower.includes('accuse')
       ) {
-        const defenses = [
-          `Pourquoi tu m'accuses ${targetMessage.senderName} ? Je claim ${nameEnum}, vérifiez mes actes avant de voter !`,
-          `Tu tentes de détourner l'attention ${targetMessage.senderName} ! C'est toi qui devrais t'expliquer.`,
-          `Accuser sans preuves c'est typique d'un Loup. Je claim ${nameEnum} et je vote contre ${targetMessage.senderName}.`,
-        ];
+        const defenses = isFr
+          ? [
+              `Pourquoi tu m'accuses ${targetMessage.senderName} ? Je claim ${nameEnum}, vérifiez mes actes avant de voter !`,
+              `Tu tentes de détourner l'attention ${targetMessage.senderName} ! C'est toi qui devrais t'expliquer.`,
+              `Accuser sans preuves c'est typique d'un Loup. Je claim ${nameEnum} et je vote contre ${targetMessage.senderName}.`,
+            ]
+          : [
+              `Why are you accusing me, ${targetMessage.senderName}? I claim ${nameEnum}, check my actions before voting!`,
+              `You're trying to deflect attention, ${targetMessage.senderName}! You're the one who should explain yourself.`,
+              `Accusing without proof is very Wolf-like. I claim ${nameEnum} and I'm voting against ${targetMessage.senderName}.`,
+            ];
         return defenses[Math.floor(Math.random() * defenses.length)]!;
       }
     }
@@ -253,18 +290,28 @@ export class AiPlayerAgent {
       Math.random() < 0.5
     ) {
       const intelStr = gameContext.knownInformation[0]!;
-      return `Je partage une info cruciale : ${intelStr}. Prenez vos responsabilités le village !`;
+      return isFr
+        ? `Je partage une info cruciale : ${intelStr}. Prenez vos responsabilités le village !`
+        : `I'm sharing crucial info: ${intelStr}. Take responsibility, village!`;
     }
 
     if (Math.random() < 0.25) {
-      return `/claim ${nameEnum} - Je préfère claim clair dès maintenant : je suis ${nameEnum}. Voyons qui ose me contredire !`;
+      return isFr
+        ? `/claim ${nameEnum} - Je préfère claim clair dès maintenant : je suis ${nameEnum}. Voyons qui ose me contredire !`
+        : `/claim ${nameEnum} - I'd rather claim clearly right now: I'm ${nameEnum}. Let's see who dares contradict me!`;
     }
 
-    const contextualObs = [
-      `J'observe de près les votes de ${randomTarget}, ses réactions depuis ce matin sont très étranges.`,
-      `Si personne d'autre ne claim, je propose qu'on demande des explications directes à ${randomTarget}.`,
-      `Regardez qui refuse de donner son rôle depuis le début du jour !`,
-    ];
+    const contextualObs = isFr
+      ? [
+          `J'observe de près les votes de ${randomTarget}, ses réactions depuis ce matin sont très étranges.`,
+          `Si personne d'autre ne claim, je propose qu'on demande des explications directes à ${randomTarget}.`,
+          `Regardez qui refuse de donner son rôle depuis le début du jour !`,
+        ]
+      : [
+          `I'm watching ${randomTarget}'s votes closely, their reactions since this morning are very strange.`,
+          `If nobody else claims, I suggest we ask ${randomTarget} directly for an explanation.`,
+          `Look who's been refusing to give their role since the day started!`,
+        ];
     return contextualObs[Math.floor(Math.random() * contextualObs.length)]!;
   }
 }

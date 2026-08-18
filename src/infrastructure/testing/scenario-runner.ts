@@ -13,6 +13,21 @@ export interface ScenarioResult {
 export class ScenarioRunner {
   private gameManager = new GameManager();
 
+  /**
+   * `game.start()` deals real random roles via `balance()` - left as-is, a scenario testing one
+   * specific role's mechanic can flake from unrelated interference (a random SnowWolf freezing the
+   * very player a test just reassigned to Necromancer, a random Judge/Mayor colliding with the role
+   * under test, ...). Pinning every player to a plain Villager first, then overriding only the
+   * role(s) a given scenario actually cares about, removes that noise - same pattern the
+   * `startedGame()` test helper in game.aggregate.abilities.test.ts uses for the same reason.
+   */
+  private pinToVillagers(game: ReturnType<GameManager['create']>): void {
+    for (const p of game.players) {
+      p.role = ROLE_BIT.Villager;
+      p.team = getTeamForRole(ROLE_BIT.Villager);
+    }
+  }
+
   public async runAllScenarios(): Promise<ScenarioResult[]> {
     const results: ScenarioResult[] = [];
 
@@ -35,6 +50,7 @@ export class ScenarioRunner {
         game.addPlayer(BigInt(i), `Bot${i}`, true);
       }
       game.start();
+      this.pinToVillagers(game);
 
       const tm = game.players[0]!;
       tm.role = ROLE_BIT.Troublemaker;
@@ -77,6 +93,7 @@ export class ScenarioRunner {
         game.addPlayer(BigInt(i), `Bot${i}`, true);
       }
       game.start();
+      this.pinToVillagers(game);
       game.phase = 'Day';
       game.startLynch();
 
@@ -139,6 +156,7 @@ export class ScenarioRunner {
         game.addPlayer(BigInt(i), `Bot${i}`, true);
       }
       game.start();
+      this.pinToVillagers(game);
 
       const necro = game.players[0]!;
       necro.role = ROLE_BIT.Necromancer;
@@ -150,7 +168,16 @@ export class ScenarioRunner {
       necro.choice = deadP.id;
       const events = game.resolveNightActions();
 
-      if (!events) throw new Error('Night resolution returned undefined');
+      if (deadP.isDead) throw new Error('Resurrected target is still marked dead');
+      if (deadP.team !== 'Neutral') {
+        throw new Error(`Resurrected target's team was not switched to Neutral (got ${deadP.team})`);
+      }
+      if (!events.some((e) => e.type === 'PlayerResurrected' && e.playerId === deadP.id)) {
+        throw new Error('No PlayerResurrected event was emitted for the target');
+      }
+      if (!necro.hasUsedAbility) {
+        throw new Error("Necromancer's once-per-game ability flag was not consumed");
+      }
 
       return {
         name,
@@ -170,6 +197,7 @@ export class ScenarioRunner {
         game.addPlayer(BigInt(i), `Bot${i}`, true);
       }
       game.start();
+      this.pinToVillagers(game);
 
       const mayor = game.players[0]!;
       mayor.role = ROLE_BIT.Mayor;

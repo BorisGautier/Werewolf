@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { ROLE_BIT } from '../../src/domain/roles/role.js';
-import { createPlayer } from '../../src/domain/game/player.js';
+import { ABSTAIN, createPlayer } from '../../src/domain/game/player.js';
 import {
+  resolveArchangelShot,
   resolveDetectiveSnoop,
   resolveGunnerShot,
   resolveSpumpkinDetonate,
@@ -163,5 +164,59 @@ describe('resolveDetectiveSnoop', () => {
     resolveDetectiveSnoop([detective, wolf, villager], () => 0.99);
 
     expect(detective.correctSnoopedIds).toEqual([]);
+  });
+});
+
+describe('resolveArchangelShot', () => {
+  it('does nothing without an acting Archangel, or with no bullets, no target, or no choice', () => {
+    const wolf = createPlayer(2n, 'W', ROLE_BIT.Wolf, 'Wolf');
+    expect(resolveArchangelShot([wolf], new Map())).toEqual([]);
+
+    const noBullets = createPlayer(1n, 'A', ROLE_BIT.Archangel, 'Village');
+    noBullets.choice = wolf.id;
+    expect(resolveArchangelShot([noBullets, wolf], new Map())).toEqual([]);
+
+    const dead = createPlayer(1n, 'A', ROLE_BIT.Archangel, 'Village');
+    dead.isDead = true;
+    dead.choice = wolf.id;
+    expect(resolveArchangelShot([dead, wolf], new Map([[dead.id, 1]]))).toEqual([]);
+
+    const abstained = createPlayer(1n, 'A', ROLE_BIT.Archangel, 'Village');
+    abstained.choice = ABSTAIN;
+    expect(resolveArchangelShot([abstained, wolf], new Map([[abstained.id, 1]]))).toEqual([]);
+
+    const noChoice = createPlayer(1n, 'A', ROLE_BIT.Archangel, 'Village');
+    expect(resolveArchangelShot([noChoice, wolf], new Map([[noChoice.id, 1]]))).toEqual([]);
+  });
+
+  it('spends a bullet and kills the target when it is actually a Werewolf', () => {
+    const archangel = createPlayer(1n, 'A', ROLE_BIT.Archangel, 'Village');
+    const wolf = createPlayer(2n, 'W', ROLE_BIT.Wolf, 'Wolf');
+    archangel.choice = wolf.id;
+    const bullets = new Map([[archangel.id, 1]]);
+
+    const events = resolveArchangelShot([archangel, wolf], bullets);
+
+    expect(bullets.get(archangel.id)).toBe(0);
+    expect(wolf.isDead).toBe(true);
+    expect(events).toEqual([
+      { type: 'ArchangelShotFired', archangelId: archangel.id, targetId: wolf.id, hit: true },
+      { type: 'PlayerDied', playerId: wolf.id, method: 'Shoot', killerIds: [archangel.id], isNight: false },
+    ]);
+  });
+
+  it('spends a bullet but harms nobody when the target is not a Werewolf', () => {
+    const archangel = createPlayer(1n, 'A', ROLE_BIT.Archangel, 'Village');
+    const villager = createPlayer(2n, 'V', ROLE_BIT.Villager, 'Village');
+    archangel.choice = villager.id;
+    const bullets = new Map([[archangel.id, 2]]);
+
+    const events = resolveArchangelShot([archangel, villager], bullets);
+
+    expect(bullets.get(archangel.id)).toBe(1);
+    expect(villager.isDead).toBe(false);
+    expect(events).toEqual([
+      { type: 'ArchangelShotFired', archangelId: archangel.id, targetId: villager.id, hit: false },
+    ]);
   });
 });

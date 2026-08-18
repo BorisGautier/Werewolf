@@ -238,7 +238,7 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
   registerWaitlistCommands(bot, deps);
   registerModesGuideCommands(bot, lobby);
 
-  const groupChatListener = new GroupChatListener(env.geminiApiKey);
+  const groupChatListener = new GroupChatListener(env.geminiApiKey, deps.groupRepository);
   groupChatListener.register(bot, gameLoop);
 
   const alertService = new AlertService(bot, env, logger);
@@ -454,20 +454,31 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     const winrate =
       playerStats.played > 0 ? ((playerStats.won / playerStats.played) * 100).toFixed(1) : '0.0';
 
-    const cardLines = [
-      `👤 <b>CARTE DE PROFIL — ${ctx.from.first_name.toUpperCase()}</b>`,
-      `━━━━━━━━━━━━━━━━━━━━━━`,
-      `🏅 <b>Rang :</b> ${rank.emoji} ${displayRankTitle}`,
-      `👑 <b>Titre Équipé :</b> ${titleText}`,
-      `⭐ <b>Points de Classement :</b> ${player?.points ?? 0} pts`,
-      `🎮 <b>Parties Jouées :</b> ${playerStats.played}`,
-      `🏆 <b>Victoires :</b> ${playerStats.won} (${winrate}% winrate)`,
-      `💎 <b>Palier Donateur :</b> ${donorBadge(player?.donationLevel ?? 0) || (isFr ? 'Membre' : 'Member')}`,
-      `━━━━━━━━━━━━━━━━━━━━━━`,
-      isFr
-        ? `💡 Utilise /titles pour changer ton titre équipé !`
-        : `💡 Use /titles to change your equipped title!`,
-    ];
+    const cardLines = isFr
+      ? [
+          `👤 <b>CARTE DE PROFIL — ${ctx.from.first_name.toUpperCase()}</b>`,
+          `━━━━━━━━━━━━━━━━━━━━━━`,
+          `🏅 <b>Rang :</b> ${rank.emoji} ${displayRankTitle}`,
+          `👑 <b>Titre Équipé :</b> ${titleText}`,
+          `⭐ <b>Points de Classement :</b> ${player?.points ?? 0} pts`,
+          `🎮 <b>Parties Jouées :</b> ${playerStats.played}`,
+          `🏆 <b>Victoires :</b> ${playerStats.won} (${winrate}% de victoires)`,
+          `💎 <b>Palier Donateur :</b> ${donorBadge(player?.donationLevel ?? 0) || 'Membre'}`,
+          `━━━━━━━━━━━━━━━━━━━━━━`,
+          `💡 Utilise /titles pour changer ton titre équipé !`,
+        ]
+      : [
+          `👤 <b>PROFILE CARD — ${ctx.from.first_name.toUpperCase()}</b>`,
+          `━━━━━━━━━━━━━━━━━━━━━━`,
+          `🏅 <b>Rank:</b> ${rank.emoji} ${displayRankTitle}`,
+          `👑 <b>Equipped Title:</b> ${titleText}`,
+          `⭐ <b>Ranking Points:</b> ${player?.points ?? 0} pts`,
+          `🎮 <b>Games Played:</b> ${playerStats.played}`,
+          `🏆 <b>Wins:</b> ${playerStats.won} (${winrate}% winrate)`,
+          `💎 <b>Donor Tier:</b> ${donorBadge(player?.donationLevel ?? 0) || 'Member'}`,
+          `━━━━━━━━━━━━━━━━━━━━━━`,
+          `💡 Use /titles to change your equipped title!`,
+        ];
 
     await ctx.reply(cardLines.join('\n'), { parse_mode: 'HTML' });
   });
@@ -616,28 +627,36 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
   bot.command('claims', async (ctx) => {
     if (!ctx.chat) return;
     const chatId = BigInt(ctx.chat.id);
+    const group = await deps.groupRepository.getOrCreate(chatId, ctx.chat.title ?? null, null);
+    const isFr = group.language !== 'en';
     const game =
       gameLoop.getGame(chatId) ??
       (ctx.from ? deps.gameManager.findByPlayer(BigInt(ctx.from.id)) : undefined);
 
     if (!game || game.phase === 'Ended' || game.phase === 'Joining') {
-      await ctx.reply("Il n'y a pas de partie en cours dans ce groupe.");
+      await ctx.reply(
+        isFr ? "Il n'y a pas de partie en cours dans ce groupe." : 'No game currently running in this group.',
+      );
       return;
     }
 
     const lines: string[] = [];
     for (const p of game.players) {
       const claim = game.claimsMap.get(p.id);
-      const status = p.isDead ? '💀 mort' : '🙂 en vie';
+      const status = p.isDead ? (isFr ? '💀 mort' : '💀 dead') : isFr ? '🙂 en vie' : '🙂 alive';
       const pMention = mentionOrPlain(p.id, p.name, p.isBot);
       if (claim) {
         lines.push(`• <b>${pMention}</b> (${status}) : <b>${escapeHtml(claim)}</b>`);
       } else {
-        lines.push(`• <b>${pMention}</b> (${status}) : <i>(Aucun claim)</i>`);
+        lines.push(
+          `• <b>${pMention}</b> (${status}) : <i>${isFr ? '(Aucun claim)' : '(No claim)'}</i>`,
+        );
       }
     }
 
-    const title = '📜 <b>RELEVÉ DES CLAIMS DE LA PARTIE :</b>\n\n';
+    const title = isFr
+      ? '📜 <b>RELEVÉ DES CLAIMS DE LA PARTIE :</b>\n\n'
+      : "📜 <b>THIS GAME'S CLAIMS RECAP:</b>\n\n";
     await ctx.reply(title + lines.join('\n'), { parse_mode: 'HTML' });
   });
 
@@ -2153,10 +2172,11 @@ function registerDonationCommands(bot: Bot, env: Env, deps: BotDependencies): vo
     );
   });
 
-  // Register Telegram Bot Command Menu for Auto-Complete UI (Scoped & Prioritized)
+  // Register Telegram Bot Command Menu for Auto-Complete UI (Scoped & Prioritized).
+  // `/botgame`/`/addbots` are deliberately absent - they're dev-only (see isDevUser above),
+  // advertising them in the public autocomplete menu would just mislead everyone else.
   const groupCommands = [
     { command: 'startgame', description: '🐺 Lancer une partie classique' },
-    { command: 'botgame', description: '🤖 Partie solo avec 5 bots IA Gemini 2.5' },
     { command: 'join', description: '✋ Rejoindre la partie en attente' },
     { command: 'forcestart', description: '⚡ Lancer la partie sans attendre' },
     { command: 'claim', description: '📢 Déclarer publiquement son rôle (ex: /claim Voyante)' },
@@ -2197,10 +2217,65 @@ function registerDonationCommands(bot: Bot, env: Env, deps: BotDependencies): vo
     { command: 'donate', description: "⭐ Faire un don d'Étoiles et devenir Donateur" },
   ];
 
+  // English variants, registered against `language_code: 'en'` (see below) - Telegram shows these
+  // instead of the French default to any user whose own Telegram app is set to English, regardless
+  // of this particular group's `/setlang` configuration (the native command menu is a per-user
+  // Telegram-client setting, orthogonal to our own per-group language).
+  const groupCommandsEn: typeof groupCommands = [
+    { command: 'startgame', description: '🐺 Start a classic game' },
+    { command: 'join', description: '✋ Join the pending game' },
+    { command: 'forcestart', description: '⚡ Start the game without waiting' },
+    { command: 'claim', description: '📢 Publicly declare your role (e.g. /claim Seer)' },
+    { command: 'claims', description: '📜 Recap of every claim made this game' },
+    { command: 'players', description: '👥 List of living & dead players' },
+    { command: 'leaderboard', description: '🏆 Global leaderboard of top players' },
+    { command: 'profile', description: '👤 View your profile card and rank' },
+    { command: 'titles', description: '👑 Choose and equip your honor title' },
+    { command: 'setlang', description: '🌐 Change the bot language (FR / EN)' },
+    { command: 'config', description: '⚙️ Configure the group options and roles' },
+    { command: 'modes', description: '📘 Browse the game modes guide' },
+    { command: 'stats', description: '📊 View your game statistics' },
+    { command: 'rolelist', description: '📜 Guide and description of every role' },
+    { command: 'accuse', description: '👉 Publicly accuse a player' },
+    { command: 'tournoi', description: '🏆 Main tournament menu' },
+    { command: 'creerequipe', description: '🛡️ Create a tournament team' },
+    { command: 'rejoindreequipe', description: '🤝 Join a tournament team' },
+    { command: 'monequipe', description: '🚩 View your tournament team' },
+    { command: 'inscrirefournoi', description: '📝 Register your team for a tournament' },
+    { command: 'startchaos', description: '🌀 Chaos mode (chaotic roles)' },
+    { command: 'flee', description: '🏃 Leave the lobby before it starts' },
+    { command: 'extend', description: '⏳ Extend the lobby wait time' },
+    { command: 'help', description: '❓ Get help and the rules' },
+    { command: 'gazette', description: "📜 Read the last game's story recap" },
+    { command: 'report', description: '🚨 Report a player after the game' },
+    { command: 'waitlist', description: '🔔 Get notified when a new game starts' },
+  ];
+
+  const privateCommandsEn: typeof privateCommands = [
+    { command: 'start', description: '🚀 Start the bot' },
+    { command: 'role', description: '🕵️ Check your secret role privately' },
+    { command: 'profile', description: '👤 View your profile card and rank' },
+    { command: 'titles', description: '👑 Choose and equip your honor title' },
+    { command: 'leaderboard', description: '🏆 Global leaderboard of top players' },
+    { command: 'stats', description: '📊 View your game statistics' },
+    { command: 'setlang', description: '🌐 Change the bot language (FR / EN)' },
+    { command: 'help', description: '❓ Get help and the rules' },
+    { command: 'donate', description: '⭐ Donate Stars and become a Donor' },
+  ];
+
   void Promise.all([
     bot.api.setMyCommands(groupCommands, { scope: { type: 'all_group_chats' } }),
     bot.api.setMyCommands(privateCommands, { scope: { type: 'all_private_chats' } }),
     bot.api.setMyCommands(groupCommands),
+    bot.api.setMyCommands(groupCommandsEn, {
+      scope: { type: 'all_group_chats' },
+      language_code: 'en',
+    }),
+    bot.api.setMyCommands(privateCommandsEn, {
+      scope: { type: 'all_private_chats' },
+      language_code: 'en',
+    }),
+    bot.api.setMyCommands(groupCommandsEn, { language_code: 'en' }),
   ]).catch(() => {
     // Ignore network errors on startup
   });
