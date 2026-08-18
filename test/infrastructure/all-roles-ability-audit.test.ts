@@ -23,6 +23,9 @@ describe('ALL ROLES ABILITY COMPREHENSIVE AUDIT', () => {
       p.team = getTeamForRole(ROLE_BIT.Villager);
       p.isDead = false;
       p.choice = null;
+      // start() already ran checkRoleChanges() once (inside enterNight()) against whatever real
+      // random roles balance() just dealt - reset any leftover promotion counter from that.
+      p.changedRolesCount = 0;
     }
     return { gameManager, game };
   }
@@ -117,7 +120,16 @@ describe('ALL ROLES ABILITY COMPREHENSIVE AUDIT', () => {
     necro.choice = deadPlayer.id;
 
     const events = game.resolveNightActions();
-    expect(events).toBeDefined();
+    expect(deadPlayer.isDead).toBe(false);
+    expect(deadPlayer.team).toBe('Neutral');
+    expect(
+      events.some(
+        (e) =>
+          e.type === 'PlayerResurrected' &&
+          e.necromancerId === necro.id &&
+          e.playerId === deadPlayer.id,
+      ),
+    ).toBe(true);
   });
 
   it('7. Guardian Angel protects target from killer attack', () => {

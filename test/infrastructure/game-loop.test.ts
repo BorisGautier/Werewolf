@@ -174,6 +174,9 @@ function dealtGame(gameManager: GameManager, chatId = 1n) {
   for (const p of game.players) {
     p.role = ROLE_BIT.Villager;
     p.team = 'Village';
+    // start() already ran checkRoleChanges() once (inside enterNight()) against whatever real
+    // random roles balance() just dealt - reset any leftover promotion counter from that.
+    p.changedRolesCount = 0;
   }
   game.players[0]!.role = ROLE_BIT.Wolf;
   game.players[0]!.team = 'Wolf';
@@ -218,7 +221,7 @@ describe('GameLoop', () => {
     await vi.advanceTimersByTimeAsync(5000); // night timer
 
     expect(victim.isDead).toBe(true);
-    expect(getApprovedFileId).toHaveBeenCalledWith('VillagerDie', null, victim.id);
+    expect(getApprovedFileId).toHaveBeenCalledWith('WolfAttack', null, victim.id);
     expect(sendAnimation).toHaveBeenCalledWith(Number(game.chatId), 'FILE_ID_123');
   });
 
@@ -248,7 +251,7 @@ describe('GameLoop', () => {
   it('falls back to a bundled local gif when no approved custom pack covers the category', async () => {
     const dir = await mkdtemp(path.join(tmpdir(), 'werewolf-gifs-'));
     try {
-      await writeFile(path.join(dir, 'VillagerDie.mp4'), 'fake-mp4-bytes');
+      await writeFile(path.join(dir, 'WolfAttack.mp4'), 'fake-mp4-bytes');
       const localGifPack = new LocalGifPack(dir);
       const { loop, gameManager, sendAnimation } = createHarness({ localGifPack });
       const game = dealtGame(gameManager);
@@ -273,7 +276,7 @@ describe('GameLoop', () => {
   it("prefers an approved custom pack's file_id over the bundled local gif when both exist", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), 'werewolf-gifs-'));
     try {
-      await writeFile(path.join(dir, 'VillagerDie.mp4'), 'fake-mp4-bytes');
+      await writeFile(path.join(dir, 'WolfAttack.mp4'), 'fake-mp4-bytes');
       const localGifPack = new LocalGifPack(dir);
       const getApprovedFileId = vi.fn(async () => 'FILE_ID_123');
       const gifPacks = {
@@ -294,6 +297,42 @@ describe('GameLoop', () => {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  });
+
+  it('sends the JesterWin gif (not TannerWin) when a lynched Jester wins, even though they share a Team', async () => {
+    const getApprovedFileId = vi.fn(
+      async (
+        _category: import('../../src/infrastructure/persistence/gif-pack.repository.js').GifCategory,
+        _groupDefaultPackId: number | null,
+        _playerTelegramId?: bigint,
+      ) => 'FILE_ID_JESTER',
+    );
+    const gifPacks = {
+      getApprovedFileId,
+    } as unknown as import('../../src/infrastructure/persistence/gif-pack.repository.js').GifPackRepository;
+    const { loop, gameManager } = createHarness({ gifPacks });
+    const game = dealtGame(gameManager);
+    const wolf = game.players[0]!;
+    const jester = game.players[1]!;
+    jester.role = ROLE_BIT.Jester;
+    jester.team = getTeamForRole(ROLE_BIT.Jester);
+
+    loop.start(game, 42);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000); // night resolves, no kill (wolf never chose)
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000); // day resolves, into Lynch
+
+    for (const voter of game.players.filter((p) => p.id !== jester.id)) {
+      await loop.handleCallback(voter.id, game.chatId, `vote:${jester.id.toString()}`);
+    }
+    await vi.advanceTimersByTimeAsync(5000); // lynch resolves - Jester wins
+
+    expect(jester.won).toBe(true);
+    const gifCategories = getApprovedFileId.mock.calls.map((call) => call[0]);
+    expect(gifCategories).toContain('JesterWin');
+    expect(gifCategories).not.toContain('TannerWin');
+    void wolf;
   });
 
   it("clears drunk/frozen/burning once that night's menus are sent, so none of them linger forever", async () => {
@@ -398,6 +437,72 @@ describe('GameLoop', () => {
     const summaryText = summaryCall![1] as string;
     for (const p of game.players) expect(summaryText).toContain(p.name);
     expect(summaryText).toContain('Game Length:');
+  });
+
+  it('never awards leaderboard points to AI/bot players, only real ones', async () => {
+    const awardPoints = vi.fn(async (_telegramId: bigint, _deltaPoints: number, _won: boolean) => ({
+      oldPoints: 0,
+      newPoints: 5,
+      oldRank: { titleKey: 'Rank_0', defaultTitle: '', emoji: '' } as unknown as ReturnType<
+        typeof import('../../src/domain/scoring/rank.js').getRankForPoints
+      >,
+      newRank: { titleKey: 'Rank_0', defaultTitle: '', emoji: '' } as unknown as ReturnType<
+        typeof import('../../src/domain/scoring/rank.js').getRankForPoints
+      >,
+      promoted: false,
+    }));
+    const players = {
+      findByTelegramId: vi.fn(async () => null),
+      awardPoints,
+    } as unknown as import('../../src/infrastructure/persistence/player.repository.js').PlayerRepository;
+    const { loop, gameManager } = createHarness({ players });
+
+    const game = gameManager.create(1n, { mode: 'Normal', minPlayers: 5 });
+    game.addPlayer(1n, 'Wolfy');
+    game.addPlayer(2n, 'Villager2');
+    game.addPlayer(3n, 'Villager3');
+    game.addPlayer(4n, 'Villager4');
+    const botId = 990001n;
+    game.addPlayer(botId, '🤖 Alex (IA)', true);
+    game.start();
+    for (const p of game.players) {
+      p.role = ROLE_BIT.Villager;
+      p.team = 'Village';
+      p.changedRolesCount = 0;
+    }
+    game.players[0]!.role = ROLE_BIT.Wolf;
+    game.players[0]!.team = 'Wolf';
+    const wolf = game.players[0]!;
+
+    loop.start(game, 42);
+    await vi.advanceTimersByTimeAsync(0);
+
+    for (let i = 0; i < 20 && gameManager.get(game.chatId) !== undefined; i++) {
+      if (game.phase === 'Night') {
+        const target = game.players.find((p) => !p.isDead && p.id !== wolf.id);
+        if (target) await loop.handleCallback(wolf.id, wolf.id, `nt:${target.id.toString()}`);
+        await vi.advanceTimersByTimeAsync(5000);
+      } else if (game.phase === 'Day') {
+        await vi.advanceTimersByTimeAsync(5000);
+      } else if (game.phase === 'Lynch') {
+        const voteTarget = game.players.find((p) => !p.isDead && p.id !== wolf.id);
+        if (voteTarget) {
+          for (const voter of game.players.filter((p) => !p.isDead)) {
+            await loop.handleCallback(voter.id, game.chatId, `vote:${voteTarget.id.toString()}`);
+          }
+        }
+        await vi.advanceTimersByTimeAsync(5000);
+      } else {
+        break;
+      }
+      await vi.advanceTimersByTimeAsync(0);
+    }
+
+    expect(gameManager.has(game.chatId)).toBe(false);
+    expect(awardPoints).toHaveBeenCalled();
+    const scoredIds = awardPoints.mock.calls.map((call) => call[0]);
+    expect(scoredIds).not.toContain(botId);
+    for (const id of scoredIds) expect(id).toBeLessThan(990000n);
   });
 
   it('end-of-game recap includes a donor badge for a player above the first donation tier', async () => {
@@ -517,6 +622,7 @@ describe('GameLoop', () => {
     for (const p of game.players) {
       p.role = ROLE_BIT.Villager;
       p.team = 'Village';
+      p.changedRolesCount = 0;
     }
     const hunter = game.players[0]!;
     hunter.role = ROLE_BIT.Hunter;
@@ -576,6 +682,7 @@ describe('GameLoop', () => {
     for (const p of game.players) {
       p.role = ROLE_BIT.Villager;
       p.team = 'Village';
+      p.changedRolesCount = 0;
     }
     const hunter = game.players[0]!;
     hunter.role = ROLE_BIT.Hunter;
@@ -658,6 +765,60 @@ describe('GameLoop', () => {
         (call) => typeof call[1] === 'string' && call[1].includes('voted to lynch'),
       ),
     ).toBe(false);
+  });
+
+  it("under a Howler Wolf's howl, announces only a running vote count, never the target", async () => {
+    const { loop, gameManager, sendMessage } = createHarness();
+    const game = dealtGame(gameManager);
+    game.anonymousLynchVotes = true;
+    const wolf = game.players[0]!;
+    const voter = game.players[1]!;
+
+    loop.start(game, 42);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000);
+
+    await loop.handleCallback(voter.id, game.chatId, `vote:${wolf.id.toString()}`);
+
+    expect(
+      sendMessage.mock.calls.some(
+        (call) => typeof call[1] === 'string' && call[1] === '1/5 players have voted.',
+      ),
+    ).toBe(true);
+    expect(
+      sendMessage.mock.calls.some(
+        (call) => typeof call[1] === 'string' && call[1].includes('voted to lynch'),
+      ),
+    ).toBe(false);
+  });
+
+  it("locks a Hypnotist Wolf's victim into their forced vote, rejecting any attempt to change it", async () => {
+    const { loop, gameManager } = createHarness();
+    const game = dealtGame(gameManager);
+    const victim = game.players[1]!;
+    const forcedTarget = game.players[2]!;
+    const otherTarget = game.players[3]!;
+    game.hypnotistForcedVoteMap.set(999n, { victimId: victim.id, targetId: forcedTarget.id });
+
+    loop.start(game, 42);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000);
+
+    // The forced vote was pre-filled the instant the lynch phase opened.
+    expect(victim.choice).toBe(forcedTarget.id);
+
+    // Their own attempt to vote for someone else is silently rejected - the forced vote stands.
+    const result = await loop.handleCallback(
+      victim.id,
+      game.chatId,
+      `vote:${otherTarget.id.toString()}`,
+    );
+    expect(result).toBeNull();
+    expect(victim.choice).toBe(forcedTarget.id);
   });
 
   it('reveals a full voter-by-voter breakdown after resolution when secretLynchShowVoters is on', async () => {

@@ -23,4 +23,5 @@ export type KillMethod =
   | 'FallGrave'
   | 'Spotted'
   | 'Burn'
-  | 'VisitBurning';
+  | 'VisitBurning'
+  | 'ViperPoison';

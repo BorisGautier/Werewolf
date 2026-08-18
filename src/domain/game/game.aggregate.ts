@@ -30,22 +30,34 @@ import {
 } from './win-condition.js';
 import { resolveClairvoyanceNight } from './clairvoyance.js';
 import {
+  resolveArchangelShot,
   resolveDetectiveSnoop,
   resolveGunnerShot,
   resolveSpumpkinDetonate,
 } from './day-actions.js';
 import {
   findActingGuardianAngel,
+  findPriestessBlessing,
   initialNightState,
   resolveArsonistNight,
+  resolveChameleonWolfNight,
   resolveChemistNight,
+  resolveCrowNight,
   resolveCultistHunterNight,
   resolveCultNight,
   resolveGuardianAngelNight,
   resolveHarlotNight,
+  resolveHowlerWolfNight,
+  resolveMimicNight,
+  resolveNecromancerNight,
+  resolveReflectorNight,
   resolveSerialKillerNight,
   resolveSnowWolfNight,
   resolveThiefNight,
+  resolveTrackerNight,
+  resolveTrapperWolfNight,
+  resolveViperWolfNight,
+  resolveWatchmanNight,
   resolveWolfNight,
 } from './night-resolution.js';
 import type { VisitContext } from './night-visit.js';
@@ -117,6 +129,9 @@ export class Game {
 
   /** Mirrors `_silverSpread`: the Blacksmith protected the whole village from wolves tonight. */
   silverSpread = false;
+  /** A Priestess's blessing blocked a wolf attack last night - the pack skips their hunt entirely
+   * tonight as the lingering consequence (see `NightState.wolfPackBlinded` in night-resolution.ts). */
+  wolfPackBlinded = false;
   /** Mirrors `_sandmanSleep`: the Sandman put the whole village (and the night's events) to sleep. */
   sandmanSleep = false;
   /** Mirrors `_pacifistUsed`: the Pacifist has declared peace - the next lynch resolution is skipped. */
@@ -125,14 +140,10 @@ export class Game {
   mimicTargetMap = new Map<bigint, bigint>();
   hitmanTargetMap = new Map<bigint, bigint>();
   avengerTargetMap = new Map<bigint, bigint>();
-  crowCursedMap = new Map<bigint, bigint>();
   chameleonAppearanceMap = new Map<bigint, Role>();
   hypnotistForcedVoteMap = new Map<bigint, { victimId: bigint; targetId: bigint }>();
-  judgePardoned = false;
-  priestessBlinded = false;
   berserkerRage = false;
   anonymousLynchVotes = false;
-  trapperTrapsMap = new Map<bigint, bigint>();
   reflectorActiveSet = new Set<bigint>();
   poisonedViperVictimsSet = new Set<bigint>();
   archangelBulletsMap = new Map<bigint, number>();
@@ -220,6 +231,7 @@ export class Game {
       playerCount: this.players.length,
       chaos: balanceOptions.chaos ?? this.mode === 'Chaos',
       burningOverkill: this.burningOverkill,
+      mode: this.mode,
     });
 
     shuffle(this.players);
@@ -272,7 +284,7 @@ export class Game {
    * double lynch today - mirrors `bool doubleLynch = _doubleLynch; _doubleLynch = false;`,
    * captured once per Lynch phase, not re-checked per attempt.
    */
-  startLynch(): void {
+  startLynch(): GameEvent[] {
     this.assertPhase('Day');
     this.phase = 'Lynch';
     this.lynchAttempt = 0;
@@ -280,6 +292,36 @@ export class Game {
     this.doubleLynchPending = false;
     this.noOneCastLynchVoteYet = true;
     resetLynchState(this.players);
+
+    // The Hypnotist Wolf's forced vote (populated directly by the `hyp2` callback in
+    // game-loop.ts - no domain resolver, mirroring Cupid's own infra-only pairing) pre-fills the
+    // victim's vote the instant voting opens. The map itself stays populated through the whole
+    // lynch - `GameLoop.applyChoice()` checks it to stop the victim from overriding it - and is
+    // only cleared at the top of the *next* `enterNight()`, so it can't leak into a later lynch.
+    for (const { victimId, targetId } of this.hypnotistForcedVoteMap.values()) {
+      const victim = this.players.find((p) => p.id === victimId);
+      const target = this.players.find((p) => p.id === targetId);
+      if (victim && !victim.isDead && target && !target.isDead) {
+        victim.choice = target.id;
+      }
+    }
+
+    // The Viper Wolf's poison finally lands "at sunset" - the day/lynch boundary - having spared
+    // the victim through the entire day it was injected on (see `resolveViperWolfNight`).
+    const events: GameEvent[] = [];
+    if (this.poisonedViperVictimsSet.size > 0) {
+      const viperIds = this.players
+        .filter((p) => p.role === ROLE_BIT.ViperWolf)
+        .map((p) => p.id);
+      for (const victimId of this.poisonedViperVictimsSet) {
+        const victim = this.players.find((p) => p.id === victimId);
+        if (!victim || victim.isDead) continue;
+        events.push(...this.killPlayer(victimId, 'ViperPoison', { killerIds: viperIds }));
+      }
+      this.poisonedViperVictimsSet.clear();
+    }
+
+    return events;
   }
 
   /**
@@ -335,9 +377,26 @@ export class Game {
     const lynchOptions: LynchOptions = {
       lynchAttempt: this.lynchAttempt,
       randomLynchOnTie: this.randomLynchOnTie,
+      avengerTargetMap: this.avengerTargetMap,
       ...options,
     };
     const lynchResult = resolveLynchVotes(this.players, lynchOptions);
+    const archangelEvents = this.trackArchangelStreak(lynchResult.events);
+
+    // The Berserker Wolf's rage: a Werewolf pack-mate actually lynched (not pardoned, not a
+    // survived Prince) enrages any living Berserker Wolf, granting the pack a second kill target
+    // next night - consumed exactly like `wolfCubKilled` is (see `resolveNightActions()`), just
+    // triggered by a lynch instead of a night death.
+    const resolution = lynchResult.resolution;
+    const berserkerEvents: GameEvent[] = [];
+    if (resolution.outcome === 'Lynched') {
+      const lynched = this.players.find((p) => p.id === resolution.playerId);
+      const berserker = this.players.find((p) => p.role === ROLE_BIT.BerserkerWolf && !p.isDead);
+      if (lynched && berserker && getTeamForRole(lynched.role) === 'Wolf') {
+        this.berserkerRage = true;
+        berserkerEvents.push({ type: 'BerserkerWolfEnraged', berserkerId: berserker.id });
+      }
+    }
 
     // Mirrors `CheckRoleChanges(true)` right before `CheckForGameEnd(true)` at the end of the
     // original's LynchCycle: an idle-kill or the lynch itself may have just killed the Seer or a
@@ -358,7 +417,7 @@ export class Game {
         ...lynchResult,
         finished: true,
         winningTeam: 'Tanner',
-        events: [...lynchResult.events, ...roleChangeEvents],
+        events: [...lynchResult.events, ...archangelEvents, ...berserkerEvents, ...roleChangeEvents],
       };
     }
 
@@ -366,7 +425,13 @@ export class Game {
     return {
       ...lynchResult,
       ...win,
-      events: [...lynchResult.events, ...roleChangeEvents, ...win.events],
+      events: [
+        ...lynchResult.events,
+        ...archangelEvents,
+        ...berserkerEvents,
+        ...roleChangeEvents,
+        ...win.events,
+      ],
     };
   }
 
@@ -406,9 +471,16 @@ export class Game {
     this.phase = 'Night';
     const events: GameEvent[] = [];
 
+    // A Howler Wolf's anonymity only ever covers the one lynch immediately after their howl - by
+    // the time the *next* night begins, that lynch is long over, so this is where it's consumed.
+    this.anonymousLynchVotes = false;
+    // Same one-lynch-only lifecycle for a Hypnotist Wolf's forced vote.
+    this.hypnotistForcedVoteMap.clear();
+
     for (const p of this.players) {
       p.choice = null;
       p.choice2 = null;
+      p.choice3 = null;
       p.votes = 0;
       p.diedLastNight = false;
       p.killedLastNight = 0;
@@ -428,6 +500,7 @@ export class Game {
       this.sandmanSleep = false;
       this.silverSpread = false;
       this.wolfCubKilled = false;
+      this.berserkerRage = false;
       for (const p of this.players) p.drunk = false;
     } else {
       // Mirrors the original's ThanksJunior check: if part of the pack is still sleeping off last
@@ -558,11 +631,54 @@ export class Game {
     state.guardianAngel = findActingGuardianAngel(this.players);
     state.silverSpread = this.silverSpread;
     this.silverSpread = false; // consumed for tonight - mirrors the original resetting `_silverSpread` once menus for this night are settled
+    state.priestessBlessed = findPriestessBlessing(this.players);
+    state.wolfPackBlinded = this.wolfPackBlinded;
+    this.wolfPackBlinded = false; // consumed for tonight - same one-night lifecycle as silverSpread
+
+    // Must run before `visitCtx` is built below: `reflectorActiveSet` needs to already include a
+    // Reflector who raises their mirror tonight before any visitPlayer() call (SnowWolf/Arsonist/
+    // Wolf onward) can check it - otherwise their very first night of protection wouldn't apply
+    // until the *next* one.
+    const reflectorEvents = resolveReflectorNight(this.players);
+    for (const e of reflectorEvents) {
+      if (e.type === 'ReflectorActivated') this.reflectorActiveSet.add(e.reflectorId);
+    }
+    events.push(...reflectorEvents);
+
+    // Same "must run before visitCtx" reasoning as the Reflector above - the trap has to be armed
+    // before any of tonight's visits (SnowWolf/Arsonist/Wolf onward) can be checked against it. The
+    // trap itself only lasts this one night, unlike the Reflector's permanent mirror.
+    let trappedTargetId: bigint | null = null;
+    const trapperEvents = resolveTrapperWolfNight(this.players);
+    for (const e of trapperEvents) {
+      if (e.type === 'TrapperWolfTrapSet') trappedTargetId = e.targetId;
+    }
+    events.push(...trapperEvents);
+
+    // The Viper Wolf's poison doesn't touch visitCtx at all - it's a delayed, unconditional kill
+    // (see `startLynch()`), so it can resolve any time before the night ends.
+    const viperEvents = resolveViperWolfNight(this.players);
+    for (const e of viperEvents) {
+      if (e.type === 'ViperWolfPoisoned') this.poisonedViperVictimsSet.add(e.targetId);
+    }
+    events.push(...viperEvents);
+
+    // Same reasoning: no visit resolution needed, just flips `Game.anonymousLynchVotes` on for the
+    // immediately following lynch (consumed/reset at the top of the *next* `enterNight()`, so it
+    // stays active for that entire lynch phase).
+    const howlerEvents = resolveHowlerWolfNight(this.players);
+    for (const e of howlerEvents) {
+      if (e.type === 'HowlerWolfHowled') this.anonymousLynchVotes = true;
+    }
+    events.push(...howlerEvents);
+
     const visitCtx: VisitContext = {
       players: this.players,
       dayNumber: this.dayNumber,
       thiefFull: this.thiefFull,
       random,
+      reflectorActive: this.reflectorActiveSet,
+      trappedTargetId,
     };
 
     events.push(...resolveSnowWolfNight(this.players, state, visitCtx));
@@ -572,24 +688,71 @@ export class Game {
     events.push(...resolveArsonistNight(this.players, state, visitCtx));
 
     this.wolfCubKilled = false; // mirrors `WolfCubKilled = false;` right before the Wolf Night block
+    // The Berserker Wolf's rage only ever grants the one night's bonus kill it was set for (the
+    // night right after the lynch that triggered it, per `resolveLynch()`) - once tonight's menus
+    // have already been sent with that in mind, it's consumed here rather than re-derived like
+    // `wolfCubKilled` above, since nothing during Wolf Night resolution itself can retrigger it.
+    this.berserkerRage = false;
     const wolfEvents = resolveWolfNight(this.players, state, visitCtx);
     if (wolfEvents.some((e) => e.type === 'WolfCubKilled')) this.wolfCubKilled = true;
     events.push(...wolfEvents);
+    // A Priestess's blessing that blocked an attack tonight blinds the pack next night too -
+    // carry that forward the same way `lastGraveDigAt` is mirrored back above.
+    if (state.triggerWolfBlindNextNight) this.wolfPackBlinded = true;
 
     events.push(...resolveSerialKillerNight(this.players, state, visitCtx));
     events.push(...resolveCultistHunterNight(this.players, visitCtx));
     events.push(...resolveCultNight(this.players, state, visitCtx));
     events.push(...resolveChemistNight(this.players, visitCtx));
     events.push(...resolveHarlotNight(this.players, visitCtx));
+    events.push(...resolveCrowNight(this.players));
 
-    events.push(...resolveClairvoyanceNight(this.players, this.possibleRoles, random));
+    // Must run before resolveClairvoyanceNight - a Seer targeting the Mimic the very night the
+    // Mimic locks in their disguise needs to see it applied already, not next night.
+    const mimicEvents = resolveMimicNight(this.players);
+    for (const e of mimicEvents) {
+      if (e.type === 'MimicChoseDisguise') this.mimicTargetMap.set(e.mimicId, e.targetId);
+    }
+    events.push(...mimicEvents);
+
+    // Unlike the Mimic's permanent disguise, the Chameleon Wolf's only lasts the one night they
+    // actively present it - clear any stale entry from a previous night before (maybe) setting a
+    // fresh one, so skipping a night truly means no disguise, not "whatever I picked last time".
+    this.chameleonAppearanceMap.clear();
+    const chameleonEvents = resolveChameleonWolfNight(this.players);
+    for (const e of chameleonEvents) {
+      if (e.type === 'ChameleonDisguiseChosen') {
+        this.chameleonAppearanceMap.set(e.chameleonId, e.appearanceRole);
+      }
+    }
+    events.push(...chameleonEvents);
+
+    events.push(
+      ...resolveClairvoyanceNight(
+        this.players,
+        this.possibleRoles,
+        random,
+        this.mimicTargetMap,
+        this.chameleonAppearanceMap,
+      ),
+    );
 
     events.push(...resolveGuardianAngelNight(this.players, state, visitCtx));
+
+    events.push(...resolveNecromancerNight(this.players));
 
     // Mirrors the original's call order exactly: CheckRoleChanges() runs *before* Thief Night, not after.
     events.push(...checkRoleChanges(this.players));
 
     events.push(...resolveThiefNight(this.players, this.dayNumber, this.thiefFull, visitCtx));
+
+    // Watchman/Tracker are pure observers of tonight's final state (visit counts, who acted) -
+    // resolved last, after every other visit/choice-producing step above, and before the
+    // end-of-night loop below wipes that same state for the next night.
+    events.push(...resolveWatchmanNight(this.players));
+    events.push(...resolveTrackerNight(this.players));
+
+    events.push(...this.trackArchangelStreak(events));
 
     // Mirrors the tail of NightCycle: `if (CheckForGameEnd()) return;` gates the final per-night
     // reset - if the game just ended, there's no next night to reset state for.
@@ -614,11 +777,50 @@ export class Game {
   resolveDayActions(options: { random?: () => number } = {}): GameEvent[] {
     this.assertPhase('Day');
     const random = options.random ?? Math.random;
-    return [
+    const events: GameEvent[] = [
       ...resolveGunnerShot(this.players),
       ...resolveSpumpkinDetonate(this.players, random),
       ...resolveDetectiveSnoop(this.players, random),
+      ...resolveArchangelShot(this.players, this.archangelBulletsMap),
     ];
+    events.push(...this.trackArchangelStreak(events));
+    return events;
+  }
+
+  /**
+   * "Si 3 villageois innocents meurent consécutivement, [l'Archangel] reçoit une Balle Sacrée" -
+   * scans a batch of freshly-resolved events for `PlayerDied`, extending or resetting
+   * `consecutiveVillageDeaths` per victim (any death not on the Village team breaks the streak,
+   * including one caused by the Archangel's own successful shot). Called after every death-producing
+   * resolution step (night, day actions, lynch, the Hunter's final shot) so the streak tracks deaths
+   * from every source, not just wolf kills. Returns the `ArchangelBulletGranted` event(s) to append,
+   * one per living Archangel, mirroring the derive-from-event pattern used throughout this file.
+   */
+  private trackArchangelStreak(events: GameEvent[]): GameEvent[] {
+    const granted: GameEvent[] = [];
+
+    for (const event of events) {
+      if (event.type !== 'PlayerDied') continue;
+      const victim = this.players.find((p) => p.id === event.playerId);
+      if (!victim) continue;
+
+      if (getTeamForRole(victim.role) !== 'Village') {
+        this.consecutiveVillageDeaths = 0;
+        continue;
+      }
+
+      this.consecutiveVillageDeaths++;
+      if (this.consecutiveVillageDeaths < 3) continue;
+
+      this.consecutiveVillageDeaths = 0;
+      for (const archangel of this.players) {
+        if (archangel.role !== ROLE_BIT.Archangel || archangel.isDead) continue;
+        this.archangelBulletsMap.set(archangel.id, (this.archangelBulletsMap.get(archangel.id) ?? 0) + 1);
+        granted.push({ type: 'ArchangelBulletGranted', archangelId: archangel.id });
+      }
+    }
+
+    return granted;
   }
 
   /**
@@ -647,11 +849,82 @@ export class Game {
     }
 
     events.push(...killPlayer(this.players, victimId, method, options));
+    events.push(...this.trackArchangelStreak(events));
     events.push(...checkRoleChanges(this.players));
     return events;
   }
 
   checkWinCondition(context: WinConditionContext = {}): WinConditionResult {
+    // Idempotent once the game has actually ended: without this, a second call after a Hitman win
+    // would skip the Hitman branch below (`!hitman.won` is now false, since the first call already
+    // set it) and fall through to `evaluateWinCondition()`, which has no idea what a Hitman win even
+    // is and would report `finished: false` - flipping an already-decided game back to "still
+    // going" from the caller's point of view, even though `this.phase` never actually left 'Ended'.
+    if (this.phase === 'Ended') {
+      return {
+        finished: true,
+        ...(this.winningTeam !== undefined && { winningTeam: this.winningTeam }),
+        events: [],
+      };
+    }
+
+    // Hitman: a secret personal win condition that can trigger off ANY kill source (night, lynch,
+    // Hunter's dying shot, ...), so it's checked here rather than folded into
+    // evaluateWinCondition()'s team-based logic - Hitman's team is 'Neutral', shared with
+    // Necromancer/Reflector/Avenger/Crow, and there's no per-role guard there (unlike Tanner's
+    // "only the one who just died" check) to stop a blanket team win from wrongly crowning all of
+    // them. Only the Hitman who actually landed their contract wins here - the `role ===
+    // ROLE_BIT.Hitman` check matters because `hitmanTargetMap` is keyed by the id assigned the
+    // role at game start, not by "whoever currently holds it": a Thief who later steals the
+    // Hitman's role (Hitman isn't wolf-team, so `nightTargets()` doesn't exclude them from a
+    // Thief's pool) would otherwise still get wrongly credited with the original contract even
+    // though they're no longer the Hitman, while the new Thief-turned-Hitman could never win at
+    // all (they have no map entry of their own).
+    for (const [hitmanId, targetId] of this.hitmanTargetMap) {
+      const hitman = this.players.find((p) => p.id === hitmanId);
+      const target = this.players.find((p) => p.id === targetId);
+      if (hitman && hitman.role === ROLE_BIT.Hitman && !hitman.isDead && !hitman.won && target?.isDead) {
+        hitman.won = true;
+        this.phase = 'Ended';
+        this.winningTeam = 'Neutral';
+        try {
+          teamWins.labels('Neutral').inc();
+          roleWins.labels('Hitman').inc();
+        } catch {
+          // ignore
+        }
+        return {
+          finished: true,
+          winningTeam: 'Neutral',
+          events: [
+            { type: 'HitmanTargetEliminated', hitmanId: hitman.id, targetId: target.id },
+            { type: 'GameEnded', winningTeam: 'Neutral' },
+          ],
+        };
+      }
+    }
+
+    // Avenger: the same "secret personal Neutral-team win, can't use evaluateWinCondition()'s
+    // blanket team logic" reasoning as Hitman above - `avenger.won` is already set the instant
+    // their rival is lynched (see lynch.ts's resolveLynchVotes()); this just turns that into a
+    // real game-ending state the very next time the win condition is checked.
+    const avengerWon = this.players.some((p) => p.role === ROLE_BIT.Avenger && !p.isDead && p.won);
+    if (avengerWon) {
+      this.phase = 'Ended';
+      this.winningTeam = 'Neutral';
+      try {
+        teamWins.labels('Neutral').inc();
+        roleWins.labels('Avenger').inc();
+      } catch {
+        // ignore
+      }
+      return {
+        finished: true,
+        winningTeam: 'Neutral',
+        events: [{ type: 'GameEnded', winningTeam: 'Neutral' }],
+      };
+    }
+
     const result = evaluateWinCondition(this.players, context);
     if (result.finished) {
       this.phase = 'Ended';

@@ -87,6 +87,15 @@ export interface NightState {
   secondLastGraveDigAt: Date | null;
   wolvesThatActed: Player[];
   silverSpread: boolean;
+  /** Who the Priestess blessed tonight (see `findPriestessBlessing`), or `null`. Read by
+   * `resolveWolfNight` the same way `guardianAngel` is - a blessed player who's attacked survives. */
+  priestessBlessed: { priestessId: bigint; targetId: bigint } | null;
+  /** Whether the pack is blinded *tonight* - the lingering effect of a blessing that blocked an
+   * attack the *previous* night (mirrors `silverSpread`'s one-night, caller-threaded lifecycle). */
+  wolfPackBlinded: boolean;
+  /** Set by `resolveWolfNight` when tonight's blessing just blocked an attack, so the caller
+   * (`Game.resolveNightActions`) knows to carry `wolfPackBlinded` forward onto *next* night. */
+  triggerWolfBlindNextNight: boolean;
 }
 
 export function initialNightState(
@@ -99,7 +108,37 @@ export function initialNightState(
     secondLastGraveDigAt,
     wolvesThatActed: [],
     silverSpread: false,
+    priestessBlessed: null,
+    wolfPackBlinded: false,
+    triggerWolfBlindNextNight: false,
   };
+}
+
+/** The Priestess's night action: once per game, blesses a living player. If the wolf pack attacks
+ * that player tonight, they survive and the pack is blinded (skips their hunt entirely) the
+ * *following* night (see `wolfPackBlinded`/`triggerWolfBlindNextNight` above, and the check inside
+ * `resolveWolfNight`). Consumed here (rather than at resolution time, like `resolveCrowNight`
+ * consumes its own once-per-game-style checks) because it must be known *before* `resolveWolfNight`
+ * runs, the same way the Guardian Angel's protection target is (`findActingGuardianAngel`). */
+export function findPriestessBlessing(
+  players: readonly Player[],
+): { priestessId: bigint; targetId: bigint } | null {
+  const priestess = players.find(
+    (p) =>
+      p.role === ROLE_BIT.Priestess &&
+      !p.isDead &&
+      !p.frozen &&
+      !p.hasUsedAbility &&
+      p.choice !== null &&
+      p.choice !== ABSTAIN,
+  );
+  if (!priestess) return null;
+
+  const target = players.find((p) => p.id === priestess.choice);
+  if (!target) return null;
+
+  priestess.hasUsedAbility = true;
+  return { priestessId: priestess.id, targetId: target.id };
 }
 
 /** Mirrors the original's `var ga = Players.FirstOrDefault(x => x.PlayerRole == IRole.GuardianAngel & !x.IsDead && x.Choice != 0 && x.Choice != -1);` */
@@ -382,6 +421,10 @@ export function resolveWolfNight(
 ): GameEvent[] {
   const events: GameEvent[] = [];
   if (state.silverSpread) return events;
+  if (state.wolfPackBlinded) {
+    events.push({ type: 'WolfPackBlinded' });
+    return events;
+  }
   const random = visitCtx.random ?? Math.random;
 
   const wolves = players.filter((p) => !p.isDead && !p.drunk && WOLF_ROLES.includes(p.role));
@@ -419,6 +462,15 @@ export function resolveWolfNight(
         target.wasSavedLastNight = true;
         wolfAttacksBlocked.labels('GuardianAngel').inc();
         events.push({ type: 'GuardianAngelBlockedWolfAttack', targetId: target.id });
+      } else if (state.priestessBlessed?.targetId === target.id) {
+        target.wasSavedLastNight = true;
+        wolfAttacksBlocked.labels('Priestess').inc();
+        state.triggerWolfBlindNextNight = true;
+        events.push({
+          type: 'PriestessBlessingSaved',
+          priestessId: state.priestessBlessed.priestessId,
+          targetId: target.id,
+        });
       } else {
         wolfKillsTotal.inc();
         const alpha = voteWolves.find((w) => w.role === ROLE_BIT.AlphaWolf) ?? null;
@@ -590,6 +642,256 @@ export function resolveCultistHunterNight(players: Player[], visitCtx: VisitCont
     cultistHunterDetections.inc();
     events.push(...killPlayer(players, hunted.id, 'Hunt', { killerIds: [hunter.id] }));
   }
+
+  return events;
+}
+
+/**
+ * The Watchman's night action: reports exactly how many visitors called on a chosen player
+ * tonight. Reads `beingVisitedSameNightCount`, which every `visitPlayer()` call already
+ * increments for its target - must run after every other visit-generating resolver (wolves,
+ * Harlot, Serial Killer, Cultist Hunter, Chemist, Guardian Angel, Thief, ...) and before the
+ * end-of-night loop that zeroes it back out for the next night. No once-per-game limit - the
+ * description says "chaque nuit" (every night), unlike the Necromancer/Priestess.
+ */
+export function resolveWatchmanNight(players: Player[]): GameEvent[] {
+  const events: GameEvent[] = [];
+
+  const watchman = players.find((p) => p.role === ROLE_BIT.Watchman && !p.isDead);
+  if (!watchman || watchman.frozen || watchman.choice === null || watchman.choice === ABSTAIN) {
+    return events;
+  }
+
+  const target = players.find((p) => p.id === watchman.choice);
+  if (!target) return events;
+
+  events.push({
+    type: 'WatchmanReport',
+    watchmanId: watchman.id,
+    targetId: target.id,
+    visitorCount: target.beingVisitedSameNightCount,
+  });
+
+  return events;
+}
+
+/**
+ * The Tracker's night action: reports whether a chosen player took an active night action
+ * ("left home") or not ("stayed home"). Must run after every other night-action resolver, and
+ * before the end-of-night loop that clears everyone's `choice` back to `null` for the next night.
+ */
+export function resolveTrackerNight(players: Player[]): GameEvent[] {
+  const events: GameEvent[] = [];
+
+  const tracker = players.find((p) => p.role === ROLE_BIT.Tracker && !p.isDead);
+  if (!tracker || tracker.frozen || tracker.choice === null || tracker.choice === ABSTAIN) {
+    return events;
+  }
+
+  const target = players.find((p) => p.id === tracker.choice);
+  if (!target) return events;
+
+  events.push({
+    type: 'TrackerReport',
+    trackerId: tracker.id,
+    targetId: target.id,
+    leftHome: target.choice !== null && target.choice !== ABSTAIN,
+  });
+
+  return events;
+}
+
+/**
+ * The Reflector's night action: once per game, raises their mirror. The actual reflection effect
+ * (killing whoever visits them instead of the Reflector) lives centrally in `visitPlayer()`
+ * (night-visit.ts), which every visiting role already funnels through - this resolver only flips
+ * the switch, via `Game.reflectorActiveSet` (populated by the caller from the returned event, the
+ * same derive-from-event pattern `resolveMimicNight` uses for `Game.mimicTargetMap`). Once raised,
+ * the mirror stays up for the rest of the game - there's no menu to lower it again.
+ */
+export function resolveReflectorNight(players: Player[]): GameEvent[] {
+  const events: GameEvent[] = [];
+
+  const reflector = players.find((p) => p.role === ROLE_BIT.Reflector && !p.isDead);
+  if (!reflector || reflector.frozen || reflector.hasUsedAbility) return events;
+  if (reflector.choice === null || reflector.choice === ABSTAIN) return events;
+
+  reflector.hasUsedAbility = true;
+  events.push({ type: 'ReflectorActivated', reflectorId: reflector.id });
+
+  return events;
+}
+
+/**
+ * The Trapper Wolf's ambush: once per game, picks a player's house to trap. Unlike the Reflector's
+ * mirror, the trap is a single-night effect - it doesn't persist once this night ends, only the
+ * one-time ability-use gate does. The actual neutralization of whoever visits the trapped player
+ * happens centrally in `visitPlayer()` (night-visit.ts) via `VisitContext.trappedTargetId`, derived
+ * by the caller from the returned event (same derive-from-event pattern as the Mimic/Reflector).
+ */
+export function resolveTrapperWolfNight(players: Player[]): GameEvent[] {
+  const events: GameEvent[] = [];
+
+  const trapper = players.find((p) => p.role === ROLE_BIT.TrapperWolf && !p.isDead);
+  if (!trapper || trapper.frozen || trapper.hasUsedAbility) return events;
+  if (trapper.choice3 === null || trapper.choice3 === ABSTAIN) return events;
+
+  const target = players.find((p) => p.id === trapper.choice3);
+  if (!target) return events;
+
+  trapper.hasUsedAbility = true;
+  events.push({ type: 'TrapperWolfTrapSet', trapperId: trapper.id, targetId: target.id });
+
+  return events;
+}
+
+/**
+ * The Chameleon Wolf's disguise: unlike every other wolf subtype's ability, this one is repeatable
+ * every night rather than once per game, and it targets a *role to borrow* rather than a player to
+ * act on - picking a living player each night (via the same dedicated `choice3` slot the Trapper
+ * Wolf uses, so it never collides with the shared pack-kill vote) and presenting that player's
+ * current role to detection powers instead of their own. There's no permanent gate here - the
+ * caller (`Game.resolveNightActions()`) clears any previous night's disguise before calling this,
+ * so skipping a night means presenting no disguise at all that night, not keeping the last one.
+ */
+export function resolveChameleonWolfNight(players: Player[]): GameEvent[] {
+  const events: GameEvent[] = [];
+
+  const chameleon = players.find((p) => p.role === ROLE_BIT.ChameleonWolf && !p.isDead);
+  if (!chameleon || chameleon.frozen) return events;
+  if (chameleon.choice3 === null || chameleon.choice3 === ABSTAIN) return events;
+
+  const target = players.find((p) => p.id === chameleon.choice3 && p.id !== chameleon.id);
+  if (!target) return events;
+
+  events.push({
+    type: 'ChameleonDisguiseChosen',
+    chameleonId: chameleon.id,
+    appearanceRole: target.role,
+  });
+
+  return events;
+}
+
+/**
+ * The Viper Wolf's slow poison: once per game, marks a living target to die "at sunset" rather than
+ * immediately - the actual delayed kill happens in `Game.startLynch()` (the day/lynch boundary is
+ * this engine's "sunset"), which drains `Game.poisonedViperVictimsSet` (populated by the caller from
+ * this resolver's event, same derive-from-event pattern as every other wolf subtype). No visit
+ * resolution here (unlike the shared pack kill) - the poison lands unconditionally, mirroring how
+ * the Chemist's own poison bypasses the Guardian Angel block too.
+ */
+export function resolveViperWolfNight(players: Player[]): GameEvent[] {
+  const events: GameEvent[] = [];
+
+  const viper = players.find((p) => p.role === ROLE_BIT.ViperWolf && !p.isDead);
+  if (!viper || viper.frozen || viper.hasUsedAbility) return events;
+  if (viper.choice3 === null || viper.choice3 === ABSTAIN) return events;
+
+  const target = players.find((p) => p.id === viper.choice3 && !p.isDead);
+  if (!target) return events;
+
+  viper.hasUsedAbility = true;
+  events.push({ type: 'ViperWolfPoisoned', viperId: viper.id, targetId: target.id });
+
+  return events;
+}
+
+/**
+ * The Howler Wolf's terrifying howl: once per game, no target really matters (mirrors the
+ * Reflector's own "the player choice doesn't matter" toggle) - just an act/don't-act signal on the
+ * same dedicated `choice3` slot every wolf subtype's own ability uses. Sets `Game.anonymousLynchVotes`
+ * for the caller to flip on, which the infra layer (`GameLoop.applyLynchVote`/
+ * `sendSecretLynchSummary`) reads to hide who voted for whom during the immediately following lynch,
+ * exactly like the group's own `secretLynch` config already does - the effect itself is a
+ * message-visibility decision with nothing left to resolve in pure domain logic.
+ */
+export function resolveHowlerWolfNight(players: Player[]): GameEvent[] {
+  const events: GameEvent[] = [];
+
+  const howler = players.find((p) => p.role === ROLE_BIT.HowlerWolf && !p.isDead);
+  if (!howler || howler.frozen || howler.hasUsedAbility) return events;
+  if (howler.choice3 === null || howler.choice3 === ABSTAIN) return events;
+
+  howler.hasUsedAbility = true;
+  events.push({ type: 'HowlerWolfHowled', howlerId: howler.id });
+
+  return events;
+}
+
+/**
+ * The Mimic's one-time choice of "disguise": whoever they pick the first time they act is locked
+ * in for the rest of the game (subsequent choices are ignored, gated by `hasUsedAbility` exactly
+ * like the Necromancer/Priestess). This only returns the `MimicChoseDisguise` event - the caller
+ * (`Game.resolveNightActions`) is the one that actually records it into `Game.mimicTargetMap`,
+ * since that Map lives on the aggregate, not on `Player` (mirrors how `wolfCubKilled` is derived
+ * from `WolfCubKilled` events right above, in the same function).
+ */
+export function resolveMimicNight(players: Player[]): GameEvent[] {
+  const events: GameEvent[] = [];
+
+  const mimic = players.find((p) => p.role === ROLE_BIT.Mimic && !p.isDead);
+  if (!mimic || mimic.frozen || mimic.hasUsedAbility) return events;
+  if (mimic.choice === null || mimic.choice === ABSTAIN) return events;
+
+  const target = players.find((p) => p.id === mimic.choice);
+  if (!target) return events;
+
+  mimic.hasUsedAbility = true;
+  events.push({ type: 'MimicChoseDisguise', mimicId: mimic.id, targetId: target.id });
+
+  return events;
+}
+
+/**
+ * The Necromancer's night action: once per game, resurrects a dead player, who abandons their
+ * old team to side with the Necromancer (mirrors how `promoteToCultist`/`promoteToWolf` in
+ * transform.ts convert a living player's allegiance - here applied to a dead one instead). Their
+ * role/abilities are otherwise unchanged; only their team and life status flip. Gated by
+ * `hasUsedAbility` the same way the day-ability roles (Mayor/Pacifist/...) gate their own
+ * single-use power, even though this one is a night menu choice rather than a button click.
+ */
+export function resolveNecromancerNight(players: Player[]): GameEvent[] {
+  const events: GameEvent[] = [];
+
+  const necromancer = players.find((p) => p.role === ROLE_BIT.Necromancer && !p.isDead);
+  if (!necromancer || necromancer.frozen || necromancer.hasUsedAbility) return events;
+  if (necromancer.choice === null || necromancer.choice === ABSTAIN) return events;
+
+  const target = players.find((p) => p.id === necromancer.choice && p.isDead);
+  if (!target) return events;
+
+  necromancer.hasUsedAbility = true;
+
+  target.isDead = false;
+  target.diedLastNight = false;
+  target.timeDied = null;
+  target.killedByRole = null;
+  target.diedByVisitingKiller = false;
+  target.diedByVisitingVictim = false;
+  target.diedByFleeOrIdle = false;
+  target.team = 'Neutral';
+
+  events.push({ type: 'PlayerResurrected', necromancerId: necromancer.id, playerId: target.id });
+
+  return events;
+}
+
+/** The Crow's night action: curses a living target's door, worth +2 penalty votes at the *next*
+ * lynching (applied in `lynch.ts`, then cleared there so the curse doesn't linger past that one
+ * vote). A remote hex, not a physical visit - unlike `visitPlayer`-based actions, cursing a
+ * burning/dead house can't get the Crow killed the way visiting one can. */
+export function resolveCrowNight(players: Player[]): GameEvent[] {
+  const events: GameEvent[] = [];
+
+  const crow = players.find((p) => p.role === ROLE_BIT.Crow && !p.isDead);
+  if (!crow || crow.frozen || crow.choice === null || crow.choice === ABSTAIN) return events;
+
+  const target = players.find((p) => p.id === crow.choice && !p.isDead);
+  if (!target) return events;
+
+  target.isCursedByCrow = true;
+  events.push({ type: 'CrowCursed', crowId: crow.id, targetId: target.id });
 
   return events;
 }

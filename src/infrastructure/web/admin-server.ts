@@ -7,6 +7,7 @@ import type { GameManager } from '../../application/game-manager.js';
 import type { Logger } from '../logging/logger.js';
 import { AdminAuthManager } from './admin-auth.js';
 import { DatabaseBackupManager } from '../persistence/db-backup.js';
+import { SYNTHETIC_BOT_ID_FLOOR } from '../../domain/game/player.js';
 import {
   TournamentRepository,
   type TournamentStatus,
@@ -157,7 +158,9 @@ export class AdminServer {
         let totalGroups = 0;
         if (this.prisma) {
           try {
-            totalPlayers = await this.prisma.player.count();
+            totalPlayers = await this.prisma.player.count({
+              where: { telegramId: { lt: SYNTHETIC_BOT_ID_FLOOR } },
+            });
             totalGroups = await this.prisma.group.count();
           } catch {
             // ignore database count errors in stats
@@ -294,7 +297,9 @@ export class AdminServer {
     try {
       activeGamesCount = this.gameManager ? this.gameManager.size : 0;
       if (this.prisma) {
-        totalPlayers = await this.prisma.player.count().catch(() => 0);
+        totalPlayers = await this.prisma.player
+          .count({ where: { telegramId: { lt: SYNTHETIC_BOT_ID_FLOOR } } })
+          .catch(() => 0);
         totalGroups = await this.prisma.group.count().catch(() => 0);
         pendingGroups = await this.prisma.group
           .count({ where: { isApproved: false } })
@@ -381,16 +386,17 @@ export class AdminServer {
     try {
       const search = url.searchParams.get('q') ?? '';
       const players = await this.prisma.player.findMany({
-        ...(search
-          ? {
-              where: {
+        where: {
+          telegramId: { lt: SYNTHETIC_BOT_ID_FLOOR },
+          ...(search
+            ? {
                 OR: [
                   { username: { contains: search, mode: 'insensitive' } },
                   { displayName: { contains: search, mode: 'insensitive' } },
                 ],
-              },
-            }
-          : {}),
+              }
+            : {}),
+        },
         take: 50,
         orderBy: { createdAt: 'desc' },
       });

@@ -17,6 +17,7 @@ import { GameAlreadyRunningError, GameManager } from '../../application/game-man
 import { Game, GameError } from '../../domain/game/game.aggregate.js';
 import type { GameMode } from '../../domain/game/game-mode.js';
 import { ROLE_BIT, ROLE_META, roleName } from '../../domain/roles/role.js';
+import { SYNTHETIC_BOT_ID_FLOOR, type Player } from '../../domain/game/player.js';
 import { WOLF_ROLES } from '../../domain/game/game-balancing.js';
 import { GameRepository } from '../persistence/game.repository.js';
 import {
@@ -48,6 +49,10 @@ import {
 const WARNING_SECONDS: readonly number[] = [60, 30, 10];
 const ANNOUNCE_JOINED_EVERY_SECONDS = 30;
 const JOIN_BUTTON_CALLBACK = 'werewolf:join';
+/** Every successful join pushes the countdown out by this many seconds - deliberately separate
+ * from (and not gated by) `/extend`'s once-per-player limit and `AllowExtend` setting: someone
+ * actually joining is real evidence the lobby is still filling up, not a manual stall request. */
+const JOIN_EXTEND_SECONDS = 30;
 
 interface LobbySession {
   game: Game;
@@ -342,6 +347,8 @@ export class GameLobbyManager {
       throw err;
     }
 
+    session.secondsLeft += JOIN_EXTEND_SECONDS;
+
     session.playersJoinedSinceAnnounce.push({ id: telegramUser.id, name: uniqueName });
     const sentPm = await this.sendToUser(
       telegramUser.id,
@@ -463,13 +470,20 @@ export class GameLobbyManager {
     }
 
     // Mirrors `Extensions.cs`'s `GetName()` appending a donor-tier medal wherever a player's name
-    // is shown - here in the /players roster.
+    // is shown - here in the /players roster. Once the game has actually started (not just
+    // joining), each name is also tagged (alive)/(dead) so a glance at /players tells you who's
+    // still in it without having to scroll back through the whole night's messages.
+    const showStatus = game.phase !== 'Joining';
     const names =
       (
         await Promise.all(
           game.players.map(async (p) => {
             const dbPlayer = await this.players.findByTelegramId(p.id);
-            return `${mentionOrPlain(p.id, p.name, p.isBot)}${donorBadge(dbPlayer?.donationLevel ?? 0)}`;
+            const badge = donorBadge(dbPlayer?.donationLevel ?? 0);
+            const status = showStatus
+              ? ` (${this.t.translate(language, p.isDead ? 'Dead' : 'Alive')})`
+              : '';
+            return `${mentionOrPlain(p.id, p.name, p.isBot)}${badge}${status}`;
           }),
         )
       ).join('\n') || '-';
@@ -736,6 +750,8 @@ export class GameLobbyManager {
         language === 'fr'
           ? `\n\n💀 <b>Votre rival juré est :</b> ${targetName}`
           : `\n\n💀 <b>Your sworn rival is:</b> ${targetName}`;
+    } else if (role === ROLE_BIT.Beholder) {
+      teamInfo = describeBeholderReveal(player.id, game.players, language);
     }
 
     const roleMsg = `${this.t.translate(language, 'YourRoleIs', `${emoji} ${displayName}`)}${description}${teamInfo}`;
@@ -771,7 +787,7 @@ export class GameLobbyManager {
 
     let addedCount = 0;
     const existingCount = session.game.players.length;
-    const startId = 990001n + BigInt(existingCount);
+    const startId = SYNTHETIC_BOT_ID_FLOOR + 1n + BigInt(existingCount);
 
     for (let i = 0; i < count; i++) {
       if (session.game.players.length >= 35) break;
@@ -856,4 +872,28 @@ function formatGroupTitle(
 
 function chatNumber(id: bigint): number {
   return Number(id);
+}
+
+/**
+ * The Beholder's whole ability: "You will be told who the seer is (the real one, not the fool)".
+ * The Seer's identity is fixed at role-deal time and never changes, so this is safe to compute
+ * once, right alongside the rest of the role-reveal PM, rather than needing its own
+ * night-resolution step. Exported as a pure function (rather than inlined in `notifyRole()`) so it
+ * has its own test seam independent of the lobby's full timer-driven start flow.
+ */
+export function describeBeholderReveal(
+  beholderId: bigint,
+  players: readonly Player[],
+  language: string,
+): string {
+  const seer = players.find((p) => p.id !== beholderId && p.role === ROLE_BIT.Seer);
+  if (!seer) {
+    return language === 'fr'
+      ? `\n\n🔭 <b>Il n'y a pas de Voyante dans cette partie.</b>`
+      : `\n\n🔭 <b>There is no Seer in this game.</b>`;
+  }
+  const seerName = mentionOrPlain(seer.id, seer.name, seer.isBot);
+  return language === 'fr'
+    ? `\n\n🔭 <b>La véritable Voyante de cette partie est :</b> ${seerName}`
+    : `\n\n🔭 <b>The true Seer in this game is:</b> ${seerName}`;
 }

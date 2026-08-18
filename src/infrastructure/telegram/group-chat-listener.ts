@@ -10,6 +10,7 @@ import type { Player } from '../../domain/game/player.js';
 import { roleName } from '../../domain/roles/role.js';
 import { getTeamForRole } from '../../domain/game/team.js';
 import { escapeHtml } from './mention.js';
+import type { GroupRepository } from '../persistence/group.repository.js';
 
 /** Floor between two AI-generated (paid Gemini call) chat replies in the same group - independent
  * of the random 40% trigger chance below, so a user spamming plain text can't fan out many
@@ -22,8 +23,19 @@ export class GroupChatListener {
   private readonly aiAgent: AiPlayerAgent;
   private tickerInterval?: NodeJS.Timeout | undefined;
 
-  constructor(geminiApiKey?: string | undefined) {
+  constructor(
+    geminiApiKey?: string | undefined,
+    private readonly groups?: GroupRepository | undefined,
+  ) {
     this.aiAgent = new AiPlayerAgent(geminiApiKey);
+  }
+
+  /** The group's configured language, defaulting to `'fr'` (matches the AI agent's own default)
+   * when no `GroupRepository` was wired in - e.g. in tests that don't care about localization. */
+  private async languageFor(chatId: bigint): Promise<string> {
+    if (!this.groups) return 'fr';
+    const group = await this.groups.getOrCreate(chatId, null, null);
+    return group.language;
   }
 
   /**
@@ -106,7 +118,8 @@ export class GroupChatListener {
             try {
               const livingPlayerNames = game.players.filter((p) => !p.isDead).map((p) => p.name);
 
-              const gameContext = this.buildGameContext(game, targetBot);
+              const language = await this.languageFor(chatId);
+              const gameContext = this.buildGameContext(game, targetBot, language);
 
               const responseText = await this.aiAgent.generateChatMessage({
                 botName: targetBot.name,
@@ -116,6 +129,7 @@ export class GroupChatListener {
                 targetMessage: newEntry,
                 livingPlayerNames,
                 gameContext,
+                language,
               });
 
               if (responseText && game.phase === phase) {
@@ -189,7 +203,8 @@ export class GroupChatListener {
 
             // Find last message to optionally reply to
             const lastEntry = history.length > 0 ? history[history.length - 1] : undefined;
-            const gameContext = this.buildGameContext(game, botToSpeak);
+            const language = await this.languageFor(chatId);
+            const gameContext = this.buildGameContext(game, botToSpeak, language);
 
             const responseText = await this.aiAgent.generateChatMessage({
               botName: botToSpeak.name,
@@ -199,6 +214,7 @@ export class GroupChatListener {
               targetMessage: lastEntry,
               livingPlayerNames,
               gameContext,
+              language,
             });
 
             if (responseText && game.phase === phase) {
@@ -230,7 +246,8 @@ export class GroupChatListener {
     }, 14000);
   }
 
-  private buildGameContext(game: Game, botPlayer: Player): AiGameContext {
+  private buildGameContext(game: Game, botPlayer: Player, language: string): AiGameContext {
+    const isFr = language !== 'en';
     const recentDeaths = game.players
       .filter((p) => p.isDead)
       .map((p) => `${p.name} (${roleName(p.role)})`);
@@ -243,11 +260,17 @@ export class GroupChatListener {
         .filter((p) => !p.isDead && p.id !== botPlayer.id && getTeamForRole(p.role) === 'Wolf')
         .map((p) => p.name);
       if (wolfTeammates.length > 0) {
-        knownInformation.push(`Tes co-équipiers Loups vivants sont : ${wolfTeammates.join(', ')}`);
+        knownInformation.push(
+          isFr
+            ? `Tes co-équipiers Loups vivants sont : ${wolfTeammates.join(', ')}`
+            : `Your living Wolf teammates are: ${wolfTeammates.join(', ')}`,
+        );
       }
     } else if (roleName(botPlayer.role) === 'Tanner') {
       knownInformation.push(
-        `Tu es le Tanneur. Ton BUT UNIQUE est de te faire lyncher par le village pour GAGNER la partie !`,
+        isFr
+          ? `Tu es le Tanneur. Ton BUT UNIQUE est de te faire lyncher par le village pour GAGNER la partie !`
+          : `You are the Tanner. Your ONLY GOAL is to get yourself lynched by the village to WIN the game!`,
       );
     }
 
