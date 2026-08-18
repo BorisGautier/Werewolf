@@ -53,6 +53,12 @@ const JOIN_BUTTON_CALLBACK = 'werewolf:join';
  * from (and not gated by) `/extend`'s once-per-player limit and `AllowExtend` setting: someone
  * actually joining is real evidence the lobby is still filling up, not a manual stall request. */
 const JOIN_EXTEND_SECONDS = 30;
+/** Pause between each individual /tagall mention, to stay under Telegram's per-chat flood limits. */
+const TAG_ALL_DELAY_MS = 1200;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 interface LobbySession {
   game: Game;
@@ -255,22 +261,24 @@ export class GameLobbyManager {
 
     if (userMap.size === 0) return;
 
-    const mentions: string[] = [];
-    for (const [id, info] of userMap.entries()) {
-      if (info.username) {
-        mentions.push(`@${info.username}`);
-      } else {
-        const pName = info.displayName ?? (isFr ? 'Membre' : 'Member');
-        mentions.push(`<a href="tg://user?id=${id}">${pName}</a>`);
-      }
-    }
+    const header = isFr
+      ? '📢 <b>APPEL DE LA COMMUNAUTÉ ! REJOIGNEZ LA PARTIE !</b> 🐺'
+      : '📢 <b>COMMUNITY CALL! JOIN THE GAME!</b> 🐺';
+    await this.bot.api.sendMessage(chatNumber(chatId), header, { parse_mode: 'HTML' });
 
-    if (mentions.length > 0) {
-      const header = isFr
-        ? `📢 <b>APPEL DE LA COMMUNAUTÉ ! REJOIGNEZ LA PARTIE !</b> 🐺\n\n`
-        : `📢 <b>COMMUNITY CALL! JOIN THE GAME!</b> 🐺\n\n`;
-      const message = `${header}${mentions.join(' ')}`;
-      await this.bot.api.sendMessage(chatNumber(chatId), message, { parse_mode: 'HTML' });
+    // Bundling every mention into one message doesn't reliably notify each tagged user on
+    // Telegram - sending one mention per message (with a short pause to stay under Telegram's
+    // per-chat flood limits) is slower but each tag actually pings its target.
+    for (const [id, info] of userMap.entries()) {
+      const mention = info.username
+        ? `@${info.username}`
+        : `<a href="tg://user?id=${id}">${info.displayName ?? (isFr ? 'Membre' : 'Member')}</a>`;
+      try {
+        await this.bot.api.sendMessage(chatNumber(chatId), mention, { parse_mode: 'HTML' });
+      } catch {
+        // Member likely left the group or blocked the bot - skip and keep tagging the rest.
+      }
+      await sleep(TAG_ALL_DELAY_MS);
     }
   }
 
@@ -654,12 +662,9 @@ export class GameLobbyManager {
       },
       'Game started, handing off to the night/day loop',
     );
-    const grp = await this.groups.getOrCreate(session.chatId, null, null);
-    void this.gameLoop.sendGifCategory?.(
-      session.chatId,
-      grp,
-      session.game.mode === 'Chaos' ? 'StartChaosGame' : 'StartGame',
-    );
+    // No `StartGame`/`StartChaosGame` gif here on purpose: `gameLoop.start()` below immediately
+    // kicks off the first night, which sends its own `NightStart` gif moments later - sending both
+    // back to back at launch was two animations for what players experience as one moment.
     this.gameLoop.start(session.game, gameId);
   }
 
@@ -692,12 +697,12 @@ export class GameLobbyManager {
         const names = coMasons.map((p) => mentionOrPlain(p.id, p.name, p.isBot)).join(', ');
         teamInfo =
           language === 'fr'
-            ? `\n\n👷 <b>Vos confrères Maçons sont :</b> ${names}`
+            ? `\n\n👷 <b>Vos confrères Francs-Maçons sont :</b> ${names}`
             : `\n\n👷 <b>Your fellow Masons are:</b> ${names}`;
       } else {
         teamInfo =
           language === 'fr'
-            ? `\n\n👷 <b>Vous êtes le seul Maçon de cette partie.</b>`
+            ? `\n\n👷 <b>Vous êtes le seul Franc-Maçon de cette partie.</b>`
             : `\n\n👷 <b>You are the only Mason in this game.</b>`;
       }
     } else if (WOLF_ROLES.includes(role) || role === ROLE_BIT.SnowWolf) {

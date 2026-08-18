@@ -1,7 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
 import type { Logger } from '../logging/logger.js';
 import type { Env } from '../config/env.js';
-import { SYNTHETIC_BOT_ID_FLOOR } from '../../domain/game/player.js';
 
 export interface DailySummaryStats {
   date: string;
@@ -38,10 +37,7 @@ export class DailySummaryNotifier {
           distinct: ['playerId'],
         }),
         this.prisma.player.count({
-          where: {
-            createdAt: { gte: dayStart, lt: dayEnd },
-            telegramId: { lt: SYNTHETIC_BOT_ID_FLOOR },
-          },
+          where: { createdAt: { gte: dayStart, lt: dayEnd } },
         }),
         this.prisma.game.findMany({
           where: { endedAt: { gte: dayStart, lt: dayEnd } },
