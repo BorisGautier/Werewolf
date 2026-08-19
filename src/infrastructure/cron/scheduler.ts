@@ -2,7 +2,7 @@ import cron from 'node-cron';
 import type { PrismaClient } from '@prisma/client';
 import type { Logger } from '../logging/logger.js';
 import type { Env } from '../config/env.js';
-import { expireBans, purgeStaleGames, rotateDailyStats } from './jobs.js';
+import { expireBans, purgeStaleGames, rotateDailyStats, runDailyDatabaseBackup } from './jobs.js';
 import { cronJobFailures, cronJobRuns } from '../monitoring/metrics.js';
 
 /** Starts the bot's background maintenance jobs. Returns a function that stops them all. */
@@ -45,12 +45,35 @@ export function startCronJobs(prisma: PrismaClient, logger: Logger, env?: Env): 
         logger.error({ err, job: 'purgeStaleGames' }, 'Cron job error: purgeStaleGames failed');
       });
     }),
+
+    // Once a day, just after 2am UTC - `runDailyDatabaseBackup` itself already existed and was
+    // fully working (createBackup/cleanupOldBackups), it just was never actually registered here,
+    // so it had never once run automatically in any deployment.
+    cron.schedule('0 2 * * *', () => {
+      cronJobRuns.labels('runDailyDatabaseBackup').inc();
+      logger.info(
+        { job: 'runDailyDatabaseBackup', schedule: '0 2 * * *' },
+        'Cron triggered: daily database backup starting',
+      );
+      void runDailyDatabaseBackup(logger).catch((err: unknown) => {
+        cronJobFailures.labels('runDailyDatabaseBackup').inc();
+        logger.error(
+          { err, job: 'runDailyDatabaseBackup' },
+          'Cron job error: runDailyDatabaseBackup failed',
+        );
+      });
+    }),
   ];
 
   logger.info(
     {
       jobs: tasks.length,
-      schedules: ['5 0 * * * (daily stats)', '* * * * * (ban expiry)', '30 * * * * (stale games)'],
+      schedules: [
+        '5 0 * * * (daily stats)',
+        '* * * * * (ban expiry)',
+        '30 * * * * (stale games)',
+        '0 2 * * * (daily DB backup)',
+      ],
     },
     'Cron jobs registered and running',
   );

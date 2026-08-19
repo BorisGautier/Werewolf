@@ -83,6 +83,7 @@ function createHarness(
     gifPacks?: import('../../src/infrastructure/persistence/gif-pack.repository.js').GifPackRepository;
     players?: import('../../src/infrastructure/persistence/player.repository.js').PlayerRepository;
     localGifPack?: import('../../src/infrastructure/telegram/local-gif-pack.js').LocalGifPack;
+    tournamentRepo?: import('../../src/infrastructure/persistence/tournament.repository.js').TournamentRepository;
   } = {},
 ) {
   const sendMessage = vi.fn().mockResolvedValue({ message_id: 1 });
@@ -121,30 +122,19 @@ function createHarness(
       findByTelegramId: vi.fn(async () => null),
     } as unknown as import('../../src/infrastructure/persistence/player.repository.js').PlayerRepository);
 
-  const loop = options.localGifPack
-    ? new GameLoop(
-        bot,
-        gameManager,
-        groups,
-        gameRepo,
-        achievements,
-        translator,
-        logger,
-        players,
-        options.gifPacks,
-        options.localGifPack,
-      )
-    : new GameLoop(
-        bot,
-        gameManager,
-        groups,
-        gameRepo,
-        achievements,
-        translator,
-        logger,
-        players,
-        options.gifPacks,
-      );
+  const loop = new GameLoop(
+    bot,
+    gameManager,
+    groups,
+    gameRepo,
+    achievements,
+    translator,
+    logger,
+    players,
+    options.gifPacks,
+    options.localGifPack,
+    options.tournamentRepo,
+  );
 
   return {
     loop,
@@ -513,6 +503,82 @@ describe('GameLoop', () => {
     expect(gameManager.has(game.chatId)).toBe(false);
     expect(awardPoints).toHaveBeenCalled();
     const scoredIds = awardPoints.mock.calls.map((call) => call[0]);
+    expect(scoredIds).not.toContain(botId);
+    for (const id of scoredIds) expect(id).toBeLessThan(990000n);
+  });
+
+  it('feeds each real player’s game points into their tournament team, never a bot’s', async () => {
+    const awardPoints = vi.fn(async () => ({
+      oldPoints: 0,
+      newPoints: 5,
+      oldRank: { titleKey: 'Rank_0', defaultTitle: '', emoji: '' } as unknown as ReturnType<
+        typeof import('../../src/domain/scoring/rank.js').getRankForPoints
+      >,
+      newRank: { titleKey: 'Rank_0', defaultTitle: '', emoji: '' } as unknown as ReturnType<
+        typeof import('../../src/domain/scoring/rank.js').getRankForPoints
+      >,
+      promoted: false,
+    }));
+    const players = {
+      findByTelegramId: vi.fn(async () => null),
+      awardPoints,
+    } as unknown as import('../../src/infrastructure/persistence/player.repository.js').PlayerRepository;
+    const awardTournamentPoints = vi.fn(
+      async (_playerId: bigint, _points: number, _won: boolean) => {},
+    );
+    const tournamentRepo = {
+      awardTournamentPoints,
+    } as unknown as import('../../src/infrastructure/persistence/tournament.repository.js').TournamentRepository;
+    const { loop, gameManager } = createHarness({ players, tournamentRepo });
+
+    const game = gameManager.create(1n, { mode: 'Normal', minPlayers: 5 });
+    game.addPlayer(1n, 'Wolfy');
+    game.addPlayer(2n, 'Villager2');
+    game.addPlayer(3n, 'Villager3');
+    game.addPlayer(4n, 'Villager4');
+    const botId = 990001n;
+    game.addPlayer(botId, '🤖 Alex (IA)', true);
+    game.start();
+    for (const p of game.players) {
+      p.role = ROLE_BIT.Villager;
+      p.team = 'Village';
+      p.changedRolesCount = 0;
+    }
+    game.players[0]!.role = ROLE_BIT.Wolf;
+    game.players[0]!.team = 'Wolf';
+    const wolf = game.players[0]!;
+
+    loop.start(game, 42);
+    await vi.advanceTimersByTimeAsync(0);
+
+    for (let i = 0; i < 20 && gameManager.get(game.chatId) !== undefined; i++) {
+      if (game.phase === 'Night') {
+        const target = game.players.find((p) => !p.isDead && p.id !== wolf.id);
+        if (target) await loop.handleCallback(wolf.id, wolf.id, `nt:${target.id.toString()}`);
+        await vi.advanceTimersByTimeAsync(5000);
+      } else if (game.phase === 'Day') {
+        await vi.advanceTimersByTimeAsync(5000);
+      } else if (game.phase === 'Lynch') {
+        const voteTarget = game.players.find((p) => !p.isDead && p.id !== wolf.id);
+        if (voteTarget) {
+          for (const voter of game.players.filter((p) => !p.isDead)) {
+            await loop.handleCallback(
+              voter.id,
+              game.chatId,
+              `vote:${game.dayNumber}:${voteTarget.id.toString()}`,
+            );
+          }
+        }
+        await vi.advanceTimersByTimeAsync(5000);
+      } else {
+        break;
+      }
+      await vi.advanceTimersByTimeAsync(0);
+    }
+
+    expect(gameManager.has(game.chatId)).toBe(false);
+    expect(awardTournamentPoints).toHaveBeenCalled();
+    const scoredIds = awardTournamentPoints.mock.calls.map((call) => call[0]);
     expect(scoredIds).not.toContain(botId);
     for (const id of scoredIds) expect(id).toBeLessThan(990000n);
   });

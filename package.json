@@ -1,6 +1,6 @@
 {
   "name": "werewolf-ts",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Werewolf/Mafia Telegram bot - clean architecture Node.js/TypeScript rewrite",
   "private": true,
   "type": "module",
