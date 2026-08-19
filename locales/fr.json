@@ -265,6 +265,7 @@
     "MayorRevealedMsg": ["{0} s'est révélé(e) comme le Maire ! Son vote compte désormais double."],
     "CrownPrinceSucceededMsg": ["👑 Le Maire est tombé ! En tant que Prince Héritier, vous héritez immédiatement du poste de Maire et de son vote double. Vous pouvez maintenant vous révéler au village quand vous le jugerez utile."],
     "DuelSquadWonMsg": ["⚔️ <b>FIN DU DUEL !</b>\n\nL'Équipe {0} remporte le duel avec {1} survivant(s) : {2} !"],
+    "DuelMutualWipeoutMsg": ["⚔️ <b>FIN DU DUEL !</b>\n\nLes deux équipes se sont anéanties en même temps... Match nul, personne ne l'emporte !"],
     "PacifistDeclaredMsg": ["Le Pacifiste a déclaré la paix - il n'y aura pas de pendaison aujourd'hui."],
     "BlacksmithSpreadMsg": ["Le Forgeron a répandu de l'argent dans tout le village - tout le monde est protégé des loups cette nuit !"],
     "SandmanUsedMsg": ["Le Marchand de sable a endormi le village - rien ne se passera cette nuit."],

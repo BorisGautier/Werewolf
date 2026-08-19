@@ -936,7 +936,16 @@ export class Game {
     const aliveA = alive.filter((p) => p.duelSquad === 'A').length;
     const aliveB = alive.filter((p) => p.duelSquad === 'B').length;
     if (aliveA > 0 && aliveB > 0) return null;
-    if (aliveA === 0 && aliveB === 0) return null;
+    // Both squads hit 0 survivors on the very same resolution (a night kill and a lynch can both
+    // land in the same round) - genuinely nobody left to keep playing, so this must still end the
+    // game as a draw, not be treated as "still contested". Leaving this as a `return null` here
+    // (as an earlier version of this method did) meant the loop kept scheduling night after night
+    // forever with zero living players, since neither squad could ever satisfy the "one side wiped
+    // out, other still has survivors" condition below again - a real, confirmed stall bug.
+    if (aliveA === 0 && aliveB === 0) {
+      this.phase = 'Ended';
+      return { finished: true, events: [{ type: 'DuelMutualWipeout' }] };
+    }
 
     const winningSquad: 'A' | 'B' = aliveA > aliveB ? 'A' : 'B';
     const survivors = alive.filter((p) => p.duelSquad === winningSquad);

@@ -213,7 +213,15 @@ async function runOneGame(
   // implementation (what `vi.useFakeTimers()` wraps) accumulates internal bookkeeping for every
   // timer ever created across the test's lifetime, which made a single multi-thousand-game test
   // degrade super-linearly - resetting it here keeps each game's cost roughly constant.
-  vi.useFakeTimers();
+  //
+  // `loopLimit` raised well above vitest's 10,000 default: a single night/day/lynch cycle here
+  // chains dozens of scheduled callbacks (one per living player's menu, one per lynch vote click,
+  // ...), so a large (30+), slow-to-converge-but-perfectly-healthy game can legitimately need many
+  // times the default limit's worth of ticks across enough real day/night cycles. Without this,
+  // `vi.runAllTimersAsync()` below throws and the game gets misreported as a stall even when
+  // `game.phase` was already 'Ended' by the time the limit tripped - a false positive, not a real
+  // hang (a genuine infinite chain still throws well before this new ceiling).
+  vi.useFakeTimers({ loopLimit: 200_000 });
 
   const errors: unknown[] = [];
   const logger = {
@@ -254,9 +262,12 @@ async function runOneGame(
   const gameManager = new GameManager();
   const selectedMode = GAME_MODES[randomInt(GAME_MODES.length)]!;
   // TeamDuel needs an even headcount of at least TEAM_DUEL_MIN_PLAYERS - round the campaign's
-  // randomly-generated count up to fit rather than letting Game.start() reject it outright.
+  // randomly-generated count to fit rather than letting Game.start() reject it outright. Rounds
+  // *down* (then re-clamped up to the minimum), not up: rounding up used to push the top of the
+  // cycled 5..35 range (which does include the production ceiling, 35, an odd number) to 36,
+  // one past `maxPlayers` below - `addPlayer()` would then throw `GROUP_FULL` on the last join.
   if (selectedMode === 'TeamDuel') {
-    playerCount = Math.max(TEAM_DUEL_MIN_PLAYERS, playerCount + (playerCount % 2));
+    playerCount = Math.max(TEAM_DUEL_MIN_PLAYERS, playerCount - (playerCount % 2));
   }
   const game: Game = gameManager.create(chatId, {
     mode: selectedMode,
@@ -404,6 +415,8 @@ interface Campaign {
   name: string;
   count: number;
   bias: VotingBias;
+  /** See the `'random'` campaign's own comment below for why this exists. */
+  randomLynchOnTie?: boolean;
 }
 
 /** Ceiling on games per `it()` block. Even with a fresh `vi.useFakeTimers()` per game (see
@@ -416,7 +429,16 @@ const MAX_GAMES_PER_TEST = 1000;
 
 function buildCampaigns(): Campaign[] {
   const raw: Campaign[] = [
-    { name: 'random', count: 30 * SCALE, bias: { kind: 'random' } },
+    // `randomLynchOnTie` isn't wired to any real group setting in production (grep the repo - it
+    // only ever defaults to `false`), but without it here, fully independent per-player random
+    // votes at large simulated player counts (up to 35 - never realistic for a real, moderated
+    // Telegram lynch discussion) essentially never concentrate enough to lynch anyone, leaving
+    // night kills as the only source of progress. That can take an enormous number of night/day/
+    // lynch cycles to converge by chance alone, occasionally exceeding vitest's fake-timer
+    // loop-limit guard and getting misreported as a stall even though the game was never truly
+    // stuck - see the CI failure this was added to fix. Forcing a tiebreak here only affects this
+    // campaign; `split` below still exercises a genuine, non-auto-resolved `Tied` outcome.
+    { name: 'random', count: 30 * SCALE, bias: { kind: 'random' }, randomLynchOnTie: true },
     { name: 'concentrate', count: 10 * SCALE, bias: { kind: 'concentrate' } },
     { name: 'split', count: 6 * SCALE, bias: { kind: 'split' } },
     { name: 'abstain', count: 4 * SCALE, bias: { kind: 'abstain' } },
@@ -469,6 +491,9 @@ describe('full game stress simulation', () => {
           playerCount,
           chaos,
           campaign.bias,
+          campaign.randomLynchOnTie !== undefined
+            ? { randomLynchOnTie: campaign.randomLynchOnTie }
+            : {},
         );
         results.push(result);
         for (const r of result.roles) seenRoles.add(r);
@@ -526,7 +551,7 @@ describe('full game stress simulation', () => {
         }),
         ...stalls.map(
           (c) =>
-            `  STALL bias=${c.bias} size=${c.playerCount} chaos=${c.chaos} mode=${c.mode} roles=[${c.roles.join(',')}]`,
+            `  STALL bias=${c.bias} size=${c.playerCount} chaos=${c.chaos} mode=${c.mode} day=${c.dayNumber} phase=${c.finalPhase} alive=${c.aliveCount} roles=[${c.roles.join(',')}]`,
         ),
         ...noWinner.map(
           (c) =>

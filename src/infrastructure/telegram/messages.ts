@@ -650,6 +650,9 @@ export function describeEvent(
         },
       ];
     }
+
+    case 'DuelMutualWipeout':
+      return [{ audience: 'group', key: 'DuelMutualWipeoutMsg', args: [] }];
   }
 }
 
