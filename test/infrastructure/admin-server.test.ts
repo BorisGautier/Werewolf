@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeAll, afterAll } from 'vitest';
+import { describe, expect, it, beforeAll, afterAll, vi } from 'vitest';
 import { AdminServer } from '../../src/infrastructure/web/admin-server.js';
 import { AdminAuthManager } from '../../src/infrastructure/web/admin-auth.js';
 
@@ -117,6 +117,51 @@ describe('AdminServer REST API & Dashboard', () => {
     expect(body.success).toBe(false);
   });
 
+  it('lists the full mission catalog, every one enabled by default without a DB configured', async () => {
+    const token = authManager.generateToken('admin');
+    const res = await fetch('http://localhost:4099/api/admin/missions', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.success).toBe(true);
+    expect(body.missions).toHaveLength(30);
+    expect(body.missions.every((m: any) => m.enabled === true)).toBe(true);
+    expect(body.missions.every((m: any) => m.attempts === 0 && m.successRate === null)).toBe(true);
+  });
+
+  it('lists mission top performers (empty/graceful without a DB configured)', async () => {
+    const token = authManager.generateToken('admin');
+    const res = await fetch('http://localhost:4099/api/admin/missions/top-performers', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.success).toBe(true);
+    expect(body.performers).toEqual([]);
+  });
+
+  it('rejects toggling a mission when no mission repository is available', async () => {
+    const token = authManager.generateToken('admin');
+    const res = await fetch('http://localhost:4099/api/admin/missions/survivor/toggle', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: false }),
+    });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as any;
+    expect(body.success).toBe(false);
+  });
+
+  it('rejects toggling access without a token', async () => {
+    const res = await fetch('http://localhost:4099/api/admin/missions/survivor/toggle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: false }),
+    });
+    expect(res.status).toBe(401);
+  });
+
   it('reports game analytics (empty/graceful without a DB configured)', async () => {
     const token = authManager.generateToken('admin');
     const res = await fetch('http://localhost:4099/api/admin/game-analytics', {
@@ -221,6 +266,82 @@ describe('AdminServer REST API & Dashboard', () => {
     } else {
       expect([400, 404]).toContain(res.status);
     }
+  });
+});
+
+describe('AdminServer - mission management with a wired repository', () => {
+  const authManager = new AdminAuthManager('test-secret-key-99', 'test-password');
+  const missionRepository = {
+    getDisabledMissionIds: async () => new Set(['ghost']),
+    getMissionStats: async () => [{ missionId: 'survivor', attempts: 10, successes: 7 }],
+    getTopPerformers: async () => [
+      {
+        playerId: 42n,
+        username: 'alice',
+        displayName: 'Alice',
+        attempts: 10,
+        successes: 7,
+        successRate: 70,
+      },
+    ],
+    setMissionEnabled: vi.fn(async () => {}),
+    recordCompletion: async () => {},
+  } as unknown as import('../../src/infrastructure/persistence/mission.repository.js').MissionRepository;
+  const server = new AdminServer({ port: 4097, authManager, missionRepository });
+
+  beforeAll(async () => {
+    await server.start();
+  });
+
+  afterAll(async () => {
+    await server.stop();
+  });
+
+  it('reflects the disabled set and per-mission stats in the catalog', async () => {
+    const token = authManager.generateToken('admin');
+    const res = await fetch('http://localhost:4097/api/admin/missions', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const body = (await res.json()) as any;
+
+    const ghost = body.missions.find((m: any) => m.id === 'ghost');
+    expect(ghost.enabled).toBe(false);
+    const survivor = body.missions.find((m: any) => m.id === 'survivor');
+    expect(survivor.attempts).toBe(10);
+    expect(survivor.successRate).toBe(70);
+  });
+
+  it('lists real top performers', async () => {
+    const token = authManager.generateToken('admin');
+    const res = await fetch('http://localhost:4097/api/admin/missions/top-performers', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const body = (await res.json()) as any;
+
+    expect(body.performers).toEqual([
+      { playerId: '42', displayName: '@alice', attempts: 10, successes: 7, successRate: 70 },
+    ]);
+  });
+
+  it('toggles a known mission through the repository', async () => {
+    const token = authManager.generateToken('admin');
+    const res = await fetch('http://localhost:4097/api/admin/missions/ghost/toggle', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: true }),
+    });
+    expect(res.status).toBe(200);
+    expect(missionRepository.setMissionEnabled).toHaveBeenCalledWith('ghost', true);
+  });
+
+  it('rejects toggling an unknown mission id', async () => {
+    const token = authManager.generateToken('admin');
+    const res = await fetch('http://localhost:4097/api/admin/missions/not-a-real-mission/toggle', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: true }),
+    });
+    expect(res.status).toBe(404);
   });
 });
 

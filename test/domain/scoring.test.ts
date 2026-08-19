@@ -131,6 +131,45 @@ describe('calculateGamePoints', () => {
     expect(result.breakdown.duelBonus).toBe(25);
     expect(result.points).toBe(50); // 5 participation + 20 generic winner + 25 duel bonus
   });
+
+  it('adds the mission bonus on top of the win/lose score, independent of duel/role bonuses', () => {
+    const p1 = createMockPlayer(1n, 'Alice', 'Village', false);
+    const missionBonus = new Map<bigint, number>([[1n, 15]]);
+
+    const results = calculateGamePoints(
+      [p1],
+      'Village',
+      null,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      missionBonus,
+    );
+    const result = results[0]!;
+
+    expect(result.breakdown.missionBonus).toBe(15);
+    expect(result.points).toBe(40); // 5 participation + 20 living village win + 15 mission bonus
+  });
+
+  it('gives 0 mission bonus to a player with no entry in the map (mission never accepted, or failed)', () => {
+    const p1 = createMockPlayer(1n, 'Alice', 'Village', false);
+    const missionBonus = new Map<bigint, number>();
+
+    const results = calculateGamePoints(
+      [p1],
+      'Village',
+      null,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      missionBonus,
+    );
+
+    expect(results[0]!.breakdown.missionBonus).toBe(0);
+    expect(results[0]!.points).toBe(25); // unaffected: 5 participation + 20 living village win
+  });
 });
 
 describe('computeDuelBonus', () => {
