@@ -92,6 +92,47 @@ export interface BotDependencies {
 
 const INVITE_LINK_PATTERN = /^(https?:\/\/)?t(elegram)?\.me\/(\+|joinchat\/)([a-zA-Z0-9_-]+)$/;
 
+const LEADERBOARD_PAGE_SIZE = 15;
+
+interface LeaderboardRow {
+  displayName: string | null;
+  username: string | null;
+  points: number;
+  gamesPlayed: number;
+  gamesWon: number;
+  donationLevel: number;
+}
+
+/** Renders one page's worth of ranked rows, shared by the global (`/leaderboard`) and per-group
+ * (`/groupleaderboard`) player rankings - they differ only in data source and title/callback. */
+function renderLeaderboardRows(
+  players: readonly LeaderboardRow[],
+  page: number,
+  translator: Translator,
+  language: string,
+): string[] {
+  return players.map((p, idx) => {
+    const rank = page * LEADERBOARD_PAGE_SIZE + idx + 1;
+    const pName = (p.displayName ?? p.username ?? 'Player') + donorBadge(p.donationLevel);
+    const tier = getRankForPoints(p.points);
+    const tierTitle = translator.translate(language, tier.titleKey);
+    const displayTierTitle = tierTitle.startsWith('Rank_') ? tier.defaultTitle : tierTitle;
+    return `${rank}. <b>${pName}</b> - ${tier.emoji} <i>${displayTierTitle}</i> (${p.points} pts | ${p.gamesWon}🏆/${p.gamesPlayed}🎮)`;
+  });
+}
+
+function leaderboardKeyboard(
+  prefix: string,
+  page: number,
+  hasNext: boolean,
+): InlineKeyboard | undefined {
+  if (page === 0 && !hasNext) return undefined;
+  const kb = new InlineKeyboard();
+  if (page > 0) kb.text('◀️', `${prefix}:${page - 1}`);
+  if (hasNext) kb.text('▶️', `${prefix}:${page + 1}`);
+  return kb;
+}
+
 /** The one place `DEV_USER_IDS` gets checked - every dev-only command below calls this instead of
  * redefining its own `env.devUserIds.includes(...)` closure, so a new dev-only command can't miss
  * the check the way `/botgame`/`/addbots` originally did. */
@@ -115,6 +156,8 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
   const startTime = new Date();
   /** Toggled by the dev-only `/maintenance` command; blocks new games while true. */
   const maintenance = deps.maintenance ?? { on: false };
+  const tournamentRepo =
+    deps.tournamentRepository ?? (deps.prisma ? new TournamentRepository(deps.prisma) : null);
   const gameLoop = new GameLoop(
     bot,
     deps.gameManager,
@@ -125,6 +168,8 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     logger,
     deps.playerRepository,
     deps.gifPackRepository,
+    undefined,
+    tournamentRepo ?? undefined,
   );
   const lobby = new GameLobbyManager(
     bot,
@@ -138,8 +183,6 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     deps.notifyGameRepository,
   );
 
-  const tournamentRepo =
-    deps.tournamentRepository ?? (deps.prisma ? new TournamentRepository(deps.prisma) : null);
   if (tournamentRepo) {
     const tournamentHandler = new TournamentCommandHandler(tournamentRepo, deps.playerRepository);
     tournamentHandler.registerCommands(bot);
@@ -398,27 +441,24 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     await ctx.reply(lines.join('\n'), { parse_mode: 'HTML' });
   });
 
-  bot.command(['leaderboard', 'top', 'classement'], async (ctx) => {
+  const sendLeaderboardPage = async (ctx: Context, page: number, edit: boolean): Promise<void> => {
     if (!ctx.from) return;
     const callerId = BigInt(ctx.from.id);
     const caller = await deps.playerRepository.findByTelegramId(callerId);
     const language = caller?.languageCode ?? 'en';
 
-    const topPlayers = await deps.playerRepository.getTopPlayers(10);
-    const lines = [deps.translator.translate(language, 'LeaderboardTitle') + '\n'];
-
-    topPlayers.forEach((p, idx) => {
-      const pName = (p.displayName ?? p.username ?? 'Player') + donorBadge(p.donationLevel);
-      const rank = getRankForPoints(p.points);
-      const rankTitle = deps.translator.translate(language, rank.titleKey);
-      const displayRankTitle = rankTitle.startsWith('Rank_') ? rank.defaultTitle : rankTitle;
-      lines.push(
-        `${idx + 1}. <b>${pName}</b> - ${rank.emoji} <i>${displayRankTitle}</i> (${p.points} pts | ${p.gamesWon}🏆/${p.gamesPlayed}🎮)`,
-      );
-    });
+    const offset = page * LEADERBOARD_PAGE_SIZE;
+    const [players, total] = await Promise.all([
+      deps.playerRepository.getTopPlayers(LEADERBOARD_PAGE_SIZE, offset),
+      deps.playerRepository.countLeaderboardPlayers(),
+    ]);
+    const lines = [
+      deps.translator.translate(language, 'LeaderboardTitle') + '\n',
+      ...renderLeaderboardRows(players, page, deps.translator, language),
+    ];
 
     const userRank = await deps.playerRepository.getPlayerRank(callerId);
-    if (userRank && userRank.rank > 10) {
+    if (userRank && (userRank.rank <= offset || userRank.rank > offset + players.length)) {
       const callerRank = getRankForPoints(caller?.points ?? 0);
       const callerRankTitle = deps.translator.translate(language, callerRank.titleKey);
       const displayCallerRank = callerRankTitle.startsWith('Rank_')
@@ -429,6 +469,105 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
       );
     }
 
+    const hasNext = offset + players.length < total;
+    const keyboard = leaderboardKeyboard('lb', page, hasNext);
+    const options = {
+      parse_mode: 'HTML' as const,
+      ...(keyboard ? { reply_markup: keyboard } : {}),
+    };
+    if (edit) {
+      await ctx.editMessageText(lines.join('\n'), options).catch(() => null);
+    } else {
+      await ctx.reply(lines.join('\n'), options);
+    }
+  };
+
+  bot.command(['leaderboard', 'top', 'classement'], async (ctx) => {
+    await sendLeaderboardPage(ctx, 0, false);
+  });
+
+  bot.callbackQuery(/^lb:(\d+)$/, async (ctx) => {
+    const page = parseInt(ctx.match[1]!, 10);
+    await sendLeaderboardPage(ctx, page, true);
+    await ctx.answerCallbackQuery().catch(() => null);
+  });
+
+  const sendGroupLeaderboardPage = async (
+    ctx: Context,
+    chatId: bigint,
+    page: number,
+    edit: boolean,
+  ): Promise<void> => {
+    const group = await deps.groupRepository.getOrCreate(chatId, null, null);
+    const language = group.language;
+
+    const offset = page * LEADERBOARD_PAGE_SIZE;
+    const [players, total] = await Promise.all([
+      deps.playerRepository.getGroupLeaderboard(chatId, LEADERBOARD_PAGE_SIZE, offset),
+      deps.playerRepository.countGroupLeaderboardPlayers(chatId),
+    ]);
+
+    if (total === 0) {
+      await ctx.reply(
+        language === 'fr'
+          ? "Aucun joueur n'a encore terminé de partie dans ce groupe."
+          : 'No player has finished a game in this group yet.',
+      );
+      return;
+    }
+
+    const title =
+      language === 'fr'
+        ? `🏆 <b>CLASSEMENT DU GROUPE${group.title ? ` : ${group.title}` : ''}</b>\n`
+        : `🏆 <b>GROUP LEADERBOARD${group.title ? `: ${group.title}` : ''}</b>\n`;
+    const lines = [title, ...renderLeaderboardRows(players, page, deps.translator, language)];
+
+    const hasNext = offset + players.length < total;
+    const keyboard = leaderboardKeyboard(`glb:${chatId}`, page, hasNext);
+    const options = {
+      parse_mode: 'HTML' as const,
+      ...(keyboard ? { reply_markup: keyboard } : {}),
+    };
+    if (edit) {
+      await ctx.editMessageText(lines.join('\n'), options).catch(() => null);
+    } else {
+      await ctx.reply(lines.join('\n'), options);
+    }
+  };
+
+  bot.command(['groupleaderboard', 'glb'], async (ctx) => {
+    if (!ctx.chat || ctx.chat.type === 'private') return;
+    await sendGroupLeaderboardPage(ctx, BigInt(ctx.chat.id), 0, false);
+  });
+
+  bot.callbackQuery(/^glb:(-?\d+):(\d+)$/, async (ctx) => {
+    const chatId = BigInt(ctx.match[1]!);
+    const page = parseInt(ctx.match[2]!, 10);
+    await sendGroupLeaderboardPage(ctx, chatId, page, true);
+    await ctx.answerCallbackQuery().catch(() => null);
+  });
+
+  bot.command(['groupranking', 'bestgroups'], async (ctx) => {
+    if (!ctx.from) return;
+    const caller = await deps.playerRepository.findByTelegramId(BigInt(ctx.from.id));
+    const language = caller?.languageCode ?? ctx.from.language_code ?? 'fr';
+    const isFr = language === 'fr';
+
+    const rankings = await deps.groupRepository.getGroupRankings(15);
+    if (rankings.length === 0) {
+      await ctx.reply(isFr ? 'Aucun groupe classé pour le moment.' : 'No ranked groups yet.');
+      return;
+    }
+
+    const lines = [
+      isFr ? '🏆 <b>MEILLEURS GROUPES</b>\n' : '🏆 <b>TOP GROUPS</b>\n',
+      ...rankings.map((r, idx) => {
+        const title = r.title ?? (isFr ? 'Groupe sans nom' : 'Untitled group');
+        return isFr
+          ? `${idx + 1}. <b>${title}</b> — ${r.gamesPlayed} partie(s), ${r.uniquePlayers} joueur(s), ${r.totalPoints} pts cumulés`
+          : `${idx + 1}. <b>${title}</b> — ${r.gamesPlayed} game(s), ${r.uniquePlayers} player(s), ${r.totalPoints} combined pts`;
+      }),
+    ];
     await ctx.reply(lines.join('\n'), { parse_mode: 'HTML' });
   });
 
@@ -571,6 +710,25 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     } catch {
       await lobby.tagAllMembers(BigInt(ctx.chat.id), language);
     }
+  });
+
+  bot.command(['notag', 'tagoptout'], async (ctx) => {
+    if (!ctx.from) return;
+    const callerId = BigInt(ctx.from.id);
+    const player = await deps.playerRepository.findByTelegramId(callerId);
+    const language = player?.languageCode ?? ctx.from.language_code ?? 'fr';
+    const isFr = language === 'fr';
+
+    const optedOut = await deps.playerRepository.toggleTagOptOut(callerId);
+    await ctx.reply(
+      optedOut
+        ? isFr
+          ? '🔕 Tu ne seras plus tagué(e) par /tagall dans aucun groupe. Retape /notag pour réactiver.'
+          : "🔕 You'll no longer be tagged by /tagall in any group. Run /notag again to opt back in."
+        : isFr
+          ? '🔔 Tu peux de nouveau être tagué(e) par /tagall.'
+          : '🔔 You can be tagged by /tagall again.',
+    );
   });
 
   bot.command('claim', async (ctx) => {
@@ -2199,6 +2357,8 @@ function registerDonationCommands(bot: Bot, env: Env, deps: BotDependencies): vo
     { command: 'accuse', description: '👉 Accuser publiquement un joueur' },
     { command: 'rolelist', description: '📜 Guide et description de tous les rôles' },
     { command: 'leaderboard', description: '🏆 Classement mondial des meilleurs joueurs' },
+    { command: 'groupleaderboard', description: '🏆 Classement des joueurs de ce groupe' },
+    { command: 'groupranking', description: '🏅 Classement des meilleurs groupes' },
     { command: 'profile', description: '👤 Voir sa carte de profil et son rang' },
     { command: 'titles', description: "👑 Choisir et équiper son titre d'honneur" },
     { command: 'stats', description: '📊 Voir tes statistiques de jeu' },
@@ -2216,6 +2376,7 @@ function registerDonationCommands(bot: Bot, env: Env, deps: BotDependencies): vo
     { command: 'chatid', description: "🆔 Afficher l'identifiant de ce groupe" },
     { command: 'config', description: '⚙️ Configurer les options et rôles du groupe (admin)' },
     { command: 'tagall', description: '📣 Taguer tous les membres du groupe (admin)' },
+    { command: 'notag', description: '🔕 Se retirer/rejoindre la liste des tags de /tagall' },
     { command: 'smite', description: '💥 Exclure un joueur de la partie (admin)' },
     { command: 'setlink', description: "🔗 Définir le lien d'invitation du groupe (admin)" },
     { command: 'remlink', description: "🔗 Retirer le lien d'invitation (admin)" },
@@ -2236,6 +2397,7 @@ function registerDonationCommands(bot: Bot, env: Env, deps: BotDependencies): vo
     { command: 'modes', description: '📘 Consulter le guide des modes de jeu' },
     { command: 'rolelist', description: '📜 Guide et description de tous les rôles' },
     { command: 'monequipe', description: '🚩 Consulter son équipe de tournoi' },
+    { command: 'notag', description: '🔕 Se retirer/rejoindre la liste des tags de /tagall' },
     { command: 'setlang', description: '🌐 Changer la langue du bot (FR / EN)' },
     { command: 'help', description: "❓ Obtenir de l'aide et les règles" },
     { command: 'donate', description: "⭐ Faire un don d'Étoiles et devenir Donateur" },
@@ -2267,6 +2429,8 @@ function registerDonationCommands(bot: Bot, env: Env, deps: BotDependencies): vo
     { command: 'accuse', description: '👉 Publicly accuse a player' },
     { command: 'rolelist', description: '📜 Guide and description of every role' },
     { command: 'leaderboard', description: '🏆 Global leaderboard of top players' },
+    { command: 'groupleaderboard', description: "🏆 This group's player leaderboard" },
+    { command: 'groupranking', description: '🏅 Ranking of the best groups' },
     { command: 'profile', description: '👤 View your profile card and rank' },
     { command: 'titles', description: '👑 Choose and equip your honor title' },
     { command: 'stats', description: '📊 View your game statistics' },
@@ -2284,6 +2448,7 @@ function registerDonationCommands(bot: Bot, env: Env, deps: BotDependencies): vo
     { command: 'chatid', description: "🆔 Show this group's chat id" },
     { command: 'config', description: '⚙️ Configure the group options and roles (admin)' },
     { command: 'tagall', description: '📣 Tag every member of the group (admin)' },
+    { command: 'notag', description: '🔕 Opt out of / back into /tagall pings' },
     { command: 'smite', description: '💥 Remove a player from the game (admin)' },
     { command: 'setlink', description: "🔗 Set the group's invite link (admin)" },
     { command: 'remlink', description: '🔗 Remove the invite link (admin)' },
@@ -2304,6 +2469,7 @@ function registerDonationCommands(bot: Bot, env: Env, deps: BotDependencies): vo
     { command: 'modes', description: '📘 Browse the game modes guide' },
     { command: 'rolelist', description: '📜 Guide and description of every role' },
     { command: 'monequipe', description: '🚩 View your tournament team' },
+    { command: 'notag', description: '🔕 Opt out of / back into /tagall pings' },
     { command: 'setlang', description: '🌐 Change the bot language (FR / EN)' },
     { command: 'help', description: '❓ Get help and the rules' },
     { command: 'donate', description: '⭐ Donate Stars and become a Donor' },

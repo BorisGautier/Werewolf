@@ -38,6 +38,7 @@ import { GameRepository } from '../persistence/game.repository.js';
 import { GroupRepository } from '../persistence/group.repository.js';
 import { GifPackRepository, type GifCategory } from '../persistence/gif-pack.repository.js';
 import { donorBadge, type PlayerRepository } from '../persistence/player.repository.js';
+import type { TournamentRepository } from '../persistence/tournament.repository.js';
 import { Translator, MissingLocaleStringError } from '../i18n/translator.js';
 import type { Logger } from '../logging/logger.js';
 import { describeEvent } from './messages.js';
@@ -130,6 +131,7 @@ export class GameLoop {
     private readonly players?: PlayerRepository,
     private readonly gifPacks?: GifPackRepository,
     private readonly localGifPack: LocalGifPack = new LocalGifPack(),
+    private readonly tournamentRepo?: TournamentRepository,
   ) {}
 
   getGame(chatId: bigint): Game | undefined {
@@ -873,6 +875,20 @@ export class GameLoop {
           const lang = grp.language;
           for (const score of scores) {
             scoresMap.set(score.playerId, score.points);
+            if (this.tournamentRepo) {
+              // A team's tournament points come from its members' normal games while the team is
+              // registered to an in-progress tournament - see `awardTournamentPoints()`'s own doc
+              // comment for why (Werewolf games aren't 1v1 matches a bracket could schedule). A
+              // no-op for anyone not on such a team.
+              await this.tournamentRepo
+                .awardTournamentPoints(score.playerId, score.points, score.won)
+                .catch((err: unknown) => {
+                  this.logger.warn(
+                    { err, playerId: score.playerId.toString() },
+                    'Failed to award tournament points',
+                  );
+                });
+            }
             const res = await this.players.awardPoints(score.playerId, score.points, score.won);
             if (res.promoted) {
               const title = this.t.translate(lang, res.newRank.titleKey);

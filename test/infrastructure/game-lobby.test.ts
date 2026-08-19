@@ -92,6 +92,7 @@ function createHarness(joinTimeSeconds = 5) {
     findByTelegramId: vi.fn(
       async (telegramId: bigint) => groupsStore.get(telegramId.toString()) ?? null,
     ),
+    getGroupMembers: vi.fn(async () => []),
   } as unknown as GroupRepository;
 
   const playersStore = new Map<string, { id: number; telegramId: bigint }>();
@@ -110,6 +111,8 @@ function createHarness(joinTimeSeconds = 5) {
     ),
     isBanned: vi.fn(async () => false),
     checkSuspension: vi.fn(async () => ({ isSuspended: false, suspendedUntil: null })),
+    getGroupPlayers: vi.fn(async () => []),
+    getTagOptOutIds: vi.fn(async () => new Set<bigint>()),
   } as unknown as PlayerRepository;
 
   const gameRepo = {
@@ -308,6 +311,51 @@ describe('GameLobbyManager', () => {
     expect(gameRepo.recordPlayers).toHaveBeenCalledTimes(1);
     // 5 role PMs + the "Night falls" group message.
     expect(sendMessage.mock.calls.length).toBeGreaterThanOrEqual(6);
+  });
+
+  it('tags community members one message at a time, skipping anyone opted out', async () => {
+    vi.useFakeTimers();
+    const { lobby, sendMessage, groups, players } = createHarness();
+    const chatId = 200n;
+
+    (groups.getGroupMembers as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { telegramId: 10n, username: 'alice', displayName: 'Alice' },
+      { telegramId: 11n, username: null, displayName: 'Bob' },
+      { telegramId: 12n, username: 'carol', displayName: 'Carol' },
+    ]);
+    (players.getTagOptOutIds as ReturnType<typeof vi.fn>).mockResolvedValue(new Set([11n]));
+
+    const done = lobby.tagAllMembers(chatId, 'en');
+    await vi.advanceTimersByTimeAsync(5000);
+    await done;
+
+    const texts = sendMessage.mock.calls.map((call) => call[1]);
+    // Header + one message per non-opted-out member (Bob, id 11n, is filtered out).
+    expect(texts).toHaveLength(3);
+    expect(texts[0]).toContain('COMMUNITY CALL');
+    expect(texts).toContain('@alice');
+    expect(texts).toContain('@carol');
+    expect(texts.some((t) => t.includes('Bob'))).toBe(false);
+  });
+
+  it('announces the full player roster once the game actually starts', async () => {
+    vi.useFakeTimers();
+    const { lobby, sendMessage, gameManager } = createHarness(100);
+    const chatId = 106n;
+
+    await lobby.startGame(chatId, 'Group', { id: 1n, name: 'Starter' }, 'Normal');
+    for (let i = 2; i <= 5; i++) {
+      await lobby.join(chatId, user(i, `Player${i}`));
+    }
+    await lobby.forceStart(chatId, true);
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(gameManager.get(chatId)!.players).toHaveLength(5);
+    expect(
+      sendMessage.mock.calls.some(
+        (call) => typeof call[1] === 'string' && call[1].startsWith('Players in this game (5):'),
+      ),
+    ).toBe(true);
   });
 
   it('PMs everyone on the /nextgame waitlist (except the starter) when a new lobby opens', async () => {
