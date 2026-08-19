@@ -238,6 +238,34 @@ describe('Game (full day/night/lynch cycle)', () => {
     ).toBe(true);
   });
 
+  it("stamps a newly-dead player's dayDied with the day they died on, exactly once", () => {
+    const game = joinedGame(5);
+    game.start();
+    pinToVillager(game.players);
+    const [victim] = game.players;
+    game.dayNumber = 3;
+
+    game.killPlayer(victim!.id, 'Eat', { killerIds: [game.players[1]!.id] });
+    game.checkWinCondition();
+
+    expect(victim!.dayDied).toBe(3);
+
+    // A later call (e.g. from a subsequent kill's own win-condition check) must not overwrite it
+    // with whatever day the game happens to be on by then.
+    game.dayNumber = 4;
+    game.checkWinCondition();
+    expect(victim!.dayDied).toBe(3);
+  });
+
+  it('leaves dayDied null for every player still alive', () => {
+    const game = joinedGame(5);
+    game.start();
+    pinToVillager(game.players);
+    game.checkWinCondition();
+
+    for (const p of game.players) expect(p.dayDied).toBeNull();
+  });
+
   it('cannot resolve a lynch or advance phases once the game has ended', () => {
     const game = joinedGame(5);
     game.start();

@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { ROLE_BIT } from '../../src/domain/roles/role.js';
 import { createPlayer } from '../../src/domain/game/player.js';
-import { SKIP_VOTE, resetLynchState, resolveLynchVotes } from '../../src/domain/game/lynch.js';
+import {
+  SKIP_VOTE,
+  resetLynchState,
+  resolveClumsyGuyVote,
+  resolveLynchVotes,
+} from '../../src/domain/game/lynch.js';
 
 function villagers(n: number, startId = 1) {
   return Array.from({ length: n }, (_, i) =>
@@ -131,67 +136,6 @@ describe('resolveLynchVotes', () => {
     expect(idler.isDead).toBe(false);
   });
 
-  it("fumbles the Clumsy Guy's vote onto a random living player on a successful roll", () => {
-    const clumsy = createPlayer(1n, 'Clumsy', ROLE_BIT.ClumsyGuy, 'Village');
-    const intended = createPlayer(2n, 'Intended', ROLE_BIT.Villager, 'Village');
-    const other = createPlayer(3n, 'Other', ROLE_BIT.Villager, 'Village');
-    clumsy.choice = intended.id;
-
-    // First roll (fumble check, 0 < 50) triggers the fumble; second roll picks the last of the two
-    // *other* living players (index 1 of [intended, other], i.e. "other" - self is excluded).
-    let call = 0;
-    const random = () => (call++ === 0 ? 0 : 0.99);
-    resolveLynchVotes([clumsy, intended, other], { lynchAttempt: 1, random });
-
-    expect(clumsy.choice).toBe(other.id);
-  });
-
-  it("does not fumble the Clumsy Guy's vote on a failed roll", () => {
-    const clumsy = createPlayer(1n, 'Clumsy', ROLE_BIT.ClumsyGuy, 'Village');
-    const intended = createPlayer(2n, 'Intended', ROLE_BIT.Villager, 'Village');
-    clumsy.choice = intended.id;
-
-    resolveLynchVotes([clumsy, intended], { lynchAttempt: 1, random: () => 0.99 });
-
-    expect(clumsy.choice).toBe(intended.id);
-  });
-
-  it('never fumbles an abstaining Clumsy Guy', () => {
-    const clumsy = createPlayer(1n, 'Clumsy', ROLE_BIT.ClumsyGuy, 'Village');
-    createPlayer(2n, 'Other', ROLE_BIT.Villager, 'Village');
-    clumsy.choice = SKIP_VOTE;
-
-    resolveLynchVotes([clumsy], { lynchAttempt: 1, random: () => 0 });
-
-    expect(clumsy.choice).toBe(SKIP_VOTE);
-  });
-
-  it("counts a Clumsy Guy's vote as correct on a no-fumble roll, and on a fumble that lands back on the same target", () => {
-    const clumsy = createPlayer(1n, 'Clumsy', ROLE_BIT.ClumsyGuy, 'Village');
-    const target = createPlayer(2n, 'T', ROLE_BIT.Villager, 'Village');
-    clumsy.choice = target.id;
-
-    resolveLynchVotes([clumsy, target], { lynchAttempt: 1, random: () => 0.99 }); // no fumble
-    expect(clumsy.clumsyCorrectLynchCount).toBe(1);
-
-    clumsy.choice = target.id;
-    resolveLynchVotes([clumsy, target], { lynchAttempt: 1, random: () => 0 }); // fumbles, only target to pick from
-    expect(clumsy.clumsyCorrectLynchCount).toBe(2);
-  });
-
-  it("does not count a Clumsy Guy's vote as correct when a fumble lands on someone else", () => {
-    const clumsy = createPlayer(1n, 'Clumsy', ROLE_BIT.ClumsyGuy, 'Village');
-    const intended = createPlayer(2n, 'Intended', ROLE_BIT.Villager, 'Village');
-    const other = createPlayer(3n, 'Other', ROLE_BIT.Villager, 'Village');
-    clumsy.choice = intended.id;
-
-    let call = 0;
-    const random = () => (call++ === 0 ? 0 : 0.99); // fumble, then pick the last of the two others
-    resolveLynchVotes([clumsy, intended, other], { lynchAttempt: 1, random });
-
-    expect(clumsy.clumsyCorrectLynchCount).toBe(0);
-  });
-
   it('marks a lynch target as hasBeenVoted the moment anyone votes for them', () => {
     const voter = createPlayer(1n, 'V', ROLE_BIT.Villager, 'Village');
     const target = createPlayer(2n, 'T', ROLE_BIT.Villager, 'Village');
@@ -256,6 +200,82 @@ describe('resolveLynchVotes', () => {
   });
 });
 
+describe('resolveClumsyGuyVote', () => {
+  // Rolled immediately when a Clumsy Guy casts a vote (see `Game.resolveClumsyGuyVote()`) -
+  // not deferred until `resolveLynchVotes()` tallies at the end of the voting window - so the
+  // group's live "X voted to lynch Y" announcement always names the real target.
+  it("fumbles the Clumsy Guy's vote onto a random living player on a successful roll", () => {
+    const clumsy = createPlayer(1n, 'Clumsy', ROLE_BIT.ClumsyGuy, 'Village');
+    const intended = createPlayer(2n, 'Intended', ROLE_BIT.Villager, 'Village');
+    const other = createPlayer(3n, 'Other', ROLE_BIT.Villager, 'Village');
+    clumsy.choice = intended.id;
+
+    // First roll (fumble check, 0 < 50) triggers the fumble; second roll picks the last of the two
+    // *other* living players (index 1 of [intended, other], i.e. "other" - self is excluded).
+    let call = 0;
+    const random = () => (call++ === 0 ? 0 : 0.99);
+    resolveClumsyGuyVote(clumsy, [clumsy, intended, other], random);
+
+    expect(clumsy.choice).toBe(other.id);
+  });
+
+  it("does not fumble the Clumsy Guy's vote on a failed roll", () => {
+    const clumsy = createPlayer(1n, 'Clumsy', ROLE_BIT.ClumsyGuy, 'Village');
+    const intended = createPlayer(2n, 'Intended', ROLE_BIT.Villager, 'Village');
+    clumsy.choice = intended.id;
+
+    resolveClumsyGuyVote(clumsy, [clumsy, intended], () => 0.99);
+
+    expect(clumsy.choice).toBe(intended.id);
+  });
+
+  it('never fumbles an abstaining Clumsy Guy', () => {
+    const clumsy = createPlayer(1n, 'Clumsy', ROLE_BIT.ClumsyGuy, 'Village');
+    const other = createPlayer(2n, 'Other', ROLE_BIT.Villager, 'Village');
+    clumsy.choice = SKIP_VOTE;
+
+    resolveClumsyGuyVote(clumsy, [clumsy, other], () => 0);
+
+    expect(clumsy.choice).toBe(SKIP_VOTE);
+  });
+
+  it('is a no-op for anyone who is not a Clumsy Guy', () => {
+    const villager = createPlayer(1n, 'V', ROLE_BIT.Villager, 'Village');
+    const target = createPlayer(2n, 'T', ROLE_BIT.Villager, 'Village');
+    villager.choice = target.id;
+
+    resolveClumsyGuyVote(villager, [villager, target], () => 0);
+
+    expect(villager.choice).toBe(target.id);
+  });
+
+  it("counts a Clumsy Guy's vote as correct on a no-fumble roll, and on a fumble that lands back on the same target", () => {
+    const clumsy = createPlayer(1n, 'Clumsy', ROLE_BIT.ClumsyGuy, 'Village');
+    const target = createPlayer(2n, 'T', ROLE_BIT.Villager, 'Village');
+    clumsy.choice = target.id;
+
+    resolveClumsyGuyVote(clumsy, [clumsy, target], () => 0.99); // no fumble
+    expect(clumsy.clumsyCorrectLynchCount).toBe(1);
+
+    clumsy.choice = target.id;
+    resolveClumsyGuyVote(clumsy, [clumsy, target], () => 0); // fumbles, only target to pick from
+    expect(clumsy.clumsyCorrectLynchCount).toBe(2);
+  });
+
+  it("does not count a Clumsy Guy's vote as correct when a fumble lands on someone else", () => {
+    const clumsy = createPlayer(1n, 'Clumsy', ROLE_BIT.ClumsyGuy, 'Village');
+    const intended = createPlayer(2n, 'Intended', ROLE_BIT.Villager, 'Village');
+    const other = createPlayer(3n, 'Other', ROLE_BIT.Villager, 'Village');
+    clumsy.choice = intended.id;
+
+    let call = 0;
+    const random = () => (call++ === 0 ? 0 : 0.99); // fumble, then pick the last of the two others
+    resolveClumsyGuyVote(clumsy, [clumsy, intended, other], random);
+
+    expect(clumsy.clumsyCorrectLynchCount).toBe(0);
+  });
+});
+
 describe("resolveLynchVotes - Avenger's rival goal", () => {
   it('wins when their secret rival (via avengerTargetMap) is actually lynched', () => {
     const avenger = createPlayer(1n, 'A', ROLE_BIT.Avenger, 'Neutral');
@@ -314,5 +334,129 @@ describe('resetLynchState', () => {
 
     expect(p.votes).toBe(0);
     expect(p.votedBy.size).toBe(0);
+  });
+});
+
+describe('resolveLynchVotes - mission-mode tracking', () => {
+  it("flags a vote for a Wolf-team player and for anyone outside the voter's own team", () => {
+    const villager = createPlayer(1n, 'V', ROLE_BIT.Villager, 'Village');
+    const wolf = createPlayer(2n, 'W', ROLE_BIT.Wolf, 'Wolf');
+    villager.choice = wolf.id;
+
+    resolveLynchVotes([villager, wolf], { lynchAttempt: 1 });
+
+    expect(villager.everVotedForWolf).toBe(true);
+    expect(villager.everVotedOppositeCamp).toBe(true);
+  });
+
+  it('does not flag a same-team vote as a wolf vote or an opposite-camp vote', () => {
+    const a = createPlayer(1n, 'A', ROLE_BIT.Villager, 'Village');
+    const b = createPlayer(2n, 'B', ROLE_BIT.Villager, 'Village');
+    a.choice = b.id;
+
+    resolveLynchVotes([a, b], { lynchAttempt: 1 });
+
+    expect(a.everVotedForWolf).toBe(false);
+    expect(a.everVotedOppositeCamp).toBe(false);
+  });
+
+  it('only flags votedOppositeCampDay1 when dayNumber is explicitly 1', () => {
+    const villager = createPlayer(1n, 'V', ROLE_BIT.Villager, 'Village');
+    const wolf = createPlayer(2n, 'W', ROLE_BIT.Wolf, 'Wolf');
+    villager.choice = wolf.id;
+
+    resolveLynchVotes([villager, wolf], { lynchAttempt: 1, dayNumber: 2 });
+    expect(villager.votedOppositeCampDay1).toBe(false);
+
+    villager.choice = wolf.id;
+    resolveLynchVotes([villager, wolf], { lynchAttempt: 1, dayNumber: 1 });
+    expect(villager.votedOppositeCampDay1).toBe(true);
+  });
+
+  it('marks the killer(s) of a resolved lynch as having voted for the eventual victim', () => {
+    const a = createPlayer(1n, 'A', ROLE_BIT.Villager, 'Village');
+    const b = createPlayer(2n, 'B', ROLE_BIT.Villager, 'Village');
+    const target = createPlayer(3n, 'T', ROLE_BIT.Villager, 'Village');
+    a.choice = target.id;
+    b.choice = target.id;
+
+    resolveLynchVotes([a, b, target], { lynchAttempt: 1 });
+
+    expect(a.everVotedForLynchedVictim).toBe(true);
+    expect(b.everVotedForLynchedVictim).toBe(true);
+  });
+
+  it("tracks majority vs minority vote counts against the round's actual top target", () => {
+    const majority1 = createPlayer(1n, 'M1', ROLE_BIT.Villager, 'Village');
+    const majority2 = createPlayer(2n, 'M2', ROLE_BIT.Villager, 'Village');
+    const minority = createPlayer(3n, 'Min', ROLE_BIT.Villager, 'Village');
+    const target = createPlayer(4n, 'T', ROLE_BIT.Villager, 'Village');
+    const other = createPlayer(5n, 'O', ROLE_BIT.Villager, 'Village');
+    majority1.choice = target.id;
+    majority2.choice = target.id;
+    minority.choice = other.id;
+
+    resolveLynchVotes([majority1, majority2, minority, target, other], { lynchAttempt: 1 });
+
+    expect(majority1.majorityVoteCount).toBe(1);
+    expect(majority2.majorityVoteCount).toBe(1);
+    expect(minority.minorityVoteCount).toBe(1);
+    expect(minority.majorityVoteCount).toBe(0);
+  });
+
+  it('increments escapedTopVoteLynchCount for a tied player who lives, not for one who dies', () => {
+    const [a, b, c, d] = villagers(4);
+    a!.choice = c!.id;
+    b!.choice = d!.id;
+
+    // A genuine 1-1 tie with no random tiebreak - neither c nor d dies, both "escaped".
+    resolveLynchVotes([a!, b!, c!, d!], { lynchAttempt: 1 });
+
+    expect(c!.escapedTopVoteLynchCount).toBe(1);
+    expect(d!.escapedTopVoteLynchCount).toBe(1);
+  });
+
+  it('does not credit escapedTopVoteLynchCount to a player who was actually lynched', () => {
+    const a = createPlayer(1n, 'A', ROLE_BIT.Villager, 'Village');
+    const b = createPlayer(2n, 'B', ROLE_BIT.Villager, 'Village');
+    const target = createPlayer(3n, 'T', ROLE_BIT.Villager, 'Village');
+    a.choice = target.id;
+    b.choice = target.id;
+
+    resolveLynchVotes([a, b, target], { lynchAttempt: 1 });
+
+    expect(target.isDead).toBe(true);
+    expect(target.escapedTopVoteLynchCount).toBe(0);
+  });
+
+  it('accumulates everVotedAgainstBy across the whole game, unlike votedBy which resetLynchState clears', () => {
+    const voter1 = createPlayer(1n, 'V1', ROLE_BIT.Villager, 'Village');
+    const voter2 = createPlayer(2n, 'V2', ROLE_BIT.Villager, 'Village');
+    const target = createPlayer(3n, 'T', ROLE_BIT.Villager, 'Village');
+    voter1.choice = target.id;
+
+    resolveLynchVotes([voter1, voter2, target], { lynchAttempt: 1 });
+    resetLynchState([voter1, voter2, target]);
+    voter2.choice = target.id;
+    resolveLynchVotes([voter1, voter2, target], { lynchAttempt: 1 });
+
+    expect(target.votedBy.size).toBe(1); // reset before the second round
+    expect(target.everVotedAgainstBy.size).toBe(2); // accumulated across both rounds
+  });
+
+  it('counts abstains via abstainCount and a genuine no-vote via everMissedVote', () => {
+    const abstainer = createPlayer(1n, 'A', ROLE_BIT.Villager, 'Village');
+    const silent = createPlayer(2n, 'S', ROLE_BIT.Villager, 'Village');
+    const other = createPlayer(3n, 'O', ROLE_BIT.Villager, 'Village');
+    abstainer.choice = SKIP_VOTE;
+    silent.choice = null;
+    other.choice = other.id;
+
+    resolveLynchVotes([abstainer, silent, other], { lynchAttempt: 1 });
+
+    expect(abstainer.abstainCount).toBe(1);
+    expect(abstainer.everMissedVote).toBe(false);
+    expect(silent.everMissedVote).toBe(true);
+    expect(silent.abstainCount).toBe(0);
   });
 });

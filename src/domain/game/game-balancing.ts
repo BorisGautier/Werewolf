@@ -13,8 +13,10 @@ import { randomInt } from 'node:crypto';
 import {
   ROLE_NAMES,
   ROLE_BIT,
+  ROLE_VALID,
   type Role,
   type RoleFlags,
+  addFlag,
   getUniqueRoles,
   hasFlag,
 } from '../roles/role.js';
@@ -35,6 +37,29 @@ export const WOLF_ROLES: readonly Role[] = [
 ];
 
 const WOLF_ROLES_WITH_SNOW: readonly Role[] = [...WOLF_ROLES, ROLE_BIT.SnowWolf];
+
+/**
+ * `TeamDuel` mode disables every role with its own solo/neutral win condition (Tanner, Jester,
+ * Cultist, SerialKiller, Arsonist, and the Neutral-team roles) - the mode's entire premise is "the
+ * squad with more survivors wins," so a role that could "win" on its own agenda regardless of its
+ * squad's fate would make the final result ambiguous. `ROLE_VALID` is included so this mask alone
+ * is enough to activate `balance()`'s disabled-role handling even for a group that hasn't
+ * configured any disabled roles of its own (see `hasFlag(options.disabledRoleFlags, ROLE_VALID)`).
+ */
+export const TEAM_DUEL_EXCLUDED_ROLE_FLAGS: RoleFlags = (
+  [
+    'Tanner',
+    'Jester',
+    'Cultist',
+    'SerialKiller',
+    'Arsonist',
+    'Necromancer',
+    'Hitman',
+    'Reflector',
+    'Avenger',
+    'Crow',
+  ] as const
+).reduce((flags, name) => addFlag(flags, ROLE_BIT[name]), ROLE_VALID);
 
 /** Roles that are not on the village team (mirrors `nonVgRoles`). */
 export const NON_VILLAGE_ROLES: readonly Role[] = [

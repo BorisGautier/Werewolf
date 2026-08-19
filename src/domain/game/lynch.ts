@@ -11,6 +11,7 @@
 import { ROLE_BIT } from '../roles/role.js';
 import { killPlayer } from './kill.js';
 import { declareWinner } from './win-condition.js';
+import { getTeamForRole } from './team.js';
 import type { GameEvent } from './game-event.js';
 import { ABSTAIN, alivePlayers, type Player } from './player.js';
 import {
@@ -44,11 +45,24 @@ export interface LynchOptions {
    * start) - the Avenger's win condition ("if that rival is executed by village lynch vote")
    * needs it, since the target lives here rather than on the Avenger's own `Player` record. */
   avengerTargetMap?: ReadonlyMap<bigint, bigint>;
+  /** `Game.dayNumber` at the time of this vote - only used by mission-mode tracking (the
+   * "Prophète" mission cares specifically about a Day 1 vote), tallying itself doesn't need it. */
+  dayNumber?: number;
+}
+
+/** One cast lynch vote, kept for the AI-narrated Gazette (see `generateAiGazette()`) - `targetId:
+ * null` means an explicit abstain. Not used by tallying itself, only accumulated on `Game.voteLog`
+ * for a post-game narrative to draw on. */
+export interface VoteLogEntry {
+  day: number;
+  voterId: bigint;
+  targetId: bigint | null;
 }
 
 export interface LynchResult {
   resolution: LynchResolution;
   events: GameEvent[];
+  voteLog: VoteLogEntry[];
 }
 
 /** Clears votes/choices at the start of a fresh voting round (mirrors the top of `LynchCycle`'s loop body). */
@@ -90,49 +104,78 @@ export function previewLynchTally(players: readonly Player[]): {
 }
 
 /**
+ * Rolls the Clumsy Guy's 50% chance of fumbling their vote onto a random living player instead
+ * of whoever they actually clicked. Called immediately when the vote is cast (see
+ * `Game.resolveClumsyGuyVote()`), not deferred until the lynch resolves - so `voter.choice`
+ * already holds the true target by the time anything (the live group announcement, the Judge's
+ * pardon-prompt preview, `resolveLynchVotes` below) reads it. No-op for anyone else, or for an
+ * abstain (fumbling never applies to abstains).
+ */
+export function resolveClumsyGuyVote(
+  voter: Player,
+  players: readonly Player[],
+  random: () => number = Math.random,
+): void {
+  if (voter.role !== ROLE_BIT.ClumsyGuy || voter.choice === null || voter.choice === ABSTAIN) {
+    return;
+  }
+  if (Math.floor(random() * 100) < 50) {
+    const original = voter.choice;
+    const alive = players.filter((p) => !p.isDead && p.id !== voter.id);
+    if (alive.length > 0) {
+      voter.choice = alive[Math.floor(random() * alive.length)]!.id;
+    }
+    if (voter.choice === original) voter.clumsyCorrectLynchCount++;
+  } else {
+    voter.clumsyCorrectLynchCount++;
+  }
+}
+
+/**
  * Tallies votes, applies idle-kills for players who failed to vote twice in a
  * row (on the first attempt only), and resolves the lynch. Mutates `players`
  * in place.
  */
 export function resolveLynchVotes(players: Player[], options: LynchOptions): LynchResult {
   const events: GameEvent[] = [];
+  const voteLog: VoteLogEntry[] = [];
   const random = options.random ?? Math.random;
-
-  // The Clumsy Guy has a 50% chance of fumbling their vote onto a random living player instead
-  for (const voter of alivePlayers(players)) {
-    if (voter.role === ROLE_BIT.ClumsyGuy && voter.choice !== null && voter.choice !== ABSTAIN) {
-      if (Math.floor(random() * 100) < 50) {
-        const original = voter.choice;
-        const alive = players.filter((p) => !p.isDead && p.id !== voter.id);
-        if (alive.length > 0) {
-          voter.choice = alive[Math.floor(random() * alive.length)]!.id;
-        }
-        if (voter.choice === original) voter.clumsyCorrectLynchCount++;
-      } else {
-        voter.clumsyCorrectLynchCount++;
-      }
-    }
-  }
+  const day = options.dayNumber ?? 0;
 
   for (const voter of alivePlayers(players)) {
     if (voter.choice !== null && voter.choice !== ABSTAIN) {
       lynchVotesCast.inc();
       if (voter.isBot) lynchBotVotes.inc();
+      voteLog.push({ day, voterId: voter.id, targetId: voter.choice });
       const target = players.find((x) => x.id === voter.choice);
       if (target) {
         target.votes++;
         target.votedBy.add(voter.id);
+        target.everVotedAgainstBy.add(voter.id);
         target.hasBeenVoted = true;
 
         if (voter.role === ROLE_BIT.Mayor && voter.hasUsedAbility) {
           target.votes++;
           voter.mayorLynchAfterRevealCount++;
         }
+
+        // Mission-mode tracking (see `src/domain/game/missions.ts`) - who they voted for, not
+        // whether that vote turned out to be the majority (that's resolved further below, once
+        // the final tally is known).
+        if (getTeamForRole(target.role) === 'Wolf') voter.everVotedForWolf = true;
+        if (getTeamForRole(target.role) !== getTeamForRole(voter.role)) {
+          voter.everVotedOppositeCamp = true;
+          if (options.dayNumber === 1) voter.votedOppositeCampDay1 = true;
+        }
       }
       voter.nonVoteCount = 0;
     } else {
       if (voter.choice === ABSTAIN) {
         lynchAbstentions.inc();
+        voter.abstainCount++;
+        voteLog.push({ day, voterId: voter.id, targetId: null });
+      } else {
+        voter.everMissedVote = true;
       }
       if (options.lynchAttempt < 2) {
         voter.nonVoteCount++;
@@ -160,6 +203,17 @@ export function resolveLynchVotes(players: Player[], options: LynchOptions): Lyn
 
   const maxVotes = Math.max(0, ...players.map((p) => p.votes));
   const tied = players.filter((p) => p.votes === maxVotes && maxVotes > 0);
+
+  // Mission-mode tracking: did this round's vote match whoever ended up with the most votes -
+  // regardless of whether that round actually results in a lynch (a tie, a Prince/Judge save).
+  if (maxVotes > 0) {
+    const topTargetIds = new Set(tied.map((p) => p.id));
+    for (const voter of alivePlayers(players)) {
+      if (voter.choice === null || voter.choice === ABSTAIN) continue;
+      if (topTargetIds.has(voter.choice)) voter.majorityVoteCount++;
+      else voter.minorityVoteCount++;
+    }
+  }
 
   let lynched: Player | undefined;
   let resolution: LynchResolution;
@@ -192,6 +246,10 @@ export function resolveLynchVotes(players: Player[], options: LynchOptions): Lyn
       const killerIds = alivePlayers(players)
         .filter((p) => p.choice === lynched!.id)
         .map((p) => p.id);
+      for (const killerId of killerIds) {
+        const killer = players.find((p) => p.id === killerId);
+        if (killer) killer.everVotedForLynchedVictim = true;
+      }
       events.push(...killPlayer(players, lynched.id, 'Lynch', { killerIds, isNight: false }));
 
       // Jester lynch victory
@@ -238,5 +296,15 @@ export function resolveLynchVotes(players: Player[], options: LynchOptions): Lyn
     }
   }
 
-  return { resolution, events };
+  // Mission-mode tracking: anyone who was at the top of the tally this round and is still alive
+  // right now escaped it - whether via a tie that wasn't randomly broken, a Prince/Judge save, or
+  // simply not being the one who ended up dying. Checked last, after `killPlayer` above has had
+  // its chance to actually kill the lynched target.
+  if (maxVotes > 0) {
+    for (const p of tied) {
+      if (!p.isDead) p.escapedTopVoteLynchCount++;
+    }
+  }
+
+  return { resolution, events, voteLog };
 }
