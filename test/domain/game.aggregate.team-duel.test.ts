@@ -133,6 +133,29 @@ describe('TeamDuel win condition', () => {
     expect(game.phase).not.toBe('Ended');
   });
 
+  it('ends the game as a draw when both squads are wiped out in the same resolution, instead of never finishing', () => {
+    // Regression test: a night kill and a lynch can land in the same resolution and take the
+    // last member of *both* squads out simultaneously - `checkDuelWinCondition()` used to treat
+    // that as "still contested" (`return null`) rather than "over", so the loop kept scheduling
+    // night after night forever with zero living players on either side. Confirmed via the stress
+    // simulation: real games were observed reaching day 3000+ stuck in this exact state.
+    const game = startedDuelGame(6);
+    for (const p of game.players) p.duelSquad = null;
+    const [a1, a2, a3, b1, b2, b3] = game.players;
+    for (const p of [a1!, a2!, a3!]) p.duelSquad = 'A';
+    for (const p of [b1!, b2!, b3!]) p.duelSquad = 'B';
+    for (const p of game.players) game.killPlayer(p.id, 'Idle', { killerIds: [p.id] });
+
+    const result = game.checkWinCondition();
+
+    expect(result.finished).toBe(true);
+    expect(game.phase).toBe('Ended');
+    expect(result.events.some((e) => e.type === 'DuelMutualWipeout')).toBe(true);
+    // A draw - nobody's on the winning side, `player.won` never gets set for anyone.
+    expect(game.players.every((p) => !p.won)).toBe(true);
+    expect(game.winningTeam).toBeUndefined();
+  });
+
   it('is idempotent once a Duel has already ended', () => {
     const game = startedDuelGame(6);
     for (const p of game.players) p.duelSquad = null;
