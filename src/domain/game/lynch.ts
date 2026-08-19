@@ -90,6 +90,34 @@ export function previewLynchTally(players: readonly Player[]): {
 }
 
 /**
+ * Rolls the Clumsy Guy's 50% chance of fumbling their vote onto a random living player instead
+ * of whoever they actually clicked. Called immediately when the vote is cast (see
+ * `Game.resolveClumsyGuyVote()`), not deferred until the lynch resolves - so `voter.choice`
+ * already holds the true target by the time anything (the live group announcement, the Judge's
+ * pardon-prompt preview, `resolveLynchVotes` below) reads it. No-op for anyone else, or for an
+ * abstain (fumbling never applies to abstains).
+ */
+export function resolveClumsyGuyVote(
+  voter: Player,
+  players: readonly Player[],
+  random: () => number = Math.random,
+): void {
+  if (voter.role !== ROLE_BIT.ClumsyGuy || voter.choice === null || voter.choice === ABSTAIN) {
+    return;
+  }
+  if (Math.floor(random() * 100) < 50) {
+    const original = voter.choice;
+    const alive = players.filter((p) => !p.isDead && p.id !== voter.id);
+    if (alive.length > 0) {
+      voter.choice = alive[Math.floor(random() * alive.length)]!.id;
+    }
+    if (voter.choice === original) voter.clumsyCorrectLynchCount++;
+  } else {
+    voter.clumsyCorrectLynchCount++;
+  }
+}
+
+/**
  * Tallies votes, applies idle-kills for players who failed to vote twice in a
  * row (on the first attempt only), and resolves the lynch. Mutates `players`
  * in place.
@@ -97,22 +125,6 @@ export function previewLynchTally(players: readonly Player[]): {
 export function resolveLynchVotes(players: Player[], options: LynchOptions): LynchResult {
   const events: GameEvent[] = [];
   const random = options.random ?? Math.random;
-
-  // The Clumsy Guy has a 50% chance of fumbling their vote onto a random living player instead
-  for (const voter of alivePlayers(players)) {
-    if (voter.role === ROLE_BIT.ClumsyGuy && voter.choice !== null && voter.choice !== ABSTAIN) {
-      if (Math.floor(random() * 100) < 50) {
-        const original = voter.choice;
-        const alive = players.filter((p) => !p.isDead && p.id !== voter.id);
-        if (alive.length > 0) {
-          voter.choice = alive[Math.floor(random() * alive.length)]!.id;
-        }
-        if (voter.choice === original) voter.clumsyCorrectLynchCount++;
-      } else {
-        voter.clumsyCorrectLynchCount++;
-      }
-    }
-  }
 
   for (const voter of alivePlayers(players)) {
     if (voter.choice !== null && voter.choice !== ABSTAIN) {

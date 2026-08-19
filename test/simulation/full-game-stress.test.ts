@@ -42,7 +42,7 @@ import { Game } from '../../src/domain/game/game.aggregate.js';
 import { ROLE_BIT, ROLE_NAMES, roleName, type RoleName } from '../../src/domain/roles/role.js';
 import { alivePlayers } from '../../src/domain/game/player.js';
 import { getTeamForRole } from '../../src/domain/game/team.js';
-import { GAME_MODES } from '../../src/domain/game/game-mode.js';
+import { GAME_MODES, TEAM_DUEL_MIN_PLAYERS } from '../../src/domain/game/game-mode.js';
 import { GameLoop } from '../../src/infrastructure/telegram/game-loop.js';
 import { getDefaultLocale, loadLocales } from '../../src/infrastructure/i18n/locale-loader.js';
 import { Translator } from '../../src/infrastructure/i18n/translator.js';
@@ -168,6 +168,7 @@ type VotingBias =
 interface SimResult {
   playerCount: number;
   chaos: boolean;
+  mode: string;
   bias: string;
   roles: string[];
   winningTeam?: string;
@@ -175,7 +176,8 @@ interface SimResult {
    * distinguishes "the loop is stuck mid-phase and something silently stopped scheduling more
    * work" (phase !== 'Ended') from "the game finished but nobody was ever marked as winningTeam"
    * (phase === 'Ended', which `checkWinCondition()`'s code shows should be structurally
-   * impossible - `finished: true` is only ever returned alongside a `winningTeam`). */
+   * impossible outside of `TeamDuel` mode - every other mode's `finished: true` is only ever
+   * returned alongside a `winningTeam`; TeamDuel's own win condition never sets one on purpose). */
   finalPhase: string;
   aliveCount: number;
   dayNumber: number;
@@ -251,6 +253,11 @@ async function runOneGame(
 
   const gameManager = new GameManager();
   const selectedMode = GAME_MODES[randomInt(GAME_MODES.length)]!;
+  // TeamDuel needs an even headcount of at least TEAM_DUEL_MIN_PLAYERS - round the campaign's
+  // randomly-generated count up to fit rather than letting Game.start() reject it outright.
+  if (selectedMode === 'TeamDuel') {
+    playerCount = Math.max(TEAM_DUEL_MIN_PLAYERS, playerCount + (playerCount % 2));
+  }
   const game: Game = gameManager.create(chatId, {
     mode: selectedMode,
     minPlayers: 5,
@@ -377,6 +384,7 @@ async function runOneGame(
   return {
     playerCount,
     chaos,
+    mode: selectedMode,
     bias: bias.kind === 'targetRole' ? `targetRole:${bias.role}` : bias.kind,
     roles,
     ...(winningTeam !== undefined ? { winningTeam } : {}),
@@ -478,7 +486,12 @@ describe('full game stress simulation', () => {
   it(`summary: ${totalGames} games across ${campaigns.length} voting strategies played with no crash, no stall, and a winner every time`, () => {
     const crashes = results.filter((r) => r.crashed);
     const stalls = results.filter((r) => r.stalled);
-    const noWinner = results.filter((r) => !r.crashed && !r.stalled && !r.winningTeam);
+    // TeamDuel deliberately never sets `game.winningTeam` (see `checkDuelWinCondition()`'s own doc
+    // comment) - no single classic Team "wins" a duel, `player.won` is the authoritative signal
+    // instead - so it's excluded from this otherwise-universal invariant rather than violating it.
+    const noWinner = results.filter(
+      (r) => !r.crashed && !r.stalled && !r.winningTeam && r.mode !== 'TeamDuel',
+    );
     const missingRoles = ROLE_NAMES.filter((name) => !seenRoles.has(name));
 
     const winTeamCounts = new Map<string, number>();
@@ -513,7 +526,7 @@ describe('full game stress simulation', () => {
         }),
         ...stalls.map(
           (c) =>
-            `  STALL bias=${c.bias} size=${c.playerCount} chaos=${c.chaos} roles=[${c.roles.join(',')}]`,
+            `  STALL bias=${c.bias} size=${c.playerCount} chaos=${c.chaos} mode=${c.mode} roles=[${c.roles.join(',')}]`,
         ),
         ...noWinner.map(
           (c) =>

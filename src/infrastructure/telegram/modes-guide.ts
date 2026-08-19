@@ -101,6 +101,16 @@ const MODES_DATA_FR: Record<GameMode, ModeInfo> = {
       'Chaque joueur reçoit une cible secrète ou un contrat à remplir. Qui éliminera sa cible en premier ?',
     keyRoles: 'Assassin à Gages, Vengeur, Franc-Tireur, Détective, Chasseur de Cultistes.',
   },
+  TeamDuel: {
+    emoji: '⚔️',
+    title: "Mode Duel d'Équipes",
+    command: '/startduel',
+    atmosphere: 'Deux camps humains, une seule équipe survit',
+    description:
+      "Les joueurs sont divisés en deux équipes égales (nombre de joueurs pair obligatoire, 6 minimum). Chaque équipe a un capitaine et peut se concerter en privé avec /equipe suivi d'un message. Les rôles classiques restent en jeu, mais la victoire ne dépend plus des camps habituels : l'équipe qui compte le plus de survivants à la fin l'emporte.",
+    keyRoles:
+      "N'importe quel rôle Village ou Loup-Garou - les rôles solo (Tanneur, Tueur en Série, Pyromane, Culte...) sont désactivés dans ce mode.",
+  },
 };
 
 import type { GameLobbyManager } from './game-lobby.js';
@@ -111,7 +121,7 @@ export function registerModesGuideCommands(bot: Bot, lobby?: GameLobbyManager): 
 
     const title =
       `🎮 <b>MANUEL INTERACTIF DES MODES DE JEU WEREWOLF</b> 🎮\n\n` +
-      `Le bot propose <b>10 modes de jeu uniques</b> ! Chaque mode possède son propre style, son ambiance et sa distribution de rôles.\n\n` +
+      `Le bot propose <b>11 modes de jeu uniques</b> ! Chaque mode possède son propre style, son ambiance et sa distribution de rôles.\n\n` +
       `👇 <i>Cliquez sur n'importe quel mode ci-dessous pour découvrir ses détails, ses rôles phares et la commande pour le lancer :</i>`;
 
     await ctx.reply(title, { parse_mode: 'HTML', reply_markup: keyboard });
@@ -166,7 +176,7 @@ export function registerModesGuideCommands(bot: Bot, lobby?: GameLobbyManager): 
     const keyboard = buildModesKeyboard();
     const title =
       `🎮 <b>MANUEL INTERACTIF DES MODES DE JEU WEREWOLF</b> 🎮\n\n` +
-      `Le bot propose <b>10 modes de jeu uniques</b> ! Cliquez sur un mode ci-dessous pour découvrir ses spécificités :`;
+      `Le bot propose <b>11 modes de jeu uniques</b> ! Cliquez sur un mode ci-dessous pour découvrir ses spécificités :`;
 
     await ctx.answerCallbackQuery();
     await ctx
@@ -190,5 +200,7 @@ function buildModesKeyboard(): InlineKeyboard {
     .text('💥 Anarchie', 'mode_info:Anarchy')
     .row()
     .text('⚔️ Sainte Guerre', 'mode_info:HolyWar')
-    .text('🎯 Assassins', 'mode_info:Assassins');
+    .text('🎯 Assassins', 'mode_info:Assassins')
+    .row()
+    .text('⚔️ Duel d’Équipes', 'mode_info:TeamDuel');
 }

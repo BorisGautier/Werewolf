@@ -313,6 +313,60 @@ describe('GameLobbyManager', () => {
     expect(sendMessage.mock.calls.length).toBeGreaterThanOrEqual(6);
   });
 
+  it('publicly announces the squad draft when a TeamDuel game starts, but not for a normal game', async () => {
+    vi.useFakeTimers();
+    const { lobby, sendMessage, gameManager, groupsStore } = createHarness(100);
+    const chatId = 106n;
+    // Group defaults to a forced 'NORMAL' mode preference in this harness (see fakeGroup) - a
+    // real group only lets /startgame vs /startchaos through via PLAYER_CHOICE, so TeamDuel needs
+    // that here too, or resolveGameMode() would silently downgrade it back to Normal.
+    groupsStore.set(
+      chatId.toString(),
+      fakeGroup(chatId, 'Group', { mode: 'PLAYER_CHOICE', language: 'fr' }),
+    );
+
+    await lobby.startGame(chatId, 'Group', { id: 1n, name: 'Starter' }, 'TeamDuel');
+    for (let i = 2; i <= 6; i++) {
+      await lobby.join(chatId, user(i, `Player${i}`));
+    }
+    expect(gameManager.get(chatId)!.players).toHaveLength(6);
+
+    await lobby.forceStart(chatId, true);
+    await vi.advanceTimersByTimeAsync(1000);
+
+    const squadMsg = sendMessage.mock.calls.find(
+      (call) => typeof call[1] === 'string' && call[1].includes('RÉPARTITION DES ÉQUIPES'),
+    );
+    expect(squadMsg).toBeDefined();
+    const text = squadMsg![1] as string;
+    expect(text).toContain('Équipe A');
+    expect(text).toContain('Équipe B');
+    // Every player's name appears somewhere in the announcement (split across the two squads).
+    for (let i = 1; i <= 6; i++) {
+      const name = i === 1 ? 'Starter' : `Player${i}`;
+      expect(text).toContain(name);
+    }
+  });
+
+  it('never announces a squad draft for a Normal game', async () => {
+    vi.useFakeTimers();
+    const { lobby, sendMessage } = createHarness(100);
+    const chatId = 107n;
+
+    await lobby.startGame(chatId, 'Group', { id: 1n, name: 'Starter' }, 'Normal');
+    for (let i = 2; i <= 5; i++) {
+      await lobby.join(chatId, user(i, `Player${i}`));
+    }
+    await lobby.forceStart(chatId, true);
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(
+      sendMessage.mock.calls.some(
+        (call) => typeof call[1] === 'string' && call[1].includes('RÉPARTITION DES ÉQUIPES'),
+      ),
+    ).toBe(false);
+  });
+
   it('tags community members one message at a time, skipping anyone opted out', async () => {
     vi.useFakeTimers();
     const { lobby, sendMessage, groups, players } = createHarness();

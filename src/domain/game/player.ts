@@ -94,6 +94,14 @@ export interface Player {
 
   changedRolesCount: number;
 
+  /** `TeamDuel` mode only: which squad this player was drafted into - `null` in every other mode.
+   * Deliberately orthogonal to `role`/`team` (the classic Village/Wolf/... alignment): a squad can
+   * (and usually will) mix roles from both sides, that's the whole point of the mode. */
+  duelSquad: 'A' | 'B' | null;
+  /** `TeamDuel` mode only: a purely organizational/honorary marker (see the mode's design notes) -
+   * carries no mechanical power of its own. */
+  isDuelCaptain: boolean;
+
   /** Arsonist mechanic: doused tonight, will burn to death next time the Arsonist sparks. */
   doused: boolean;
   /** Arsonist mechanic: doused and set alight - dies to anyone who visits them, except the Serial Killer. */
@@ -208,6 +216,8 @@ export function createPlayer(
     wasSavedLastNight: false,
     won: false,
     changedRolesCount: 0,
+    duelSquad: null,
+    isDuelCaptain: false,
     doused: false,
     burning: false,
     dugGravesLastNight: 0,
