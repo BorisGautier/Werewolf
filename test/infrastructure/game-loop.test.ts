@@ -194,6 +194,37 @@ describe('GameLoop', () => {
     expect(sendMessage).toHaveBeenCalled();
   });
 
+  it('shows a per-squad survivor breakdown in the night recap for TeamDuel games, instead of the flat alive/dead player list', async () => {
+    const { loop, gameManager, sendMessage } = createHarness();
+    const game = gameManager.create(1n, { mode: 'TeamDuel', minPlayers: 6 });
+    for (let i = 1; i <= 6; i++) game.addPlayer(BigInt(i), `Player${i}`);
+    game.start();
+    for (const p of game.players) {
+      p.role = ROLE_BIT.Villager;
+      p.team = 'Village';
+      p.changedRolesCount = 0;
+    }
+    const squadA = game.players.filter((p) => p.duelSquad === 'A');
+    const squadB = game.players.filter((p) => p.duelSquad === 'B');
+
+    loop.start(game, 42);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000); // night resolves, nobody acted
+
+    const recap = sendMessage.mock.calls.find(
+      (call) => typeof call[1] === 'string' && call[1].includes('Night 1 Recap'),
+    );
+    expect(recap).toBeDefined();
+    const text = recap![1] as string;
+    expect(text).toContain('Squad A');
+    expect(text).toContain(`${squadA.length}/${squadA.length} alive`);
+    expect(text).toContain('Squad B');
+    expect(text).toContain(`${squadB.length}/${squadB.length} alive`);
+    for (const p of [...squadA, ...squadB]) {
+      expect(text).toContain(mention(p.id, p.name));
+    }
+  });
+
   it("sends the dying player's approved gif alongside the night-kill announcement, when a gif pack repository is wired in", async () => {
     const getApprovedFileId = vi.fn(async () => 'FILE_ID_123');
     const gifPacks = {
@@ -867,6 +898,165 @@ describe('GameLoop', () => {
         (call) => typeof call[1] === 'string' && call[1].includes('voted to lynch'),
       ),
     ).toBe(false);
+  });
+
+  it("immediately reveals a Clumsy Guy's real (possibly fumbled) target the instant they vote, not what they clicked", async () => {
+    const { loop, gameManager, sendMessage } = createHarness();
+    const game = dealtGame(gameManager);
+    const clumsy = game.players[1]!;
+    clumsy.role = ROLE_BIT.ClumsyGuy;
+    clumsy.team = getTeamForRole(ROLE_BIT.ClumsyGuy);
+    const clickedTarget = game.players[2]!; // Villager3
+    const fumbledTarget = game.players[4]!; // Villager5
+
+    loop.start(game, 42);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000); // night resolves
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000); // day resolves, into Lynch
+
+    // Force the 50% fumble to land on `fumbledTarget`: the fumble now rolls right at cast-time
+    // (see `Game.resolveClumsyGuyVote()`), not deferred until the lynch resolves - `random()` is
+    // called once for the fumble chance (< 0.5 fumbles) and once more to pick the new target out
+    // of `[wolf, Villager3, Villager4, Villager5]` (the voter themselves is excluded) - index 3.
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValueOnce(0.1).mockReturnValueOnce(0.9);
+    await loop.handleCallback(
+      clumsy.id,
+      game.chatId,
+      `vote:${game.dayNumber}:${clickedTarget.id.toString()}`,
+    );
+    randomSpy.mockRestore();
+
+    expect(clumsy.choice).toBe(fumbledTarget.id);
+    expect(
+      sendMessage.mock.calls.some(
+        (call) =>
+          typeof call[1] === 'string' &&
+          call[1] ===
+            `${mention(clumsy.id, clumsy.name)} voted to lynch ${mention(fumbledTarget.id, fumbledTarget.name)}.`,
+      ),
+    ).toBe(true);
+    expect(
+      sendMessage.mock.calls.some(
+        (call) =>
+          typeof call[1] === 'string' &&
+          call[1] ===
+            `${mention(clumsy.id, clumsy.name)} voted to lynch ${mention(clickedTarget.id, clickedTarget.name)}.`,
+      ),
+    ).toBe(false);
+  });
+
+  it('still announces an abstaining Clumsy Guy immediately, since the fumble mechanic never applies to abstains', async () => {
+    const { loop, gameManager, sendMessage } = createHarness();
+    const game = dealtGame(gameManager);
+    const clumsy = game.players[1]!;
+    clumsy.role = ROLE_BIT.ClumsyGuy;
+    clumsy.team = getTeamForRole(ROLE_BIT.ClumsyGuy);
+
+    loop.start(game, 42);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000);
+
+    await loop.handleCallback(clumsy.id, game.chatId, `vote:${game.dayNumber}:abstain`);
+
+    expect(
+      sendMessage.mock.calls.some(
+        (call) =>
+          typeof call[1] === 'string' &&
+          call[1] === `${mention(clumsy.id, clumsy.name)} voted to abstain.`,
+      ),
+    ).toBe(true);
+  });
+
+  it("suppresses a Clumsy Guy's vote reveal under a secret lynch, same as any other vote", async () => {
+    const { loop, gameManager, sendMessage, group } = createHarness();
+    group.secretLynch = true;
+    const game = dealtGame(gameManager);
+    const clumsy = game.players[1]!;
+    clumsy.role = ROLE_BIT.ClumsyGuy;
+    clumsy.team = getTeamForRole(ROLE_BIT.ClumsyGuy);
+    const target = game.players[2]!;
+
+    loop.start(game, 42);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000);
+
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValueOnce(0.9); // no fumble
+    await loop.handleCallback(
+      clumsy.id,
+      game.chatId,
+      `vote:${game.dayNumber}:${target.id.toString()}`,
+    );
+    randomSpy.mockRestore();
+
+    expect(
+      sendMessage.mock.calls.some(
+        (call) => typeof call[1] === 'string' && call[1].includes('voted to lynch'),
+      ),
+    ).toBe(false);
+  });
+
+  it("still resolves and announces a Clumsy Guy's own vote correctly even though they end up lynched that same round", async () => {
+    const { loop, gameManager, sendMessage } = createHarness();
+    const game = gameManager.create(1n, { mode: 'Normal', minPlayers: 6 });
+    game.addPlayer(1n, 'Wolfy');
+    game.addPlayer(2n, 'Clumsy');
+    game.addPlayer(3n, 'Villager3');
+    game.addPlayer(4n, 'Villager4');
+    game.addPlayer(5n, 'Villager5');
+    game.addPlayer(6n, 'Villager6');
+    game.start();
+    for (const p of game.players) {
+      p.role = ROLE_BIT.Villager;
+      p.team = 'Village';
+      p.changedRolesCount = 0;
+    }
+    game.players[0]!.role = ROLE_BIT.Wolf;
+    game.players[0]!.team = 'Wolf';
+    const clumsy = game.players[1]!;
+    clumsy.role = ROLE_BIT.ClumsyGuy;
+    clumsy.team = getTeamForRole(ROLE_BIT.ClumsyGuy);
+    const clumsyTarget = game.players[2]!;
+
+    loop.start(game, 42);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000); // night resolves
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000); // day resolves, into Lynch
+
+    // Everyone else piles onto the Clumsy Guy; the Clumsy Guy votes for someone else entirely -
+    // their own vote still resolves and announces normally, right at cast-time, regardless of
+    // what happens to them later this same round.
+    for (const voter of game.players.filter((p) => !p.isDead && p.id !== clumsy.id)) {
+      await loop.handleCallback(
+        voter.id,
+        game.chatId,
+        `vote:${game.dayNumber}:${clumsy.id.toString()}`,
+      );
+    }
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValueOnce(0.9); // no fumble - real target stays clumsyTarget
+    await loop.handleCallback(
+      clumsy.id,
+      game.chatId,
+      `vote:${game.dayNumber}:${clumsyTarget.id.toString()}`,
+    );
+    randomSpy.mockRestore();
+
+    expect(
+      sendMessage.mock.calls.some(
+        (call) =>
+          typeof call[1] === 'string' &&
+          call[1] ===
+            `${mention(clumsy.id, clumsy.name)} voted to lynch ${mention(clumsyTarget.id, clumsyTarget.name)}.`,
+      ),
+    ).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(5000); // lynch resolves - the Clumsy Guy is executed
+    expect(clumsy.isDead).toBe(true);
   });
 
   it('rejects a vote button left over from an earlier day, even while the game is in Lynch again today', async () => {

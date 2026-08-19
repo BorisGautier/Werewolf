@@ -15,7 +15,7 @@
 import { Bot, InlineKeyboard } from 'grammy';
 import { GameAlreadyRunningError, GameManager } from '../../application/game-manager.js';
 import { Game, GameError } from '../../domain/game/game.aggregate.js';
-import type { GameMode } from '../../domain/game/game-mode.js';
+import { TEAM_DUEL_MIN_PLAYERS, type GameMode } from '../../domain/game/game-mode.js';
 import { ROLE_BIT, ROLE_META, roleName } from '../../domain/roles/role.js';
 import { SYNTHETIC_BOT_ID_FLOOR, type Player } from '../../domain/game/player.js';
 import { WOLF_ROLES } from '../../domain/game/game-balancing.js';
@@ -501,6 +501,25 @@ export class GameLobbyManager {
     await this.send(chatId, language, 'PlayersInGame', game.players.length, names);
   }
 
+  /** `TeamDuel` only: publicly announces who's on Squad A vs Squad B (names, no roles) right
+   * after the game starts - `notifyRole()`'s squad summary is PM-only (each player only learns
+   * their own squad), so without this, nobody watching the group chat - a curious teammate,
+   * anyone spectating - has any way to know how the two squads are split. */
+  private async announceDuelSquads(chatId: bigint, game: Game, language: string): Promise<void> {
+    const squadA = game.players.filter((p) => p.duelSquad === 'A');
+    const squadB = game.players.filter((p) => p.duelSquad === 'B');
+    const nameOf = (p: Player) =>
+      mentionOrPlain(p.id, p.name, p.isBot) + (p.isDuelCaptain ? ' 👑' : '');
+    const namesA = squadA.map(nameOf).join(', ');
+    const namesB = squadB.map(nameOf).join(', ');
+
+    const text =
+      language === 'fr'
+        ? `⚔️ <b>RÉPARTITION DES ÉQUIPES DU DUEL !</b>\n\n🅰️ <b>Équipe A :</b> ${namesA}\n\n🅱️ <b>Équipe B :</b> ${namesB}\n\nQue le meilleur camp survive ! (👑 = capitaine)`
+        : `⚔️ <b>DUEL SQUAD DRAFT!</b>\n\n🅰️ <b>Squad A:</b> ${namesA}\n\n🅱️ <b>Squad B:</b> ${namesB}\n\nMay the best squad survive! (👑 = captain)`;
+    await this.bot.api.sendMessage(chatNumber(chatId), text, { parse_mode: 'HTML' });
+  }
+
   /**
    * Mirrors `/flee`: removes the player from the joining lobby, or - for a game already in
    * progress - marks them fled (`Game.removePlayer` already implements both, mirroring
@@ -608,7 +627,19 @@ export class GameLobbyManager {
         { chatId: session.chatId.toString(), playerCount: session.game.players.length },
         'Game lobby cancelled — not enough players',
       );
-      await this.send(session.chatId, session.language, 'NotEnoughPlayers');
+      // TeamDuel needs an even headcount to split into two equal squads - a lobby with, say, 7
+      // players has plenty to play a normal game with, so the generic "not enough players"
+      // message would be actively misleading here; it's specifically the odd count that's the
+      // problem, not the total.
+      const isOddTeamDuel =
+        session.game.mode === 'TeamDuel' &&
+        session.game.players.length >= TEAM_DUEL_MIN_PLAYERS &&
+        session.game.players.length % 2 !== 0;
+      await this.send(
+        session.chatId,
+        session.language,
+        isOddTeamDuel ? 'TeamDuelNeedsEvenPlayers' : 'NotEnoughPlayers',
+      );
       this.games.remove(session.chatId);
       return;
     }
@@ -666,6 +697,8 @@ export class GameLobbyManager {
       'Game started, handing off to the night/day loop',
     );
     await this.showPlayers(session.chatId);
+    if (session.game.mode === 'TeamDuel')
+      await this.announceDuelSquads(session.chatId, session.game, session.language);
 
     // No `StartGame`/`StartChaosGame` gif here on purpose: `gameLoop.start()` below immediately
     // kicks off the first night, which sends its own `NightStart` gif moments later - sending both
@@ -674,7 +707,13 @@ export class GameLobbyManager {
   }
 
   private async notifyRole(
-    player: { id: bigint; role: bigint; name: string },
+    player: {
+      id: bigint;
+      role: bigint;
+      name: string;
+      duelSquad?: 'A' | 'B' | null;
+      isDuelCaptain?: boolean;
+    },
     game: Game,
     language: string,
   ): Promise<boolean> {
@@ -764,7 +803,29 @@ export class GameLobbyManager {
       teamInfo = describeBeholderReveal(player.id, game.players, language);
     }
 
-    const roleMsg = `${this.t.translate(language, 'YourRoleIs', `${emoji} ${displayName}`)}${description}${teamInfo}`;
+    // Orthogonal to the role-based branches above: every player in a TeamDuel game has a squad,
+    // regardless of what role they were dealt (a Wolf pack member could well be on the same squad
+    // as the Villager they're about to eat's rival).
+    let duelInfo = '';
+    if (player.duelSquad) {
+      const squadmates = game.players.filter(
+        (p) => p.id !== player.id && p.duelSquad === player.duelSquad,
+      );
+      const names = squadmates
+        .map((p) => mentionOrPlain(p.id, p.name, p.isBot) + (p.isDuelCaptain ? ' 👑' : ''))
+        .join('\n• ');
+      const captainNote = player.isDuelCaptain
+        ? language === 'fr'
+          ? '\n👑 Vous êtes le Capitaine de cette équipe.'
+          : '\n👑 You are this squad’s Captain.'
+        : '';
+      duelInfo =
+        language === 'fr'
+          ? `\n\n⚔️ <b>Vous faites partie de l'Équipe ${player.duelSquad} !</b>${captainNote}\nCoéquipiers :\n• ${names}\nUtilisez /equipe suivi de votre message pour leur parler en privé. L'équipe avec le plus de survivants à la fin gagne !`
+          : `\n\n⚔️ <b>You're on Squad ${player.duelSquad}!</b>${captainNote}\nSquadmates:\n• ${names}\nUse /equipe followed by your message to talk to them privately. Whichever squad has the most survivors at the end wins!`;
+    }
+
+    const roleMsg = `${this.t.translate(language, 'YourRoleIs', `${emoji} ${displayName}`)}${description}${teamInfo}${duelInfo}`;
 
     try {
       await this.bot.api.sendMessage(chatNumber(telegramId), roleMsg, { parse_mode: 'HTML' });

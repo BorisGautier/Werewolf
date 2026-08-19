@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { ROLE_BIT } from '../../src/domain/roles/role.js';
 import { createPlayer } from '../../src/domain/game/player.js';
-import { SKIP_VOTE, resetLynchState, resolveLynchVotes } from '../../src/domain/game/lynch.js';
+import {
+  SKIP_VOTE,
+  resetLynchState,
+  resolveClumsyGuyVote,
+  resolveLynchVotes,
+} from '../../src/domain/game/lynch.js';
 
 function villagers(n: number, startId = 1) {
   return Array.from({ length: n }, (_, i) =>
@@ -131,67 +136,6 @@ describe('resolveLynchVotes', () => {
     expect(idler.isDead).toBe(false);
   });
 
-  it("fumbles the Clumsy Guy's vote onto a random living player on a successful roll", () => {
-    const clumsy = createPlayer(1n, 'Clumsy', ROLE_BIT.ClumsyGuy, 'Village');
-    const intended = createPlayer(2n, 'Intended', ROLE_BIT.Villager, 'Village');
-    const other = createPlayer(3n, 'Other', ROLE_BIT.Villager, 'Village');
-    clumsy.choice = intended.id;
-
-    // First roll (fumble check, 0 < 50) triggers the fumble; second roll picks the last of the two
-    // *other* living players (index 1 of [intended, other], i.e. "other" - self is excluded).
-    let call = 0;
-    const random = () => (call++ === 0 ? 0 : 0.99);
-    resolveLynchVotes([clumsy, intended, other], { lynchAttempt: 1, random });
-
-    expect(clumsy.choice).toBe(other.id);
-  });
-
-  it("does not fumble the Clumsy Guy's vote on a failed roll", () => {
-    const clumsy = createPlayer(1n, 'Clumsy', ROLE_BIT.ClumsyGuy, 'Village');
-    const intended = createPlayer(2n, 'Intended', ROLE_BIT.Villager, 'Village');
-    clumsy.choice = intended.id;
-
-    resolveLynchVotes([clumsy, intended], { lynchAttempt: 1, random: () => 0.99 });
-
-    expect(clumsy.choice).toBe(intended.id);
-  });
-
-  it('never fumbles an abstaining Clumsy Guy', () => {
-    const clumsy = createPlayer(1n, 'Clumsy', ROLE_BIT.ClumsyGuy, 'Village');
-    createPlayer(2n, 'Other', ROLE_BIT.Villager, 'Village');
-    clumsy.choice = SKIP_VOTE;
-
-    resolveLynchVotes([clumsy], { lynchAttempt: 1, random: () => 0 });
-
-    expect(clumsy.choice).toBe(SKIP_VOTE);
-  });
-
-  it("counts a Clumsy Guy's vote as correct on a no-fumble roll, and on a fumble that lands back on the same target", () => {
-    const clumsy = createPlayer(1n, 'Clumsy', ROLE_BIT.ClumsyGuy, 'Village');
-    const target = createPlayer(2n, 'T', ROLE_BIT.Villager, 'Village');
-    clumsy.choice = target.id;
-
-    resolveLynchVotes([clumsy, target], { lynchAttempt: 1, random: () => 0.99 }); // no fumble
-    expect(clumsy.clumsyCorrectLynchCount).toBe(1);
-
-    clumsy.choice = target.id;
-    resolveLynchVotes([clumsy, target], { lynchAttempt: 1, random: () => 0 }); // fumbles, only target to pick from
-    expect(clumsy.clumsyCorrectLynchCount).toBe(2);
-  });
-
-  it("does not count a Clumsy Guy's vote as correct when a fumble lands on someone else", () => {
-    const clumsy = createPlayer(1n, 'Clumsy', ROLE_BIT.ClumsyGuy, 'Village');
-    const intended = createPlayer(2n, 'Intended', ROLE_BIT.Villager, 'Village');
-    const other = createPlayer(3n, 'Other', ROLE_BIT.Villager, 'Village');
-    clumsy.choice = intended.id;
-
-    let call = 0;
-    const random = () => (call++ === 0 ? 0 : 0.99); // fumble, then pick the last of the two others
-    resolveLynchVotes([clumsy, intended, other], { lynchAttempt: 1, random });
-
-    expect(clumsy.clumsyCorrectLynchCount).toBe(0);
-  });
-
   it('marks a lynch target as hasBeenVoted the moment anyone votes for them', () => {
     const voter = createPlayer(1n, 'V', ROLE_BIT.Villager, 'Village');
     const target = createPlayer(2n, 'T', ROLE_BIT.Villager, 'Village');
@@ -253,6 +197,82 @@ describe('resolveLynchVotes', () => {
     resolveLynchVotes([tanner, v1, v2, v3], { lynchAttempt: 1 });
 
     expect(tanner.tannerOverkill).toBe(false);
+  });
+});
+
+describe('resolveClumsyGuyVote', () => {
+  // Rolled immediately when a Clumsy Guy casts a vote (see `Game.resolveClumsyGuyVote()`) -
+  // not deferred until `resolveLynchVotes()` tallies at the end of the voting window - so the
+  // group's live "X voted to lynch Y" announcement always names the real target.
+  it("fumbles the Clumsy Guy's vote onto a random living player on a successful roll", () => {
+    const clumsy = createPlayer(1n, 'Clumsy', ROLE_BIT.ClumsyGuy, 'Village');
+    const intended = createPlayer(2n, 'Intended', ROLE_BIT.Villager, 'Village');
+    const other = createPlayer(3n, 'Other', ROLE_BIT.Villager, 'Village');
+    clumsy.choice = intended.id;
+
+    // First roll (fumble check, 0 < 50) triggers the fumble; second roll picks the last of the two
+    // *other* living players (index 1 of [intended, other], i.e. "other" - self is excluded).
+    let call = 0;
+    const random = () => (call++ === 0 ? 0 : 0.99);
+    resolveClumsyGuyVote(clumsy, [clumsy, intended, other], random);
+
+    expect(clumsy.choice).toBe(other.id);
+  });
+
+  it("does not fumble the Clumsy Guy's vote on a failed roll", () => {
+    const clumsy = createPlayer(1n, 'Clumsy', ROLE_BIT.ClumsyGuy, 'Village');
+    const intended = createPlayer(2n, 'Intended', ROLE_BIT.Villager, 'Village');
+    clumsy.choice = intended.id;
+
+    resolveClumsyGuyVote(clumsy, [clumsy, intended], () => 0.99);
+
+    expect(clumsy.choice).toBe(intended.id);
+  });
+
+  it('never fumbles an abstaining Clumsy Guy', () => {
+    const clumsy = createPlayer(1n, 'Clumsy', ROLE_BIT.ClumsyGuy, 'Village');
+    const other = createPlayer(2n, 'Other', ROLE_BIT.Villager, 'Village');
+    clumsy.choice = SKIP_VOTE;
+
+    resolveClumsyGuyVote(clumsy, [clumsy, other], () => 0);
+
+    expect(clumsy.choice).toBe(SKIP_VOTE);
+  });
+
+  it('is a no-op for anyone who is not a Clumsy Guy', () => {
+    const villager = createPlayer(1n, 'V', ROLE_BIT.Villager, 'Village');
+    const target = createPlayer(2n, 'T', ROLE_BIT.Villager, 'Village');
+    villager.choice = target.id;
+
+    resolveClumsyGuyVote(villager, [villager, target], () => 0);
+
+    expect(villager.choice).toBe(target.id);
+  });
+
+  it("counts a Clumsy Guy's vote as correct on a no-fumble roll, and on a fumble that lands back on the same target", () => {
+    const clumsy = createPlayer(1n, 'Clumsy', ROLE_BIT.ClumsyGuy, 'Village');
+    const target = createPlayer(2n, 'T', ROLE_BIT.Villager, 'Village');
+    clumsy.choice = target.id;
+
+    resolveClumsyGuyVote(clumsy, [clumsy, target], () => 0.99); // no fumble
+    expect(clumsy.clumsyCorrectLynchCount).toBe(1);
+
+    clumsy.choice = target.id;
+    resolveClumsyGuyVote(clumsy, [clumsy, target], () => 0); // fumbles, only target to pick from
+    expect(clumsy.clumsyCorrectLynchCount).toBe(2);
+  });
+
+  it("does not count a Clumsy Guy's vote as correct when a fumble lands on someone else", () => {
+    const clumsy = createPlayer(1n, 'Clumsy', ROLE_BIT.ClumsyGuy, 'Village');
+    const intended = createPlayer(2n, 'Intended', ROLE_BIT.Villager, 'Village');
+    const other = createPlayer(3n, 'Other', ROLE_BIT.Villager, 'Village');
+    clumsy.choice = intended.id;
+
+    let call = 0;
+    const random = () => (call++ === 0 ? 0 : 0.99); // fumble, then pick the last of the two others
+    resolveClumsyGuyVote(clumsy, [clumsy, intended, other], random);
+
+    expect(clumsy.clumsyCorrectLynchCount).toBe(0);
   });
 });
 

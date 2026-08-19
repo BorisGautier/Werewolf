@@ -52,7 +52,7 @@ import {
   nightTargets,
 } from './role-menus.js';
 import { buildEndGameSummary } from './end-game-summary.js';
-import { calculateGamePoints } from '../../domain/scoring.js';
+import { calculateGamePoints, computeDuelBonus } from '../../domain/scoring.js';
 import { calculateRolePerformanceBonus } from '../../domain/role-performance.js';
 import { previewLynchTally } from '../../domain/game/lynch.js';
 import {
@@ -264,13 +264,38 @@ export class GameLoop {
    * where things stand before the day begins. */
   private async sendNightRecap(game: Game, group: GroupWithConfig): Promise<void> {
     const language = group.language;
-    const names = game.players
-      .map((p) => {
-        const status = this.t.translate(language, p.isDead ? 'Dead' : 'Alive');
-        return `${mentionOrPlain(p.id, p.name, p.isBot)} (${status})`;
-      })
-      .join('\n');
+    const names =
+      game.mode === 'TeamDuel'
+        ? this.buildDuelSquadRecap(game, language)
+        : game.players
+            .map((p) => {
+              const status = this.t.translate(language, p.isDead ? 'Dead' : 'Alive');
+              return `${mentionOrPlain(p.id, p.name, p.isBot)} (${status})`;
+            })
+            .join('\n');
     await this.send(game.chatId, language, 'NightRecap', game.dayNumber, names);
+  }
+
+  /** TeamDuel's own take on `sendNightRecap()`'s alive/dead list: grouped by squad, each with a
+   * live survivor count, so the village doesn't have to mentally sort the flat player list back
+   * into squads to see how the duel is actually shaping up. */
+  private buildDuelSquadRecap(game: Game, language: string): string {
+    const squadA = game.players.filter((p) => p.duelSquad === 'A');
+    const squadB = game.players.filter((p) => p.duelSquad === 'B');
+    const aliveCount = (squad: Player[]) => squad.filter((p) => !p.isDead).length;
+    const line = (p: Player) => {
+      const status = this.t.translate(language, p.isDead ? 'Dead' : 'Alive');
+      return `${mentionOrPlain(p.id, p.name, p.isBot)}${p.isDuelCaptain ? ' 👑' : ''} (${status})`;
+    };
+    const labelA =
+      language === 'fr'
+        ? `🅰️ <b>Équipe A</b> — ${aliveCount(squadA)}/${squadA.length} en vie`
+        : `🅰️ <b>Squad A</b> — ${aliveCount(squadA)}/${squadA.length} alive`;
+    const labelB =
+      language === 'fr'
+        ? `🅱️ <b>Équipe B</b> — ${aliveCount(squadB)}/${squadB.length} en vie`
+        : `🅱️ <b>Squad B</b> — ${aliveCount(squadB)}/${squadB.length} alive`;
+    return [labelA, ...squadA.map(line), '', labelB, ...squadB.map(line)].join('\n');
   }
 
   private nightSeconds(game: Game, group: GroupWithConfig): number {
@@ -863,6 +888,7 @@ export class GameLoop {
             players: game.players,
             eventBatches: batches,
           });
+          const duelBonus = computeDuelBonus(game.players, batches);
           const scores = calculateGamePoints(
             realPlayers,
             game.winningTeam ?? null,
@@ -870,6 +896,7 @@ export class GameLoop {
             undefined,
             earlyDeathIds,
             rolePerformanceBonus,
+            duelBonus,
           );
           const grp = await this.groups.getOrCreate(game.chatId, null, null);
           const lang = grp.language;
@@ -1252,6 +1279,11 @@ export class GameLoop {
     const result = this.applyChoice(game, playerId, 'choice', rawTarget);
     if (result !== 'ChoiceRecorded') return result;
     game.registerLynchVoteCast(playerId);
+    // The Clumsy Guy's 50% chance of fumbling onto a random living player is rolled immediately,
+    // right here at cast-time (no-op for anyone else, or for an abstain) - so `voter.choice`
+    // already holds their real target by the time the announcement below reads it, instead of
+    // deferring the reveal until the lynch resolves.
+    game.resolveClumsyGuyVote(playerId);
 
     const group = await this.groups.getOrCreate(game.chatId, null, null);
     // A Howler Wolf's howl (see `Game.anonymousLynchVotes`) forces the same anonymity as the
@@ -1273,7 +1305,9 @@ export class GameLoop {
         mentionOrPlain(voter.id, voter.name, voter.isBot),
       );
     } else {
-      const target = game.players.find((p) => p.id === BigInt(rawTarget));
+      // Read back from `voter.choice` rather than `rawTarget` - for a Clumsy Guy whose fumble
+      // just landed, they now differ, and it's the real (resolved) target that must be announced.
+      const target = game.players.find((p) => p.id === voter.choice);
       if (target)
         await this.send(
           game.chatId,

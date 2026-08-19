@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { calculateGamePoints } from '../../src/domain/scoring.js';
+import { calculateGamePoints, computeDuelBonus } from '../../src/domain/scoring.js';
 import type { Player } from '../../src/domain/game/player.js';
+import type { GameEvent } from '../../src/domain/game/game-event.js';
 import type { Team } from '../../src/domain/game/team.js';
 import { ROLE_BIT } from '../../src/domain/roles/role.js';
 
-function createMockPlayer(id: bigint, name: string, team: Team, isDead = false): Player {
+function createMockPlayer(
+  id: bigint,
+  name: string,
+  team: Team,
+  isDead = false,
+  duelSquad: 'A' | 'B' | null = null,
+): Player {
   return {
     id,
     name,
@@ -12,6 +19,7 @@ function createMockPlayer(id: bigint, name: string, team: Team, isDead = false):
     team,
     isDead,
     isBot: false,
+    duelSquad,
   } as unknown as Player;
 }
 
@@ -100,5 +108,63 @@ describe('calculateGamePoints', () => {
 
     expect(result.breakdown.rolePerformance).toBe(4);
     expect(result.points).toBe(29); // 5 participation + 20 living village win + 4 role performance
+  });
+
+  it('adds the TeamDuel bonus on top of the generic winner score', () => {
+    const p1 = createMockPlayer(1n, 'Alice', 'Village', false);
+    const duelBonus = new Map<bigint, number>([[1n, 25]]);
+
+    // winningTeam is null for a Duel win (see calculateGamePoints's doc comment) - player.won
+    // being true is what makes them a winner here, same as a real TeamDuel game would produce.
+    const p1Winner = { ...p1, won: true } as unknown as Player;
+    const results = calculateGamePoints(
+      [p1Winner],
+      null,
+      null,
+      undefined,
+      undefined,
+      undefined,
+      duelBonus,
+    );
+    const result = results[0]!;
+
+    expect(result.breakdown.duelBonus).toBe(25);
+    expect(result.points).toBe(50); // 5 participation + 20 generic winner + 25 duel bonus
+  });
+});
+
+describe('computeDuelBonus', () => {
+  function duelWonBatch(squad: 'A' | 'B', survivorIds: bigint[]): GameEvent[][] {
+    return [[{ type: 'DuelSquadWon', squad, survivorIds }]];
+  }
+
+  it('is empty for a game that never emitted a DuelSquadWon event', () => {
+    const p1 = createMockPlayer(1n, 'Alice', 'Village', false, 'A');
+    expect(computeDuelBonus([p1], [[]])).toEqual(new Map());
+  });
+
+  it('gives every winning-squad member a base bonus, higher for survivors than the fallen', () => {
+    const survivor = createMockPlayer(1n, 'Survivor', 'Village', false, 'A');
+    const fallen = createMockPlayer(2n, 'Fallen', 'Wolf', true, 'A');
+    const loser = createMockPlayer(3n, 'Loser', 'Village', true, 'B');
+
+    const bonus = computeDuelBonus([survivor, fallen, loser], duelWonBatch('A', [survivor.id]));
+
+    expect(bonus.get(survivor.id)).toBe(20); // alive: base 20, margin = 5*(1-1) = 0
+    expect(bonus.get(fallen.id)).toBe(8); // dead: base 8, same margin
+    expect(bonus.has(loser.id)).toBe(false); // not on the winning squad at all
+  });
+
+  it('scales the margin bonus with how many survivors the winning squad ended with', () => {
+    const s1 = createMockPlayer(1n, 'S1', 'Village', false, 'A');
+    const s2 = createMockPlayer(2n, 'S2', 'Wolf', false, 'A');
+    const s3 = createMockPlayer(3n, 'S3', 'Village', false, 'A');
+
+    const bonus = computeDuelBonus([s1, s2, s3], duelWonBatch('A', [s1.id, s2.id, s3.id]));
+
+    // base 20 + margin 5*(3-1)=10 => 30 each
+    expect(bonus.get(s1.id)).toBe(30);
+    expect(bonus.get(s2.id)).toBe(30);
+    expect(bonus.get(s3.id)).toBe(30);
   });
 });
