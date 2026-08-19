@@ -5,6 +5,7 @@ import type { Bot } from 'grammy';
 import type { PrismaClient } from '@prisma/client';
 import type { GameManager } from '../../application/game-manager.js';
 import type { Logger } from '../logging/logger.js';
+import { SYNTHETIC_BOT_ID_CEILING, SYNTHETIC_BOT_ID_FLOOR } from '../../domain/game/player.js';
 import { AdminAuthManager } from './admin-auth.js';
 import { DatabaseBackupManager } from '../persistence/db-backup.js';
 import {
@@ -226,6 +227,10 @@ export class AdminServer {
         await this.handleGameAction(res, chatIdStr, body);
       } else if (pathname === '/api/admin/players' && req.method === 'GET') {
         await this.handleGetPlayers(res, url);
+      } else if (pathname === '/api/admin/leaderboard' && req.method === 'GET') {
+        await this.handleGetLeaderboard(res, url);
+      } else if (pathname === '/api/admin/game-history' && req.method === 'GET') {
+        await this.handleGetGameHistory(res, url);
       } else if (
         pathname.startsWith('/api/admin/players/') &&
         pathname.endsWith('/ban') &&
@@ -252,6 +257,10 @@ export class AdminServer {
         await this.handleGroupApprove(res, chatIdStr, body);
       } else if (pathname === '/api/admin/backups' && req.method === 'GET') {
         await this.handleGetBackups(res);
+      } else if (pathname === '/api/admin/db-stats' && req.method === 'GET') {
+        await this.handleGetDbStats(res);
+      } else if (pathname === '/api/admin/game-analytics' && req.method === 'GET') {
+        await this.handleGetGameAnalytics(res);
       } else if (pathname === '/api/admin/backups/create' && req.method === 'POST') {
         await this.handleCreateBackup(res);
       } else if (pathname === '/api/admin/backups/restore' && req.method === 'POST') {
@@ -277,6 +286,9 @@ export class AdminServer {
         const id = parseInt(idStr, 10);
         const body = await this.readJsonBody(req);
         await this.handleUpdateTournamentStatus(res, id, body);
+      } else if (pathname.match(/^\/api\/admin\/tournaments\/(\d+)$/) && req.method === 'GET') {
+        const idStr = pathname.split('/')[4] ?? '0';
+        await this.handleGetTournamentDetails(res, parseInt(idStr, 10));
       } else {
         this.sendJson(res, 404, { success: false, error: 'Endpoint not found' });
       }
@@ -415,6 +427,117 @@ export class AdminServer {
     }
   }
 
+  /** Full, paginated leaderboard - unlike `/api/admin/players` (recent registrations, for
+   * moderation) this is ranked by points, mirroring `PlayerRepository.getTopPlayers()`'s bot
+   * exclusion. */
+  private async handleGetLeaderboard(res: ServerResponse, url: URL): Promise<void> {
+    if (!this.prisma) {
+      this.sendJson(res, 200, { success: true, players: [], total: 0, page: 0, pageSize: 25 });
+      return;
+    }
+    try {
+      const pageSize = 25;
+      const page = Math.max(0, parseInt(url.searchParams.get('page') ?? '0', 10) || 0);
+      const where = {
+        OR: [
+          { telegramId: { lte: SYNTHETIC_BOT_ID_FLOOR } },
+          { telegramId: { gt: SYNTHETIC_BOT_ID_CEILING } },
+        ],
+      };
+      const [players, total] = await Promise.all([
+        this.prisma.player.findMany({
+          where,
+          orderBy: [{ points: 'desc' }, { gamesWon: 'desc' }],
+          skip: page * pageSize,
+          take: pageSize,
+        }),
+        this.prisma.player.count({ where }),
+      ]);
+
+      this.sendJson(res, 200, {
+        success: true,
+        page,
+        pageSize,
+        total,
+        players: players.map((p, idx) => ({
+          rank: page * pageSize + idx + 1,
+          telegramId: p.telegramId.toString(),
+          username: p.username,
+          displayName: p.displayName,
+          points: p.points,
+          gamesPlayed: p.gamesPlayed,
+          gamesWon: p.gamesWon,
+          donationLevel: p.donationLevel,
+        })),
+      });
+    } catch (err) {
+      this.logger?.warn({ err }, '[AdminServer] Error fetching leaderboard');
+      this.sendJson(res, 200, { success: true, players: [], total: 0, page: 0, pageSize: 25 });
+    }
+  }
+
+  /** Paginated history of every finished game, with its full roster (role, team, survived, won)
+   * - unlike `/api/admin/games` (currently active, in-memory sessions only). */
+  private async handleGetGameHistory(res: ServerResponse, url: URL): Promise<void> {
+    if (!this.prisma) {
+      this.sendJson(res, 200, { success: true, games: [], total: 0, page: 0, pageSize: 20 });
+      return;
+    }
+    try {
+      const pageSize = 20;
+      const page = Math.max(0, parseInt(url.searchParams.get('page') ?? '0', 10) || 0);
+      const where = { endedAt: { not: null } };
+      const [games, total] = await Promise.all([
+        this.prisma.game.findMany({
+          where,
+          orderBy: { endedAt: 'desc' },
+          skip: page * pageSize,
+          take: pageSize,
+          include: {
+            group: { select: { title: true, telegramId: true } },
+            players: {
+              include: {
+                player: { select: { telegramId: true, username: true, displayName: true } },
+              },
+            },
+          },
+        }),
+        this.prisma.game.count({ where }),
+      ]);
+
+      this.sendJson(res, 200, {
+        success: true,
+        page,
+        pageSize,
+        total,
+        games: games.map((g) => ({
+          id: g.id,
+          groupTitle: g.groupTitleSnapshot ?? g.group.title,
+          groupTelegramId: g.group.telegramId.toString(),
+          mode: g.mode,
+          winnerTeam: g.winnerTeam,
+          startedAt: g.startedAt,
+          endedAt: g.endedAt,
+          playerCount: g.players.length,
+          players: g.players.map((gp) => ({
+            name:
+              gp.player.displayName ??
+              (gp.player.username
+                ? '@' + gp.player.username
+                : `#${gp.player.telegramId.toString()}`),
+            role: gp.role,
+            team: gp.team,
+            survived: gp.survived,
+            won: gp.won,
+          })),
+        })),
+      });
+    } catch (err) {
+      this.logger?.warn({ err }, '[AdminServer] Error fetching game history');
+      this.sendJson(res, 200, { success: true, games: [], total: 0, page: 0, pageSize: 20 });
+    }
+  }
+
   private async handlePlayerBan(
     res: ServerResponse,
     telegramIdStr: string,
@@ -511,7 +634,92 @@ export class AdminServer {
       return;
     }
     const tournaments = await this.tournamentRepository.listTournaments();
-    this.sendJson(res, 200, { success: true, tournaments });
+    const repo = this.tournamentRepository;
+    const withStandings = await Promise.all(
+      tournaments.map(async (t) => ({
+        ...t,
+        standings: (await repo.getTeamStandings(t.id)).map((team) => ({
+          id: team.id,
+          name: team.name,
+          totalPoints: team.totalPoints,
+          wins: team.wins,
+          memberCount: team.members.length,
+        })),
+      })),
+    );
+    this.sendJson(res, 200, { success: true, tournaments: withStandings });
+  }
+
+  /** Full drill-down for one tournament: every team's complete roster and a chronological
+   * point-award log per team (its "evolution") - what the dashboard's tournament detail modal
+   * needs, beyond the lightweight standings `handleGetTournaments()` already returns. */
+  private async handleGetTournamentDetails(res: ServerResponse, id: number): Promise<void> {
+    if (!this.tournamentRepository) {
+      this.sendJson(res, 404, { success: false, error: 'Tournament repository not available' });
+      return;
+    }
+    const tournament = await this.tournamentRepository.getTournamentFullDetails(id);
+    if (!tournament) {
+      this.sendJson(res, 404, { success: false, error: 'Tournament not found' });
+      return;
+    }
+
+    // `TournamentTeamMember`/`TournamentPointLog` only carry a bare `playerId` (telegramId) - one
+    // lookup across every distinct id in this tournament gets the display name each needs instead
+    // of falling back to a bare "Player #<id>".
+    const allIds = new Set<bigint>();
+    for (const team of tournament.teams) {
+      for (const m of team.members) allIds.add(m.playerId);
+      for (const log of team.pointLogs) allIds.add(log.playerId);
+    }
+    const nameById = new Map<string, string>();
+    if (this.prisma && allIds.size > 0) {
+      const players = await this.prisma.player.findMany({
+        where: { telegramId: { in: [...allIds] } },
+        select: { telegramId: true, username: true, displayName: true },
+      });
+      for (const p of players) {
+        const label = p.username ? `@${p.username}` : (p.displayName ?? null);
+        if (label) nameById.set(p.telegramId.toString(), label);
+      }
+    }
+    const displayName = (playerId: bigint) =>
+      nameById.get(playerId.toString()) ?? `Joueur #${playerId.toString()}`;
+
+    this.sendJson(res, 200, {
+      success: true,
+      tournament: {
+        id: tournament.id,
+        name: tournament.name,
+        status: tournament.status,
+        maxTeams: tournament.maxTeams,
+        teamSize: tournament.teamSize,
+        totalRounds: tournament.totalRounds,
+        currentRound: tournament.currentRound,
+        createdAt: tournament.createdAt,
+        teams: tournament.teams.map((team) => ({
+          id: team.id,
+          name: team.name,
+          code: team.code,
+          totalPoints: team.totalPoints,
+          wins: team.wins,
+          createdAt: team.createdAt,
+          members: team.members.map((m) => ({
+            playerId: m.playerId.toString(),
+            displayName: displayName(m.playerId),
+            isCaptain: m.isCaptain,
+            pointsContributed: m.pointsContributed,
+          })),
+          pointLog: team.pointLogs.map((log) => ({
+            playerId: log.playerId.toString(),
+            displayName: displayName(log.playerId),
+            points: log.points,
+            won: log.won,
+            createdAt: log.createdAt,
+          })),
+        })),
+      },
+    });
   }
 
   private async handleCreateTournament(
@@ -557,6 +765,107 @@ export class AdminServer {
   private async handleGetBackups(res: ServerResponse): Promise<void> {
     const backups = await this.backupManager.listBackups();
     this.sendJson(res, 200, { success: true, backups });
+  }
+
+  /** Postgres-level health/sizing snapshot: total DB size, per-table row counts and disk usage
+   * (sorted biggest-first), and how many connections are currently open - everything an operator
+   * needs to spot a table growing out of control or a connection leak, without shelling out to
+   * `psql` by hand. Uses `$queryRaw` against Postgres's own `pg_*` system views/functions, since
+   * none of this is modeled in the Prisma schema itself. */
+  private async handleGetDbStats(res: ServerResponse): Promise<void> {
+    if (!this.prisma) {
+      this.sendJson(res, 200, {
+        success: true,
+        databaseSizeBytes: 0,
+        databaseSizePretty: 'N/A',
+        connectionCount: 0,
+        tables: [],
+      });
+      return;
+    }
+    try {
+      const [sizeRows, connectionRows, tableRows] = await Promise.all([
+        this.prisma.$queryRaw<{ size_bytes: bigint; size_pretty: string }[]>`
+          SELECT pg_database_size(current_database()) AS size_bytes,
+                 pg_size_pretty(pg_database_size(current_database())) AS size_pretty
+        `,
+        this.prisma.$queryRaw<{ count: bigint }[]>`
+          SELECT count(*) AS count FROM pg_stat_activity WHERE datname = current_database()
+        `,
+        this.prisma.$queryRaw<
+          { table_name: string; row_estimate: bigint; size_bytes: bigint; size_pretty: string }[]
+        >`
+          SELECT relname AS table_name,
+                 n_live_tup AS row_estimate,
+                 pg_total_relation_size(relid) AS size_bytes,
+                 pg_size_pretty(pg_total_relation_size(relid)) AS size_pretty
+          FROM pg_stat_user_tables
+          ORDER BY pg_total_relation_size(relid) DESC
+        `,
+      ]);
+
+      this.sendJson(res, 200, {
+        success: true,
+        databaseSizeBytes: Number(sizeRows[0]?.size_bytes ?? 0),
+        databaseSizePretty: sizeRows[0]?.size_pretty ?? 'N/A',
+        connectionCount: Number(connectionRows[0]?.count ?? 0),
+        tables: tableRows.map((t) => ({
+          name: t.table_name,
+          rowEstimate: Number(t.row_estimate),
+          sizeBytes: Number(t.size_bytes),
+          sizePretty: t.size_pretty,
+        })),
+      });
+    } catch (err) {
+      this.logger?.warn({ err }, '[AdminServer] Error fetching DB stats');
+      this.sendJson(res, 200, {
+        success: true,
+        databaseSizeBytes: 0,
+        databaseSizePretty: 'N/A',
+        connectionCount: 0,
+        tables: [],
+      });
+    }
+  }
+
+  /** Feeds the overview dashboard's charts: how many games finished per day over the last two
+   * weeks, and how the wins split across winning teams - both read straight off `games.endedAt`/
+   * `winnerTeam`, no separate analytics table to keep in sync. */
+  private async handleGetGameAnalytics(res: ServerResponse): Promise<void> {
+    if (!this.prisma) {
+      this.sendJson(res, 200, { success: true, gamesPerDay: [], winsByTeam: [] });
+      return;
+    }
+    try {
+      const [dayRows, teamRows] = await Promise.all([
+        this.prisma.$queryRaw<{ day: Date; count: bigint }[]>`
+          SELECT date_trunc('day', "endedAt") AS day, count(*) AS count
+          FROM games
+          WHERE "endedAt" IS NOT NULL AND "endedAt" >= now() - interval '14 days'
+          GROUP BY day
+          ORDER BY day ASC
+        `,
+        this.prisma.game.groupBy({
+          by: ['winnerTeam'],
+          where: { endedAt: { not: null } },
+          _count: { _all: true },
+        }),
+      ]);
+
+      this.sendJson(res, 200, {
+        success: true,
+        gamesPerDay: dayRows.map((r) => ({
+          day: r.day.toISOString().slice(0, 10),
+          count: Number(r.count),
+        })),
+        winsByTeam: teamRows
+          .map((r) => ({ team: r.winnerTeam ?? 'NoWinner', count: r._count._all }))
+          .sort((a, b) => b.count - a.count),
+      });
+    } catch (err) {
+      this.logger?.warn({ err }, '[AdminServer] Error fetching game analytics');
+      this.sendJson(res, 200, { success: true, gamesPerDay: [], winsByTeam: [] });
+    }
   }
 
   private async handleCreateBackup(res: ServerResponse): Promise<void> {
@@ -633,17 +942,42 @@ export class AdminServer {
     });
   }
 
+  /** Finds today's (or, absent one, the most recently modified) combined log file - the daily
+   * rotating file transport (`winston-logger.ts`) names them `werewolf-YYYY-MM-DD.log`, never a
+   * fixed `werewolf-combined.log`, and only rotated-out days get gzipped, so this only considers
+   * plain `.log` files. */
+  private findLatestLogFile(): string | null {
+    const logDir = process.env.LOG_DIR
+      ? path.resolve(process.env.LOG_DIR)
+      : path.resolve(process.cwd(), 'logs');
+    if (!fs.existsSync(logDir)) return null;
+
+    const candidates = fs
+      .readdirSync(logDir)
+      .filter((name) => name.startsWith('werewolf-') && name.endsWith('.log'))
+      .map((name) => {
+        const fullPath = path.join(logDir, name);
+        return { fullPath, mtimeMs: fs.statSync(fullPath).mtimeMs };
+      })
+      .sort((a, b) => b.mtimeMs - a.mtimeMs);
+
+    return candidates[0]?.fullPath ?? null;
+  }
+
   private handleGetLogs(res: ServerResponse): void {
-    const logFilePath = path.join(process.cwd(), 'logs', 'werewolf-combined.log');
-    if (fs.existsSync(logFilePath)) {
+    const logFilePath = this.findLatestLogFile();
+    if (logFilePath) {
       const stats = fs.statSync(logFilePath);
       const readStream = fs.createReadStream(logFilePath, {
-        start: Math.max(0, stats.size - 10000), // Last 10KB
+        start: Math.max(0, stats.size - 20000), // Last 20KB
       });
       let data = '';
       readStream.on('data', (chunk) => (data += chunk));
       readStream.on('end', () => {
-        this.sendJson(res, 200, { success: true, logs: data });
+        this.sendJson(res, 200, { success: true, logs: data, file: path.basename(logFilePath) });
+      });
+      readStream.on('error', () => {
+        this.sendJson(res, 200, { success: true, logs: 'Failed to read log file.' });
       });
       return;
     }
@@ -850,8 +1184,11 @@ export class AdminServer {
             <button class="nav-btn" id="nav-games" onclick="loadTab('games')"><i class="fa-solid fa-gamepad"></i> Parties en Direct</button>
             <button class="nav-btn" id="nav-players" onclick="loadTab('players')"><i class="fa-solid fa-users"></i> Joueurs & Ban</button>
             <button class="nav-btn" id="nav-groups" onclick="loadTab('groups')"><i class="fa-solid fa-building-user"></i> Groupes Telegram</button>
+            <button class="nav-btn" id="nav-leaderboard" onclick="loadTab('leaderboard')"><i class="fa-solid fa-ranking-star"></i> Classement Complet</button>
+            <button class="nav-btn" id="nav-history" onclick="loadTab('history')"><i class="fa-solid fa-clock-rotate-left"></i> Historique des Parties</button>
             <button class="nav-btn" id="nav-tournaments" onclick="loadTab('tournaments')"><i class="fa-solid fa-trophy"></i> Tournois & Championnats</button>
             <button class="nav-btn" id="nav-backups" onclick="loadTab('backups')"><i class="fa-solid fa-database"></i> Sauvegardes 15J</button>
+            <button class="nav-btn" id="nav-dbstats" onclick="loadTab('dbstats')"><i class="fa-solid fa-server"></i> Monitoring BD</button>
             <button class="nav-btn" id="nav-broadcast" onclick="loadTab('broadcast')"><i class="fa-solid fa-bullhorn"></i> Annonce Globale</button>
             <button class="nav-btn" id="nav-logs" onclick="loadTab('logs')"><i class="fa-solid fa-terminal"></i> Logs Winston</button>
           </sidebar>
@@ -885,10 +1222,60 @@ export class AdminServer {
       const main = document.getElementById('main-content');
 
       if (tab === 'overview') {
-        const data = await apiFetch('/api/admin/stats');
+        const [data, analytics, lbData] = await Promise.all([
+          apiFetch('/api/admin/stats'),
+          apiFetch('/api/admin/game-analytics'),
+          apiFetch('/api/admin/leaderboard?page=0'),
+        ]);
         const s = (data && data.stats) ? data.stats : { activeGames: 0, totalPlayers: 0, totalGroups: 0, pendingGroups: 0, uptimeSeconds: 0 };
+        const gamesPerDay = (analytics && Array.isArray(analytics.gamesPerDay)) ? analytics.gamesPerDay : [];
+        const winsByTeam = (analytics && Array.isArray(analytics.winsByTeam)) ? analytics.winsByTeam : [];
+        const topPlayers = ((lbData && Array.isArray(lbData.players)) ? lbData.players : []).slice(0, 5);
+
+        const maxDayCount = Math.max(1, ...gamesPerDay.map(d => d.count));
+        const dayBars = gamesPerDay.map(d => \`
+          <div style="display:flex; flex-direction:column; align-items:center; gap:6px; flex:1;">
+            <div style="font-size:0.75rem; color:var(--text-muted);">\${d.count}</div>
+            <div style="width:100%; max-width:28px; height:120px; display:flex; align-items:flex-end;">
+              <div style="width:100%; background:var(--accent-purple); border-radius:4px 4px 0 0; height:\${Math.max(3, (d.count / maxDayCount) * 100)}%;"></div>
+            </div>
+            <div style="font-size:0.7rem; color:var(--text-muted); writing-mode:vertical-rl; transform:rotate(180deg); height:50px;">\${d.day.slice(5)}</div>
+          </div>
+        \`).join('');
+
+        const maxTeamCount = Math.max(1, ...winsByTeam.map(t => t.count));
+        const teamBars = winsByTeam.map(t => \`
+          <div style="display:flex; align-items:center; gap:12px; margin-bottom:10px;">
+            <div style="width:110px; font-size:0.85rem; color:var(--text-muted); flex-shrink:0;">\${esc(t.team)}</div>
+            <div style="flex:1; background:rgba(255,255,255,0.06); border-radius:6px; overflow:hidden; height:14px;">
+              <div style="background:var(--accent-emerald); height:100%; width:\${Math.max(2, (t.count / maxTeamCount) * 100)}%;"></div>
+            </div>
+            <div style="width:30px; text-align:right; font-size:0.85rem;">\${t.count}</div>
+          </div>
+        \`).join('');
+
+        const topPlayerRows = topPlayers.map(p => \`
+          <div style="display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--border);">
+            <div><strong>#\${p.rank}</strong> \${p.username ? '@' + esc(p.username) : esc(p.displayName || 'Joueur')}</div>
+            <div style="color:var(--text-muted); font-size:0.85rem;">\${p.points} pts · \${p.gamesWon}🏆/\${p.gamesPlayed}🎮</div>
+          </div>
+        \`).join('');
+
         main.innerHTML = \`
           <div class="page-header"><h1 class="page-title">📊 Vue d'Ensemble du Bot</h1></div>
+
+          <div class="table-container" style="padding:20px; margin-bottom:24px;">
+            <h3 style="margin-bottom:14px;"><i class="fa-solid fa-bolt"></i> Actions Rapides</h3>
+            <div style="display:flex; gap:12px; flex-wrap:wrap;">
+              <button class="btn btn-primary" onclick="createBackup()"><i class="fa-solid fa-database"></i> Sauvegarder la BD</button>
+              <button class="btn btn-secondary" onclick="loadTab('games')"><i class="fa-solid fa-gamepad"></i> Parties en Direct</button>
+              <button class="btn btn-secondary" onclick="loadTab('leaderboard')"><i class="fa-solid fa-ranking-star"></i> Classement Complet</button>
+              <button class="btn btn-secondary" onclick="loadTab('history')"><i class="fa-solid fa-clock-rotate-left"></i> Historique</button>
+              <button class="btn btn-secondary" onclick="loadTab('dbstats')"><i class="fa-solid fa-server"></i> Monitoring BD</button>
+              <button class="btn btn-secondary" onclick="loadTab('broadcast')"><i class="fa-solid fa-bullhorn"></i> Annonce Globale</button>
+            </div>
+          </div>
+
           <div class="stats-grid">
             <div class="stat-card">
               <div class="stat-icon" style="background:rgba(139,92,246,0.15); color:var(--accent-purple);"><i class="fa-solid fa-gamepad"></i></div>
@@ -916,7 +1303,24 @@ export class AdminServer {
               <div class="stat-val">\${s.uptimeSeconds}s</div>
             </div>
           </div>
-          <div class="table-container" style="padding:24px;">
+
+          <div style="display:grid; grid-template-columns: 2fr 1fr; gap:20px; margin-top:24px;">
+            <div class="table-container" style="padding:20px;">
+              <h3 style="margin-bottom:16px;"><i class="fa-solid fa-chart-column"></i> Parties Terminées (14 derniers jours)</h3>
+              \${gamesPerDay.length ? \`<div style="display:flex; align-items:flex-end; gap:6px; height:190px;">\${dayBars}</div>\` : '<p style="color:var(--text-muted); text-align:center; padding:30px 0;">Pas encore de données</p>'}
+            </div>
+            <div class="table-container" style="padding:20px;">
+              <h3 style="margin-bottom:16px;"><i class="fa-solid fa-trophy"></i> Top 5 Joueurs</h3>
+              \${topPlayerRows || '<p style="color:var(--text-muted); text-align:center; padding:30px 0;">Aucun joueur classé</p>'}
+            </div>
+          </div>
+
+          <div class="table-container" style="padding:20px; margin-top:20px;">
+            <h3 style="margin-bottom:16px;"><i class="fa-solid fa-flag-checkered"></i> Répartition des Victoires par Camp</h3>
+            \${teamBars || '<p style="color:var(--text-muted); text-align:center; padding:30px 0;">Pas encore de données</p>'}
+          </div>
+
+          <div class="table-container" style="padding:24px; margin-top:20px;">
             <h3 style="margin-bottom:16px;"><i class="fa-solid fa-microchip"></i> Ressources Système</h3>
             <p><strong>Node.js Version :</strong> \${s.nodeVersion}</p>
             <p style="margin-top:8px;"><strong>Mémoire Heap Utilisée :</strong> \${(s.memory.heapUsed / 1024 / 1024).toFixed(1)} MB / \${(s.memory.heapTotal / 1024 / 1024).toFixed(1)} MB</p>
@@ -1007,6 +1411,65 @@ export class AdminServer {
             </table>
           </div>
         \`;
+      } else if (tab === 'leaderboard') {
+        const page = window.__lbPage || 0;
+        const data = await apiFetch('/api/admin/leaderboard?page=' + page);
+        const list = (data && Array.isArray(data.players)) ? data.players : [];
+        let rows = list.map(p => \`
+          <tr>
+            <td><strong>#\${p.rank}</strong></td>
+            <td><strong>\${p.username ? '@' + esc(p.username) : esc(p.displayName || 'Joueur')}</strong><br><small style="color:var(--text-muted);">ID: \${p.telegramId}</small></td>
+            <td>\${p.points} pts</td>
+            <td>\${p.gamesWon} 🏆 / \${p.gamesPlayed} 🎮</td>
+          </tr>
+        \`).join('');
+        const totalPages = Math.max(1, Math.ceil((data.total || 0) / (data.pageSize || 25)));
+
+        main.innerHTML = \`
+          <div class="page-header"><h1 class="page-title">🏆 Classement Complet (\${data.total || 0} joueurs)</h1></div>
+          <div class="table-container">
+            <table>
+              <thead><tr><th>Rang</th><th>Joueur</th><th>Points</th><th>Bilan</th></tr></thead>
+              <tbody>\${rows || '<tr><td colspan="4" style="text-align:center; padding:30px; color:var(--text-muted);">Aucun joueur classé</td></tr>'}</tbody>
+            </table>
+            <div style="display:flex; justify-content:center; align-items:center; gap:12px; padding:16px;">
+              <button class="btn btn-secondary" \${page <= 0 ? 'disabled' : ''} onclick="changeLeaderboardPage(\${page - 1})"><i class="fa-solid fa-chevron-left"></i> Précédent</button>
+              <span style="color:var(--text-muted);">Page \${page + 1} / \${totalPages}</span>
+              <button class="btn btn-secondary" \${page + 1 >= totalPages ? 'disabled' : ''} onclick="changeLeaderboardPage(\${page + 1})">Suivant <i class="fa-solid fa-chevron-right"></i></button>
+            </div>
+          </div>
+        \`;
+      } else if (tab === 'history') {
+        const page = window.__historyPage || 0;
+        const data = await apiFetch('/api/admin/game-history?page=' + page);
+        const list = (data && Array.isArray(data.games)) ? data.games : [];
+        window.__historyGames = list;
+        let rows = list.map(g => \`
+          <tr>
+            <td><strong>\${esc(g.groupTitle) || ('Groupe #' + g.groupTelegramId)}</strong></td>
+            <td><span class="badge badge-purple">\${g.mode}</span></td>
+            <td>\${g.winnerTeam ? '<span class="badge badge-emerald">' + esc(g.winnerTeam) + '</span>' : '<span class="badge badge-amber">Aucun</span>'}</td>
+            <td>\${g.playerCount} joueurs</td>
+            <td>\${new Date(g.endedAt).toLocaleString('fr-FR')}</td>
+            <td><button class="btn btn-secondary" onclick="viewGameHistoryDetails(\${g.id})"><i class="fa-solid fa-eye"></i> Détails</button></td>
+          </tr>
+        \`).join('');
+        const totalPages = Math.max(1, Math.ceil((data.total || 0) / (data.pageSize || 20)));
+
+        main.innerHTML = \`
+          <div class="page-header"><h1 class="page-title">🕰️ Historique des Parties (\${data.total || 0} parties terminées)</h1></div>
+          <div class="table-container">
+            <table>
+              <thead><tr><th>Groupe</th><th>Mode</th><th>Vainqueur</th><th>Joueurs</th><th>Terminée le</th><th>Actions</th></tr></thead>
+              <tbody>\${rows || '<tr><td colspan="6" style="text-align:center; padding:30px; color:var(--text-muted);">Aucune partie terminée enregistrée</td></tr>'}</tbody>
+            </table>
+            <div style="display:flex; justify-content:center; align-items:center; gap:12px; padding:16px;">
+              <button class="btn btn-secondary" \${page <= 0 ? 'disabled' : ''} onclick="changeHistoryPage(\${page - 1})"><i class="fa-solid fa-chevron-left"></i> Précédent</button>
+              <span style="color:var(--text-muted);">Page \${page + 1} / \${totalPages}</span>
+              <button class="btn btn-secondary" \${page + 1 >= totalPages ? 'disabled' : ''} onclick="changeHistoryPage(\${page + 1})">Suivant <i class="fa-solid fa-chevron-right"></i></button>
+            </div>
+          </div>
+        \`;
       } else if (tab === 'backups') {
         const data = await apiFetch('/api/admin/backups');
         const backupsList = (data && Array.isArray(data.backups)) ? data.backups : [];
@@ -1035,6 +1498,49 @@ export class AdminServer {
             </table>
           </div>
         \`;
+      } else if (tab === 'dbstats') {
+        const data = await apiFetch('/api/admin/db-stats');
+        const tables = (data && Array.isArray(data.tables)) ? data.tables : [];
+        const maxSize = Math.max(1, ...tables.map(t => t.sizeBytes));
+        let rows = tables.map(t => \`
+          <tr>
+            <td><strong>\${esc(t.name)}</strong></td>
+            <td>\${t.rowEstimate.toLocaleString('fr-FR')}</td>
+            <td>\${esc(t.sizePretty)}</td>
+            <td style="width:200px;">
+              <div style="background:rgba(255,255,255,0.06); border-radius:6px; overflow:hidden; height:8px;">
+                <div style="background:var(--accent-purple); height:100%; width:\${Math.max(2, (t.sizeBytes / maxSize) * 100)}%;"></div>
+              </div>
+            </td>
+          </tr>
+        \`).join('');
+
+        main.innerHTML = \`
+          <div class="page-header"><h1 class="page-title">🖥️ Monitoring de la Base de Données</h1></div>
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-icon" style="background:rgba(139,92,246,0.15); color:var(--accent-purple);"><i class="fa-solid fa-hard-drive"></i></div>
+              <div class="stat-lbl">Taille Totale de la BD</div>
+              <div class="stat-val">\${esc(data.databaseSizePretty)}</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon" style="background:rgba(6,182,212,0.15); color:var(--accent-cyan);"><i class="fa-solid fa-plug"></i></div>
+              <div class="stat-lbl">Connexions Actives</div>
+              <div class="stat-val">\${data.connectionCount}</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon" style="background:rgba(16,185,129,0.15); color:var(--accent-emerald);"><i class="fa-solid fa-table"></i></div>
+              <div class="stat-lbl">Tables Suivies</div>
+              <div class="stat-val">\${tables.length}</div>
+            </div>
+          </div>
+          <div class="table-container" style="margin-top:24px;">
+            <table>
+              <thead><tr><th>Table</th><th>Lignes (estimation)</th><th>Taille sur disque</th><th>Part relative</th></tr></thead>
+              <tbody>\${rows || '<tr><td colspan="4" style="text-align:center; padding:30px; color:var(--text-muted);">Aucune donnée disponible</td></tr>'}</tbody>
+            </table>
+          </div>
+        \`;
       } else if (tab === 'broadcast') {
         main.innerHTML = \`
           <div class="page-header"><h1 class="page-title">📢 Annonce Globale Telegram</h1></div>
@@ -1055,21 +1561,38 @@ export class AdminServer {
         \`;
       } else if (tab === 'tournaments') {
         const data = await apiFetch('/api/admin/tournaments');
-        let tourneyCards = (data.tournaments || []).map(t => \`
+        let tourneyCards = (data.tournaments || []).map(t => {
+          const standings = Array.isArray(t.standings) ? t.standings : [];
+          const standingsRows = standings.map((team, idx) => \`
+            <div style="display:flex; justify-content:space-between; font-size:0.85rem; padding:6px 0; border-top:1px solid var(--border);">
+              <span>\${idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : (idx + 1) + '.'} \${esc(team.name)} (\${team.memberCount}/\${t.teamSize})</span>
+              <span style="color:var(--text-muted);">\${team.totalPoints} pts · \${team.wins}🏆</span>
+            </div>
+          \`).join('');
+
+          return \`
           <div class="stat-card" style="flex-direction:column; align-items:flex-start; gap:12px;">
             <div style="display:flex; justify-content:space-between; width:100%; align-items:center;">
-              <h3 style="font-size:1.1rem; font-weight:800;"><i class="fa-solid fa-trophy" style="color:var(--accent-amber);"></i> \${esc(t.name)}</h3>
+              <h3 style="font-size:1.1rem; font-weight:800;"><i class="fa-solid fa-trophy" style="color:var(--accent-amber);"></i> \${esc(t.name)} <span style="font-weight:400; font-size:0.85rem; color:var(--text-muted);">(ID: \${t.id})</span></h3>
               <span class="badge \${t.status === 'COMPLETED' ? 'badge-emerald' : t.status === 'IN_PROGRESS' ? 'badge-purple' : 'badge-amber'}">\${t.status}</span>
             </div>
             <p style="font-size:0.85rem; color:var(--text-muted);">
               <strong>Format :</strong> \${t.maxTeams} Équipes | <strong>Taille :</strong> \${t.teamSize} Joueurs/Équipe | <strong>Manches :</strong> \${t.currentRound} / \${t.totalRounds}
             </p>
-            <div style="display:flex; gap:8px; width:100%; margin-top:8px;">
+            <p style="font-size:0.85rem;">
+              📋 Commande d'inscription : <code>/inscrirefournoi \${t.id}</code> &nbsp;|&nbsp; Classement : <code>/tournoi \${t.id}</code>
+            </p>
+            <div style="width:100%;">
+              \${standingsRows || '<p style="font-size:0.8rem; color:var(--text-muted);">Aucune équipe inscrite</p>'}
+            </div>
+            <div style="display:flex; gap:8px; width:100%; margin-top:8px; flex-wrap:wrap;">
+              <button class="btn btn-secondary" onclick="viewTournamentDetails(\${t.id})"><i class="fa-solid fa-magnifying-glass"></i> Voir tous les détails</button>
               \${t.status === 'REGISTRATION' ? \`<button class="btn btn-primary" onclick="updateTournamentStatus(\${t.id}, 'IN_PROGRESS', 1)"><i class="fa-solid fa-play"></i> Démarrer Manche 1</button>\` : ''}
               \${t.status === 'IN_PROGRESS' ? \`<button class="btn btn-secondary" onclick="updateTournamentStatus(\${t.id}, 'IN_PROGRESS', \${t.currentRound + 1})"><i class="fa-solid fa-forward"></i> Manche Suivante (\${t.currentRound + 1}/\${t.totalRounds})</button><button class="btn btn-danger" onclick="updateTournamentStatus(\${t.id}, 'COMPLETED', \${t.currentRound})"><i class="fa-solid fa-flag-checkered"></i> Clôturer</button>\` : ''}
             </div>
           </div>
-        \`).join('');
+        \`;
+        }).join('');
 
         main.innerHTML = \`
           <div class="page-header">
@@ -1080,8 +1603,14 @@ export class AdminServer {
             <div style="display:flex; gap:16px; flex-wrap:wrap;">
               <input type="text" id="tourney-name" class="input-field" style="flex:2; margin-bottom:0;" placeholder="Nom du Tournoi (ex: Grand Championnat d'Été 2026)">
               <select id="tourney-teams" class="input-field" style="flex:1; margin-bottom:0;">
-                <option value="4">4 Équipes (16 Joueurs)</option>
-                <option value="8">8 Équipes (32 Joueurs)</option>
+                <option value="4">4 Équipes</option>
+                <option value="8">8 Équipes</option>
+                <option value="16">16 Équipes</option>
+              </select>
+              <select id="tourney-size" class="input-field" style="flex:1; margin-bottom:0;">
+                <option value="1">1 Joueur/Équipe (test rapide)</option>
+                <option value="2">2 Joueurs/Équipe</option>
+                <option value="4" selected>4 Joueurs/Équipe</option>
               </select>
               <select id="tourney-rounds" class="input-field" style="flex:1; margin-bottom:0;">
                 <option value="3">3 Manches</option>
@@ -1154,6 +1683,129 @@ export class AdminServer {
       if (modal) modal.remove();
     }
 
+    function changeLeaderboardPage(page) {
+      window.__lbPage = Math.max(0, page);
+      loadTab('leaderboard');
+    }
+
+    function changeHistoryPage(page) {
+      window.__historyPage = Math.max(0, page);
+      loadTab('history');
+    }
+
+    function viewGameHistoryDetails(gameId) {
+      const game = (window.__historyGames || []).find(g => g.id === gameId);
+      if (!game) return showToast('Partie introuvable', 'error');
+
+      let playersRows = (game.players || []).map(p => \`
+        <tr>
+          <td><strong>\${esc(p.name)}</strong></td>
+          <td><span class="badge badge-purple">\${esc(p.role)}</span></td>
+          <td>\${esc(p.team)}</td>
+          <td>\${p.survived ? '<span class="badge badge-emerald">SURVÉCU</span>' : '<span class="badge badge-rose">MORT</span>'}</td>
+          <td>\${p.won ? '<span class="badge badge-emerald">GAGNÉ</span>' : '<span class="badge badge-amber">PERDU</span>'}</td>
+        </tr>
+      \`).join('');
+
+      const modalHtml = \`
+        <div class="modal-overlay active" id="game-modal" onclick="if(event.target===this)closeModal()">
+          <div class="modal-card" style="max-width:700px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+              <h2 style="font-size:1.3rem; margin:0;"><i class="fa-solid fa-clock-rotate-left" style="color:var(--accent-purple);"></i> Partie #\${game.id} — \${esc(game.groupTitle) || ('Groupe #' + game.groupTelegramId)}</h2>
+              <button class="btn btn-secondary" onclick="closeModal()" style="padding:6px 12px;"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div style="background:rgba(255,255,255,0.03); border:1px solid var(--border); padding:16px; border-radius:12px; margin-bottom:20px; font-size:0.9rem;">
+              <p><strong>Mode :</strong> <span class="badge badge-purple">\${game.mode}</span> | <strong>Vainqueur :</strong> \${game.winnerTeam ? '<span class="badge badge-emerald">' + esc(game.winnerTeam) + '</span>' : '<span class="badge badge-amber">Aucun</span>'}</p>
+              <p style="margin-top:8px;"><strong>Débutée :</strong> \${new Date(game.startedAt).toLocaleString('fr-FR')} | <strong>Terminée :</strong> \${new Date(game.endedAt).toLocaleString('fr-FR')}</p>
+            </div>
+            <h4 style="margin-bottom:12px;"><i class="fa-solid fa-users"></i> Composition & Résultats</h4>
+            <div class="table-container" style="max-height:320px; overflow-y:auto; margin-bottom:24px;">
+              <table>
+                <thead><tr><th>Joueur</th><th>Rôle</th><th>Équipe</th><th>Statut</th><th>Résultat</th></tr></thead>
+                <tbody>\${playersRows || '<tr><td colspan="5" style="text-align:center; padding:20px; color:var(--text-muted);">Aucun joueur trouvé</td></tr>'}</tbody>
+              </table>
+            </div>
+            <div style="display:flex; gap:12px; justify-content:flex-end;">
+              <button class="btn btn-secondary" onclick="closeModal()">Fermer</button>
+            </div>
+          </div>
+        </div>
+      \`;
+
+      closeModal();
+      document.body.insertAdjacentHTML('beforeend', modalHtml);
+    }
+
+    async function viewTournamentDetails(tournamentId) {
+      try {
+        const data = await apiFetch('/api/admin/tournaments/' + tournamentId);
+        if (!data.success || !data.tournament) return showToast('Tournoi introuvable', 'error');
+        const t = data.tournament;
+
+        const teamSections = (t.teams || []).map((team, idx) => {
+          const memberRows = (team.members || []).map(m => \`
+            <tr>
+              <td>\${m.isCaptain ? '👑 ' : ''}\${esc(m.displayName || ('Joueur #' + m.playerId))}</td>
+              <td>\${m.pointsContributed} pts contribués</td>
+            </tr>
+          \`).join('');
+
+          const logRows = (team.pointLog || []).slice().reverse().map(log => \`
+            <div style="display:flex; justify-content:space-between; font-size:0.8rem; padding:4px 0; border-top:1px solid var(--border);">
+              <span>\${esc(log.displayName || ('Joueur #' + log.playerId))} \${log.won ? '🏆' : ''}</span>
+              <span style="color:\${log.points >= 0 ? 'var(--accent-emerald)' : 'var(--accent-rose, #f87171)'};">\${log.points >= 0 ? '+' : ''}\${log.points} pts</span>
+              <span style="color:var(--text-muted);">\${new Date(log.createdAt).toLocaleString('fr-FR')}</span>
+            </div>
+          \`).join('');
+
+          return \`
+            <div style="background:rgba(255,255,255,0.03); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:16px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                <h4 style="margin:0;">\${idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : (idx + 1) + '.'} \${esc(team.name)} <span style="color:var(--text-muted); font-weight:400; font-size:0.8rem;">(code: \${esc(team.code)})</span></h4>
+                <span style="font-weight:700;">\${team.totalPoints} pts · \${team.wins}🏆</span>
+              </div>
+              <table style="width:100%; margin-bottom:10px;">
+                <tbody>\${memberRows || '<tr><td style="color:var(--text-muted); font-size:0.85rem;">Aucun membre</td></tr>'}</tbody>
+              </table>
+              <details>
+                <summary style="cursor:pointer; font-size:0.85rem; color:var(--text-muted);">📈 Évolution des points (\${(team.pointLog || []).length} partie(s) comptabilisée(s))</summary>
+                <div style="max-height:180px; overflow-y:auto; margin-top:8px;">
+                  \${logRows || '<p style="font-size:0.8rem; color:var(--text-muted);">Aucune partie comptabilisée pour le moment.</p>'}
+                </div>
+              </details>
+            </div>
+          \`;
+        }).join('');
+
+        const modalHtml = \`
+          <div class="modal-overlay active" id="game-modal" onclick="if(event.target===this)closeModal()">
+            <div class="modal-card" style="max-width:750px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h2 style="font-size:1.3rem; margin:0;"><i class="fa-solid fa-trophy" style="color:var(--accent-amber);"></i> \${esc(t.name)} <span style="font-size:0.85rem; color:var(--text-muted); font-weight:400;">(ID: \${t.id})</span></h2>
+                <button class="btn btn-secondary" onclick="closeModal()" style="padding:6px 12px;"><i class="fa-solid fa-xmark"></i></button>
+              </div>
+              <div style="background:rgba(255,255,255,0.03); border:1px solid var(--border); padding:16px; border-radius:12px; margin-bottom:20px; font-size:0.9rem;">
+                <p><strong>Statut :</strong> <span class="badge \${t.status === 'COMPLETED' ? 'badge-emerald' : t.status === 'IN_PROGRESS' ? 'badge-purple' : 'badge-amber'}">\${t.status}</span> | <strong>Format :</strong> \${t.maxTeams} équipes de \${t.teamSize} | <strong>Manche :</strong> \${t.currentRound}/\${t.totalRounds}</p>
+                <p style="margin-top:8px;"><strong>Créé le :</strong> \${new Date(t.createdAt).toLocaleString('fr-FR')} | <strong>Équipes inscrites :</strong> \${(t.teams || []).length}</p>
+              </div>
+              <h4 style="margin-bottom:12px;"><i class="fa-solid fa-users"></i> Équipes, participants & évolution</h4>
+              <div style="max-height:420px; overflow-y:auto;">
+                \${teamSections || '<p style="text-align:center; color:var(--text-muted); padding:30px 0;">Aucune équipe inscrite à ce tournoi pour le moment.</p>'}
+              </div>
+              <div style="display:flex; gap:12px; justify-content:flex-end; margin-top:16px;">
+                <button class="btn btn-secondary" onclick="closeModal()">Fermer</button>
+              </div>
+            </div>
+          </div>
+        \`;
+
+        closeModal();
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+      } catch (err) {
+        showToast('Erreur lors du chargement des détails du tournoi', 'error');
+      }
+    }
+
     async function killGame(chatId) {
       if (confirm('Purger immédiatement la partie dans le groupe ' + chatId + ' ?')) {
         const res = await apiFetch('/api/admin/games/' + chatId + '/action', {
@@ -1203,13 +1855,15 @@ export class AdminServer {
       const name = input ? input.value : '';
       const teamsEl = document.getElementById('tourney-teams');
       const maxTeams = teamsEl ? parseInt(teamsEl.value, 10) : 4;
+      const sizeEl = document.getElementById('tourney-size');
+      const teamSize = sizeEl ? parseInt(sizeEl.value, 10) : 4;
       const roundsEl = document.getElementById('tourney-rounds');
       const totalRounds = roundsEl ? parseInt(roundsEl.value, 10) : 5;
       try {
         const data = await apiFetch('/api/admin/tournaments/create', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, maxTeams, totalRounds })
+          body: JSON.stringify({ name, maxTeams, teamSize, totalRounds })
         });
         if (data.success) {
           showToast('Tournoi créé avec succès !');

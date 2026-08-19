@@ -119,6 +119,76 @@ export class GroupRepository {
       take: limit,
     });
   }
+
+  /**
+   * Ranks groups by a composite "how good is this community" score, combining three signals:
+   * activity (finished games hosted), player quality (the combined global leaderboard points of
+   * everyone who's ever played there), and engagement (how many distinct players that is). Each
+   * signal is min-max normalized against the highest-scoring group before being weighted (40%
+   * games, 35% points, 25% unique players), so no single metric's raw scale - points routinely run
+   * into the thousands, unique players rarely past a few dozen - can dominate the others on its
+   * own. A player's points are global (not earned specifically "for" this group), so a group whose
+   * regulars are also active elsewhere gets some credit it didn't strictly earn here - accepted as
+   * a reasonable proxy for "this group attracts skilled players," not treated as exact attribution.
+   * Groups with zero finished games are excluded rather than scored at 0, so an empty/abandoned
+   * group chat never outranks a genuinely small-but-active one.
+   */
+  async getGroupRankings(limit = 20): Promise<GroupRanking[]> {
+    const groups = await this.prisma.group.findMany({
+      select: { id: true, telegramId: true, title: true },
+    });
+
+    const gamesPerGroup = await this.prisma.game.groupBy({
+      by: ['groupId'],
+      where: { endedAt: { not: null } },
+      _count: { _all: true },
+    });
+    const gamesMap = new Map(gamesPerGroup.map((g) => [g.groupId, g._count._all]));
+
+    const rankings: GroupRanking[] = [];
+    for (const group of groups) {
+      const gamesPlayed = gamesMap.get(group.id) ?? 0;
+      if (gamesPlayed === 0) continue;
+
+      const players = await this.prisma.gamePlayer.findMany({
+        where: { game: { groupId: group.id } },
+        select: { player: { select: { points: true } } },
+        distinct: ['playerId'],
+      });
+
+      rankings.push({
+        telegramId: group.telegramId,
+        title: group.title,
+        gamesPlayed,
+        uniquePlayers: players.length,
+        totalPoints: players.reduce((sum, p) => sum + p.player.points, 0),
+        score: 0,
+      });
+    }
+
+    const maxGames = Math.max(1, ...rankings.map((r) => r.gamesPlayed));
+    const maxPoints = Math.max(1, ...rankings.map((r) => r.totalPoints));
+    const maxPlayers = Math.max(1, ...rankings.map((r) => r.uniquePlayers));
+
+    for (const r of rankings) {
+      r.score =
+        0.4 * (r.gamesPlayed / maxGames) +
+        0.35 * (r.totalPoints / maxPoints) +
+        0.25 * (r.uniquePlayers / maxPlayers);
+    }
+
+    rankings.sort((a, b) => b.score - a.score);
+    return rankings.slice(0, limit);
+  }
+}
+
+export interface GroupRanking {
+  telegramId: bigint;
+  title: string | null;
+  gamesPlayed: number;
+  uniquePlayers: number;
+  totalPoints: number;
+  score: number;
 }
 
 /** The `Game` construction options a `GroupWithConfig` maps to (mode/timers are read separately per call site). */

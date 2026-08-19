@@ -89,6 +89,82 @@ describe('describeEvent - PlayerDied flavor text', () => {
     ]);
   });
 
+  it('always outs the shooter (name + role) on a Shoot kill, even with roles hidden on death', () => {
+    const gunner = createPlayer(1n, 'Gunner', ROLE_BIT.Gunner, 'Village');
+    const victim = createPlayer(2n, 'Victim', ROLE_BIT.Villager, 'Village');
+
+    const hidden = describeEvent(
+      { type: 'PlayerDied', playerId: 2n, method: 'Shoot', killerIds: [1n], isNight: false },
+      [gunner, victim],
+      false,
+    );
+    expect(hidden).toEqual([
+      {
+        audience: 'group',
+        key: 'PlayerShotPublic',
+        args: [mention(1n, 'Gunner'), '🔫 Gunner', mention(2n, 'Victim')],
+      },
+    ]);
+
+    const shown = describeEvent(
+      { type: 'PlayerDied', playerId: 2n, method: 'Shoot', killerIds: [1n], isNight: false },
+      [gunner, victim],
+      true,
+    );
+    expect(shown).toEqual([
+      {
+        audience: 'group',
+        key: 'PlayerShotPublicWithRole',
+        args: [mention(1n, 'Gunner'), '🔫 Gunner', mention(2n, 'Victim'), '👱 Villager'],
+      },
+    ]);
+  });
+
+  it('works for any Shoot-capable role, not just the Gunner (e.g. the Archangel)', () => {
+    const archangel = createPlayer(1n, 'Angel', ROLE_BIT.Archangel, 'Village');
+    const wolf = createPlayer(2n, 'Wolfy', ROLE_BIT.Wolf, 'Wolf');
+
+    const messages = describeEvent(
+      { type: 'PlayerDied', playerId: 2n, method: 'Shoot', killerIds: [1n], isNight: false },
+      [archangel, wolf],
+      false,
+    );
+
+    expect(messages).toEqual([
+      {
+        audience: 'group',
+        key: 'PlayerShotPublic',
+        args: [mention(1n, 'Angel'), '👼⚡️ Archangel', mention(2n, 'Wolfy')],
+      },
+    ]);
+  });
+
+  it('gives a HunterShot death dramatic flavor text instead of the passive "found dead" fallback', () => {
+    const victim = createPlayer(2n, 'Victim', ROLE_BIT.Wolf, 'Wolf');
+
+    const hidden = describeEvent(
+      { type: 'PlayerDied', playerId: 2n, method: 'HunterShot', killerIds: [1n], isNight: true },
+      [victim],
+      false,
+    );
+    expect(hidden).toEqual([
+      { audience: 'group', key: 'HunterShotDeathPublic', args: [mention(2n, 'Victim')] },
+    ]);
+
+    const shown = describeEvent(
+      { type: 'PlayerDied', playerId: 2n, method: 'HunterShot', killerIds: [1n], isNight: true },
+      [victim],
+      true,
+    );
+    expect(shown).toEqual([
+      {
+        audience: 'group',
+        key: 'HunterShotDeathPublicWithRole',
+        args: [mention(2n, 'Victim'), '🐺 Wolf'],
+      },
+    ]);
+  });
+
   it('falls back to the generic reveal for a method/role combo with no dedicated flavor text', () => {
     const villager = createPlayer(1n, 'V', ROLE_BIT.Villager, 'Village');
 

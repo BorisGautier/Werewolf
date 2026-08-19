@@ -21,6 +21,21 @@ export const SPARK: bigint = -2n;
  * `GameLoop`'s `!p.isBot` filter before ever calling `awardPoints()`, not a numeric id guess.) */
 export const SYNTHETIC_BOT_ID_FLOOR: bigint = 990000n;
 
+/** Ceiling for the synthetic bot id range - generous headroom above the 35-player game cap, since
+ * `addBotPlayers` can be called more than once per lobby. */
+export const SYNTHETIC_BOT_ID_CEILING: bigint = SYNTHETIC_BOT_ID_FLOOR + 1000n;
+
+/** Unlike a `< SYNTHETIC_BOT_ID_FLOOR` ceiling (the earlier, broken approach - see the comment
+ * above), this checks *membership in the narrow synthetic range itself*, so it can't misclassify
+ * real players the way that did. Real Telegram ids landing inside this ~1000-wide band are not
+ * impossible (Telegram's very first users have low ids), just vanishingly unlikely - a defense-in-
+ * depth check for query-side surfaces (the leaderboard, `/tagall`'s member list) that read
+ * `telegramId` directly, layered on top of the actual guard (`!Player.isBot` before
+ * `awardPoints()`/DB writes), not a replacement for it. */
+export function isSyntheticBotId(telegramId: bigint): boolean {
+  return telegramId > SYNTHETIC_BOT_ID_FLOOR && telegramId <= SYNTHETIC_BOT_ID_CEILING;
+}
+
 /**
  * Port of the gameplay-relevant fields of `Werewolf Node/Models/IPlayer.cs`, plus the subset of
  * the original's achievement-tracking counters/flags that turned out to need real-time state

@@ -259,6 +259,9 @@ export class GameLobbyManager {
       userMap.set(m.telegramId, { username: m.username, displayName: m.displayName });
     }
 
+    const optedOut = await this.players.getTagOptOutIds([...userMap.keys()]);
+    for (const id of optedOut) userMap.delete(id);
+
     if (userMap.size === 0) return;
 
     const header = isFr
@@ -662,6 +665,8 @@ export class GameLobbyManager {
       },
       'Game started, handing off to the night/day loop',
     );
+    await this.showPlayers(session.chatId);
+
     // No `StartGame`/`StartChaosGame` gif here on purpose: `gameLoop.start()` below immediately
     // kicks off the first night, which sends its own `NightStart` gif moments later - sending both
     // back to back at launch was two animations for what players experience as one moment.
