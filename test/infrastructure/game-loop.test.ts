@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { InputFile, type Bot } from 'grammy';
+import { GrammyError, InputFile, type Bot } from 'grammy';
 import { GameManager } from '../../src/application/game-manager.js';
 import { ROLE_BIT } from '../../src/domain/roles/role.js';
 import { getTeamForRole } from '../../src/domain/game/team.js';
@@ -468,6 +468,115 @@ describe('GameLoop', () => {
     expect(summaryText).toContain('Game Length:');
   });
 
+  it("sends a private mission-result DM at game end - success for a completed mission, failure for one that wasn't", async () => {
+    const { loop, gameManager, sendMessage } = createHarness();
+    const game = dealtGame(gameManager);
+    const wolf = game.players[0]!;
+    const villager = game.players[1]!;
+    // `champion`: alive + on the winning side - the wolf, about to sweep the village, will satisfy
+    // this. `resistant`: alive + on the *losing* side - impossible for a villager who's about to
+    // get lynched out, so this is set up to fail.
+    wolf.missionId = 'champion';
+    villager.missionId = 'resistant';
+
+    loop.start(game, 42);
+    await vi.advanceTimersByTimeAsync(0);
+
+    for (let i = 0; i < 20 && gameManager.get(game.chatId) !== undefined; i++) {
+      if (game.phase === 'Night') {
+        const target = game.players.find((p) => !p.isDead && p.id !== wolf.id);
+        if (target) await loop.handleCallback(wolf.id, wolf.id, `nt:${target.id.toString()}`);
+        await vi.advanceTimersByTimeAsync(5000);
+      } else if (game.phase === 'Day') {
+        await vi.advanceTimersByTimeAsync(5000);
+      } else if (game.phase === 'Lynch') {
+        const voteTarget = game.players.find((p) => !p.isDead && p.id !== wolf.id);
+        if (voteTarget) {
+          for (const voter of game.players.filter((p) => !p.isDead)) {
+            await loop.handleCallback(
+              voter.id,
+              game.chatId,
+              `vote:${game.dayNumber}:${voteTarget.id.toString()}`,
+            );
+          }
+        }
+        await vi.advanceTimersByTimeAsync(5000);
+      } else {
+        break;
+      }
+      await vi.advanceTimersByTimeAsync(0);
+    }
+
+    expect(game.winningTeam).toBe('Wolf');
+
+    const wolfDm = sendMessage.mock.calls.find(
+      (call) =>
+        call[0] === Number(wolf.id) && typeof call[1] === 'string' && call[1].includes('MISSION'),
+    );
+    expect(wolfDm).toBeDefined();
+    expect(wolfDm![1] as string).toContain('MISSION ACCOMPLISHED');
+
+    const villagerDm = sendMessage.mock.calls.find(
+      (call) =>
+        call[0] === Number(villager.id) &&
+        typeof call[1] === 'string' &&
+        call[1].includes('Mission failed'),
+    );
+    expect(villagerDm).toBeDefined();
+  });
+
+  it('logs a warning (instead of silently dropping it) when Telegram rejects the end-of-game Gazette message', async () => {
+    const { loop, gameManager, sendMessage, logger } = createHarness();
+    const game = dealtGame(gameManager);
+    const wolf = game.players[0]!;
+
+    sendMessage.mockImplementation(async (_chatId: number, text?: string) => {
+      if (typeof text === 'string' && text.includes('GAZETTE')) {
+        throw new GrammyError(
+          'Bad Request: message is too long',
+          { ok: false, error_code: 400, description: 'Bad Request: message is too long' },
+          'sendMessage',
+          {},
+        );
+      }
+      return { message_id: 1 };
+    });
+
+    loop.start(game, 42);
+    await vi.advanceTimersByTimeAsync(0);
+
+    for (let i = 0; i < 20 && gameManager.get(game.chatId) !== undefined; i++) {
+      if (game.phase === 'Night') {
+        const target = game.players.find((p) => !p.isDead && p.id !== wolf.id);
+        if (target) await loop.handleCallback(wolf.id, wolf.id, `nt:${target.id.toString()}`);
+        await vi.advanceTimersByTimeAsync(5000);
+      } else if (game.phase === 'Day') {
+        await vi.advanceTimersByTimeAsync(5000);
+      } else if (game.phase === 'Lynch') {
+        const voteTarget = game.players.find((p) => !p.isDead && p.id !== wolf.id);
+        if (voteTarget) {
+          for (const voter of game.players.filter((p) => !p.isDead)) {
+            await loop.handleCallback(
+              voter.id,
+              game.chatId,
+              `vote:${game.dayNumber}:${voteTarget.id.toString()}`,
+            );
+          }
+        }
+        await vi.advanceTimersByTimeAsync(5000);
+      } else {
+        break;
+      }
+      await vi.advanceTimersByTimeAsync(0);
+    }
+
+    expect(gameManager.has(game.chatId)).toBe(false); // the game still finished cleanly
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ chatId: game.chatId.toString() }),
+      'sendRaw: Telegram rejected the message',
+    );
+  });
+
   it('never awards leaderboard points to AI/bot players, only real ones', async () => {
     const awardPoints = vi.fn(async (_telegramId: bigint, _deltaPoints: number, _won: boolean) => ({
       oldPoints: 0,
@@ -867,6 +976,48 @@ describe('GameLoop', () => {
             `${mention(voter.id, voter.name)} voted to lynch ${mention(wolf.id, wolf.name)}.`,
       ),
     ).toBe(true);
+  });
+
+  it('tracks mission-mode vote-change and last-second-vote signals via applyLynchVote', async () => {
+    const { loop, gameManager, group } = createHarness();
+    group.lynchTimerSeconds = 30; // long enough to distinguish an early vote from a closing one
+    const game = dealtGame(gameManager);
+    const wolf = game.players[0]!;
+    const villager3 = game.players[2]!;
+    const voter = game.players[1]!;
+
+    loop.start(game, 42);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000); // night resolves
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000); // day resolves, into a 30s Lynch window
+
+    await loop.handleCallback(
+      voter.id,
+      game.chatId,
+      `vote:${game.dayNumber}:${wolf.id.toString()}`,
+    );
+    expect(voter.voteChangedCount).toBe(0); // first vote this round, not a change
+    expect(voter.votedInLastSecondsOfPhase).toBe(false); // voted right at the start of a 30s window
+
+    await loop.handleCallback(
+      voter.id,
+      game.chatId,
+      `vote:${game.dayNumber}:${villager3.id.toString()}`,
+    );
+    expect(voter.voteChangedCount).toBe(1); // overwrote an already-cast vote this same round
+
+    // 25s into a 30s window leaves 5s remaining - inside the closing-10-seconds threshold.
+    await vi.advanceTimersByTimeAsync(25000);
+    const lastVoter = game.players[3]!;
+    await loop.handleCallback(
+      lastVoter.id,
+      game.chatId,
+      `vote:${game.dayNumber}:${villager3.id.toString()}`,
+    );
+    expect(lastVoter.votedInLastSecondsOfPhase).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(5000); // let the lynch round resolve
   });
 
   it('under a secret lynch, announces only a running vote count, never the target', async () => {

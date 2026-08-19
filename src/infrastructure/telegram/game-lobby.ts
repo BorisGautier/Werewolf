@@ -19,6 +19,8 @@ import { TEAM_DUEL_MIN_PLAYERS, type GameMode } from '../../domain/game/game-mod
 import { ROLE_BIT, ROLE_META, roleName } from '../../domain/roles/role.js';
 import { SYNTHETIC_BOT_ID_FLOOR, type Player } from '../../domain/game/player.js';
 import { WOLF_ROLES } from '../../domain/game/game-balancing.js';
+import { pickMissionForPlayer, type MissionDef } from '../../domain/game/missions.js';
+import type { MissionRepository } from '../persistence/mission.repository.js';
 import { GameRepository } from '../persistence/game.repository.js';
 import {
   groupToGameOptions,
@@ -86,6 +88,7 @@ export class GameLobbyManager {
     private readonly gameLoop: GameLoop,
     private readonly notifyGames: NotifyGameRepository,
     private readonly joinTimeSeconds = 180,
+    private readonly missionRepo?: MissionRepository,
   ) {}
 
   get joinButtonCallbackData(): string {
@@ -685,6 +688,20 @@ export class GameLobbyManager {
         .catch(() => null);
     }
 
+    // Mission mode: an independent random draw per real player (bots never get one - they can't
+    // click Accept/Decline) - duplicates across players are expected, see `missions.ts`'s doc
+    // comment. Offered, not assigned: nothing becomes scoreable until the player actually taps
+    // Accept (see the `mission_accept`/`mission_decline` callbacks in bot.ts). Fetched once for
+    // the whole batch rather than per player - an admin's disable list doesn't change mid-draw.
+    const disabledMissionIds = (await this.missionRepo?.getDisabledMissionIds()) ?? new Set();
+    for (const p of session.game.players) {
+      if (p.isBot) continue;
+      const def = pickMissionForPlayer(session.game.players, disabledMissionIds);
+      if (!def) continue;
+      p.missionOfferedId = def.id;
+      await this.notifyMission(p, def, session.language);
+    }
+
     // The night/day loop sends its own richer "Night N falls, you have X seconds" message right
     // as it takes over - no need to also announce a bare NightFalls here.
     this.logger.info(
@@ -837,6 +854,26 @@ export class GameLobbyManager {
       );
       return false;
     }
+  }
+
+  /** Mission mode's own PM, sent right after the role reveal - deliberately dramatic (this is
+   * the one moment the whole mechanic hinges on catching the player's attention) with two inline
+   * buttons. Accepting/declining is handled by the `mission_accept`/`mission_decline` callbacks
+   * in `bot.ts`, not here - this method only ever offers, never assigns. */
+  private async notifyMission(
+    player: { id: bigint; name: string },
+    def: MissionDef,
+    language: string,
+  ): Promise<void> {
+    const title = this.t.translate(language, `Mission_${def.id}_Title`);
+    const desc = this.t.translate(language, `Mission_${def.id}_Desc`);
+    const text = this.t.translate(language, 'MissionOffer', title, desc, def.points);
+    const keyboard = new InlineKeyboard()
+      .text(this.t.translate(language, 'MissionAcceptButton'), `mission_accept:${def.id}`)
+      .text(this.t.translate(language, 'MissionDeclineButton'), 'mission_decline');
+    await this.bot.api
+      .sendMessage(chatNumber(player.id), text, { parse_mode: 'HTML', reply_markup: keyboard })
+      .catch(() => null);
   }
 
   async addBotPlayers(chatId: bigint, count = 4): Promise<number> {

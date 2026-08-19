@@ -313,6 +313,39 @@ describe('GameLobbyManager', () => {
     expect(sendMessage.mock.calls.length).toBeGreaterThanOrEqual(6);
   });
 
+  it('offers every real player a mission PM with accept/decline buttons after force-starting, but never a bot', async () => {
+    vi.useFakeTimers();
+    const { lobby, sendMessage, gameManager } = createHarness(100);
+    const chatId = 115n;
+
+    await lobby.startGame(chatId, 'Group', { id: 1n, name: 'Starter' }, 'Normal');
+    for (let i = 2; i <= 5; i++) {
+      await lobby.join(chatId, user(i, `Player${i}`));
+    }
+    const game = gameManager.get(chatId)!;
+    await lobby.forceStart(chatId, true);
+    await vi.advanceTimersByTimeAsync(1000);
+
+    const missionOffers = sendMessage.mock.calls.filter(
+      (call) => typeof call[1] === 'string' && call[1].includes('SECRET MISSION AVAILABLE'),
+    );
+    // One offer per real player - none of the 5 here are bots.
+    expect(missionOffers).toHaveLength(5);
+
+    const [, , options] = missionOffers[0]!;
+    const buttons = (
+      options as { reply_markup: { inline_keyboard: { text: string; callback_data: string }[][] } }
+    ).reply_markup.inline_keyboard[0]!;
+    expect(buttons).toHaveLength(2);
+    expect(buttons[0]!.callback_data).toMatch(/^mission_accept:/);
+    expect(buttons[1]!.callback_data).toBe('mission_decline');
+
+    for (const p of game.players) {
+      expect(p.missionOfferedId).not.toBeNull();
+      expect(p.missionId).toBeNull(); // offered, not yet accepted
+    }
+  });
+
   it('publicly announces the squad draft when a TeamDuel game starts, but not for a normal game', async () => {
     vi.useFakeTimers();
     const { lobby, sendMessage, gameManager, groupsStore } = createHarness(100);

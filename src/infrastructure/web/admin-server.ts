@@ -12,6 +12,8 @@ import {
   TournamentRepository,
   type TournamentStatus,
 } from '../persistence/tournament.repository.js';
+import { MissionRepository } from '../persistence/mission.repository.js';
+import { MISSION_DEFS } from '../../domain/game/missions.js';
 
 export interface AdminServerDependencies {
   port?: number;
@@ -22,6 +24,7 @@ export interface AdminServerDependencies {
   backupManager?: DatabaseBackupManager;
   bot?: Bot;
   tournamentRepository?: TournamentRepository;
+  missionRepository?: MissionRepository;
   maintenance?: { on: boolean };
 }
 
@@ -35,6 +38,7 @@ export class AdminServer {
   private backupManager: DatabaseBackupManager;
   private bot?: Bot | undefined;
   private tournamentRepository?: TournamentRepository | undefined;
+  private missionRepository?: MissionRepository | undefined;
   private maintenance?: { on: boolean } | undefined;
 
   constructor(deps: AdminServerDependencies = {}) {
@@ -56,6 +60,8 @@ export class AdminServer {
     this.tournamentRepository =
       deps.tournamentRepository ??
       (deps.prisma ? new TournamentRepository(deps.prisma) : undefined);
+    this.missionRepository =
+      deps.missionRepository ?? (deps.prisma ? new MissionRepository(deps.prisma) : undefined);
     this.maintenance = deps.maintenance;
   }
 
@@ -289,6 +295,18 @@ export class AdminServer {
       } else if (pathname.match(/^\/api\/admin\/tournaments\/(\d+)$/) && req.method === 'GET') {
         const idStr = pathname.split('/')[4] ?? '0';
         await this.handleGetTournamentDetails(res, parseInt(idStr, 10));
+      } else if (pathname === '/api/admin/missions' && req.method === 'GET') {
+        await this.handleGetMissions(res);
+      } else if (
+        pathname.match(/^\/api\/admin\/missions\/([^/]+)\/toggle$/) &&
+        req.method === 'POST'
+      ) {
+        const matches = pathname.match(/^\/api\/admin\/missions\/([^/]+)\/toggle$/)!;
+        const missionId = matches[1]!;
+        const body = await this.readJsonBody(req);
+        await this.handleToggleMission(res, missionId, body);
+      } else if (pathname === '/api/admin/missions/top-performers' && req.method === 'GET') {
+        await this.handleGetMissionTopPerformers(res);
       } else {
         this.sendJson(res, 404, { success: false, error: 'Endpoint not found' });
       }
@@ -722,6 +740,68 @@ export class AdminServer {
     });
   }
 
+  /** The full mission catalog (see `missions.ts`'s `MISSION_DEFS`) annotated with each one's
+   * enabled/disabled state and lifetime attempt/success counts, for the dashboard's Missions tab. */
+  private async handleGetMissions(res: ServerResponse): Promise<void> {
+    const [disabledIds, stats] = await Promise.all([
+      this.missionRepository?.getDisabledMissionIds() ?? Promise.resolve(new Set<string>()),
+      this.missionRepository?.getMissionStats() ?? Promise.resolve([]),
+    ]);
+    const statsById = new Map(stats.map((s) => [s.missionId, s]));
+
+    this.sendJson(res, 200, {
+      success: true,
+      missions: MISSION_DEFS.map((def) => {
+        const stat = statsById.get(def.id);
+        const attempts = stat?.attempts ?? 0;
+        const successes = stat?.successes ?? 0;
+        return {
+          id: def.id,
+          points: def.points,
+          minPlayers: def.minPlayers,
+          enabled: !disabledIds.has(def.id),
+          attempts,
+          successes,
+          successRate: attempts > 0 ? Math.round((successes / attempts) * 1000) / 10 : null,
+        };
+      }),
+    });
+  }
+
+  private async handleToggleMission(
+    res: ServerResponse,
+    missionId: string,
+    body: Record<string, unknown>,
+  ): Promise<void> {
+    if (!this.missionRepository) {
+      this.sendJson(res, 400, { success: false, error: 'Mission repository not available' });
+      return;
+    }
+    if (!MISSION_DEFS.some((d) => d.id === missionId)) {
+      this.sendJson(res, 404, { success: false, error: 'Unknown mission id' });
+      return;
+    }
+    const enabled = typeof body.enabled === 'boolean' ? body.enabled : true;
+    await this.missionRepository.setMissionEnabled(missionId, enabled);
+    this.sendJson(res, 200, { success: true, missionId, enabled });
+  }
+
+  /** Real players with the best mission success rate, for the dashboard's Missions tab - see
+   * `MissionRepository.getTopPerformers()`'s doc comment for the minimum-attempts floor. */
+  private async handleGetMissionTopPerformers(res: ServerResponse): Promise<void> {
+    const performers = (await this.missionRepository?.getTopPerformers()) ?? [];
+    this.sendJson(res, 200, {
+      success: true,
+      performers: performers.map((p) => ({
+        playerId: p.playerId.toString(),
+        displayName: p.username ? `@${p.username}` : (p.displayName ?? `Joueur #${p.playerId}`),
+        attempts: p.attempts,
+        successes: p.successes,
+        successRate: p.successRate,
+      })),
+    });
+  }
+
   private async handleCreateTournament(
     res: ServerResponse,
     body: Record<string, unknown>,
@@ -1075,6 +1155,14 @@ export class AdminServer {
     .badge-rose { background: rgba(244, 63, 94, 0.15); color: var(--accent-rose); border: 1px solid rgba(244, 63, 94, 0.3); }
     .badge-amber { background: rgba(245, 158, 11, 0.15); color: var(--accent-amber); border: 1px solid rgba(245, 158, 11, 0.3); }
 
+    /* Toggle switch (mission enable/disable) */
+    .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .switch-slider { position: absolute; cursor: pointer; inset: 0; background: rgba(255,255,255,0.12); border: 1px solid var(--border); border-radius: 999px; transition: 0.2s; }
+    .switch-slider::before { content: ""; position: absolute; height: 18px; width: 18px; left: 2px; top: 2px; background: white; border-radius: 50%; transition: 0.2s; }
+    .switch input:checked + .switch-slider { background: var(--accent-emerald); border-color: var(--accent-emerald); }
+    .switch input:checked + .switch-slider::before { transform: translateX(20px); }
+
     /* Logs Console */
     .log-box { background: #050811; border: 1px solid var(--border); border-radius: 16px; padding: 20px; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; height: 500px; overflow-y: auto; color: #a7f3d0; line-height: 1.6; white-space: pre-wrap; }
 
@@ -1187,6 +1275,7 @@ export class AdminServer {
             <button class="nav-btn" id="nav-leaderboard" onclick="loadTab('leaderboard')"><i class="fa-solid fa-ranking-star"></i> Classement Complet</button>
             <button class="nav-btn" id="nav-history" onclick="loadTab('history')"><i class="fa-solid fa-clock-rotate-left"></i> Historique des Parties</button>
             <button class="nav-btn" id="nav-tournaments" onclick="loadTab('tournaments')"><i class="fa-solid fa-trophy"></i> Tournois & Championnats</button>
+            <button class="nav-btn" id="nav-missions" onclick="loadTab('missions')"><i class="fa-solid fa-bullseye"></i> Missions Secrètes</button>
             <button class="nav-btn" id="nav-backups" onclick="loadTab('backups')"><i class="fa-solid fa-database"></i> Sauvegardes 15J</button>
             <button class="nav-btn" id="nav-dbstats" onclick="loadTab('dbstats')"><i class="fa-solid fa-server"></i> Monitoring BD</button>
             <button class="nav-btn" id="nav-broadcast" onclick="loadTab('broadcast')"><i class="fa-solid fa-bullhorn"></i> Annonce Globale</button>
@@ -1625,6 +1714,80 @@ export class AdminServer {
             \${tourneyCards || '<div class="table-container" style="padding:30px; text-align:center; color:var(--text-muted); grid-column:1/-1;">Aucun tournoi créé pour le moment. Utilisez le formulaire ci-dessus pour lancer votre premier tournoi officiel !</div>'}
           </div>
         \`;
+      } else if (tab === 'missions') {
+        const [missionsData, performersData] = await Promise.all([
+          apiFetch('/api/admin/missions'),
+          apiFetch('/api/admin/missions/top-performers'),
+        ]);
+        const missions = missionsData.missions || [];
+        const performers = performersData.performers || [];
+
+        const missionRows = missions.map(m => \`
+          <tr>
+            <td><strong>\${missionLabel(m.id)}</strong></td>
+            <td>\${m.minPlayers}+ joueurs</td>
+            <td>+\${m.points} pts</td>
+            <td>\${m.attempts}</td>
+            <td>\${m.successes}</td>
+            <td>\${m.successRate === null ? '—' : m.successRate + '%'}</td>
+            <td>
+              <label class="switch">
+                <input type="checkbox" \${m.enabled ? 'checked' : ''} onchange="toggleMission('\${m.id}', this.checked)">
+                <span class="switch-slider"></span>
+              </label>
+            </td>
+          </tr>
+        \`).join('');
+
+        const performerRows = performers.map((p, idx) => \`
+          <tr>
+            <td>\${idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : (idx + 1) + '.'} \${esc(p.displayName)}</td>
+            <td>\${p.attempts}</td>
+            <td>\${p.successes}</td>
+            <td><strong>\${p.successRate}%</strong></td>
+          </tr>
+        \`).join('');
+
+        main.innerHTML = \`
+          <div class="page-header">
+            <h1 class="page-title">🎯 Missions Secrètes</h1>
+          </div>
+          <div class="table-container" style="padding:24px; margin-bottom:24px;">
+            <h3 style="margin-bottom:16px;"><i class="fa-solid fa-list-check"></i> Catalogue des Missions (activer/désactiver globalement)</h3>
+            <table>
+              <thead>
+                <tr><th>Mission</th><th>Seuil</th><th>Récompense</th><th>Tentatives</th><th>Réussites</th><th>Taux</th><th>Active</th></tr>
+              </thead>
+              <tbody>\${missionRows || '<tr><td colspan="7" style="text-align:center; padding:20px; color:var(--text-muted);">Aucune mission trouvée</td></tr>'}</tbody>
+            </table>
+          </div>
+          <div class="table-container" style="padding:24px;">
+            <h3 style="margin-bottom:16px;"><i class="fa-solid fa-medal"></i> Meilleurs Performers (min. 3 missions tentées)</h3>
+            <table>
+              <thead>
+                <tr><th>Joueur</th><th>Tentatives</th><th>Réussites</th><th>Taux de réussite</th></tr>
+              </thead>
+              <tbody>\${performerRows || '<tr><td colspan="4" style="text-align:center; padding:20px; color:var(--text-muted);">Pas encore assez de données</td></tr>'}</tbody>
+            </table>
+          </div>
+        \`;
+      }
+    }
+
+    function missionLabel(id) {
+      return id.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase());
+    }
+
+    async function toggleMission(missionId, enabled) {
+      try {
+        await apiFetch('/api/admin/missions/' + encodeURIComponent(missionId) + '/toggle', {
+          method: 'POST',
+          body: JSON.stringify({ enabled }),
+        });
+        showToast(enabled ? 'Mission activée' : 'Mission désactivée', 'success');
+      } catch (err) {
+        showToast('Erreur lors de la mise à jour de la mission', 'error');
+        loadTab('missions');
       }
     }
 

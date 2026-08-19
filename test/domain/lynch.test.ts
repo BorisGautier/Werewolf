@@ -336,3 +336,127 @@ describe('resetLynchState', () => {
     expect(p.votedBy.size).toBe(0);
   });
 });
+
+describe('resolveLynchVotes - mission-mode tracking', () => {
+  it("flags a vote for a Wolf-team player and for anyone outside the voter's own team", () => {
+    const villager = createPlayer(1n, 'V', ROLE_BIT.Villager, 'Village');
+    const wolf = createPlayer(2n, 'W', ROLE_BIT.Wolf, 'Wolf');
+    villager.choice = wolf.id;
+
+    resolveLynchVotes([villager, wolf], { lynchAttempt: 1 });
+
+    expect(villager.everVotedForWolf).toBe(true);
+    expect(villager.everVotedOppositeCamp).toBe(true);
+  });
+
+  it('does not flag a same-team vote as a wolf vote or an opposite-camp vote', () => {
+    const a = createPlayer(1n, 'A', ROLE_BIT.Villager, 'Village');
+    const b = createPlayer(2n, 'B', ROLE_BIT.Villager, 'Village');
+    a.choice = b.id;
+
+    resolveLynchVotes([a, b], { lynchAttempt: 1 });
+
+    expect(a.everVotedForWolf).toBe(false);
+    expect(a.everVotedOppositeCamp).toBe(false);
+  });
+
+  it('only flags votedOppositeCampDay1 when dayNumber is explicitly 1', () => {
+    const villager = createPlayer(1n, 'V', ROLE_BIT.Villager, 'Village');
+    const wolf = createPlayer(2n, 'W', ROLE_BIT.Wolf, 'Wolf');
+    villager.choice = wolf.id;
+
+    resolveLynchVotes([villager, wolf], { lynchAttempt: 1, dayNumber: 2 });
+    expect(villager.votedOppositeCampDay1).toBe(false);
+
+    villager.choice = wolf.id;
+    resolveLynchVotes([villager, wolf], { lynchAttempt: 1, dayNumber: 1 });
+    expect(villager.votedOppositeCampDay1).toBe(true);
+  });
+
+  it('marks the killer(s) of a resolved lynch as having voted for the eventual victim', () => {
+    const a = createPlayer(1n, 'A', ROLE_BIT.Villager, 'Village');
+    const b = createPlayer(2n, 'B', ROLE_BIT.Villager, 'Village');
+    const target = createPlayer(3n, 'T', ROLE_BIT.Villager, 'Village');
+    a.choice = target.id;
+    b.choice = target.id;
+
+    resolveLynchVotes([a, b, target], { lynchAttempt: 1 });
+
+    expect(a.everVotedForLynchedVictim).toBe(true);
+    expect(b.everVotedForLynchedVictim).toBe(true);
+  });
+
+  it("tracks majority vs minority vote counts against the round's actual top target", () => {
+    const majority1 = createPlayer(1n, 'M1', ROLE_BIT.Villager, 'Village');
+    const majority2 = createPlayer(2n, 'M2', ROLE_BIT.Villager, 'Village');
+    const minority = createPlayer(3n, 'Min', ROLE_BIT.Villager, 'Village');
+    const target = createPlayer(4n, 'T', ROLE_BIT.Villager, 'Village');
+    const other = createPlayer(5n, 'O', ROLE_BIT.Villager, 'Village');
+    majority1.choice = target.id;
+    majority2.choice = target.id;
+    minority.choice = other.id;
+
+    resolveLynchVotes([majority1, majority2, minority, target, other], { lynchAttempt: 1 });
+
+    expect(majority1.majorityVoteCount).toBe(1);
+    expect(majority2.majorityVoteCount).toBe(1);
+    expect(minority.minorityVoteCount).toBe(1);
+    expect(minority.majorityVoteCount).toBe(0);
+  });
+
+  it('increments escapedTopVoteLynchCount for a tied player who lives, not for one who dies', () => {
+    const [a, b, c, d] = villagers(4);
+    a!.choice = c!.id;
+    b!.choice = d!.id;
+
+    // A genuine 1-1 tie with no random tiebreak - neither c nor d dies, both "escaped".
+    resolveLynchVotes([a!, b!, c!, d!], { lynchAttempt: 1 });
+
+    expect(c!.escapedTopVoteLynchCount).toBe(1);
+    expect(d!.escapedTopVoteLynchCount).toBe(1);
+  });
+
+  it('does not credit escapedTopVoteLynchCount to a player who was actually lynched', () => {
+    const a = createPlayer(1n, 'A', ROLE_BIT.Villager, 'Village');
+    const b = createPlayer(2n, 'B', ROLE_BIT.Villager, 'Village');
+    const target = createPlayer(3n, 'T', ROLE_BIT.Villager, 'Village');
+    a.choice = target.id;
+    b.choice = target.id;
+
+    resolveLynchVotes([a, b, target], { lynchAttempt: 1 });
+
+    expect(target.isDead).toBe(true);
+    expect(target.escapedTopVoteLynchCount).toBe(0);
+  });
+
+  it('accumulates everVotedAgainstBy across the whole game, unlike votedBy which resetLynchState clears', () => {
+    const voter1 = createPlayer(1n, 'V1', ROLE_BIT.Villager, 'Village');
+    const voter2 = createPlayer(2n, 'V2', ROLE_BIT.Villager, 'Village');
+    const target = createPlayer(3n, 'T', ROLE_BIT.Villager, 'Village');
+    voter1.choice = target.id;
+
+    resolveLynchVotes([voter1, voter2, target], { lynchAttempt: 1 });
+    resetLynchState([voter1, voter2, target]);
+    voter2.choice = target.id;
+    resolveLynchVotes([voter1, voter2, target], { lynchAttempt: 1 });
+
+    expect(target.votedBy.size).toBe(1); // reset before the second round
+    expect(target.everVotedAgainstBy.size).toBe(2); // accumulated across both rounds
+  });
+
+  it('counts abstains via abstainCount and a genuine no-vote via everMissedVote', () => {
+    const abstainer = createPlayer(1n, 'A', ROLE_BIT.Villager, 'Village');
+    const silent = createPlayer(2n, 'S', ROLE_BIT.Villager, 'Village');
+    const other = createPlayer(3n, 'O', ROLE_BIT.Villager, 'Village');
+    abstainer.choice = SKIP_VOTE;
+    silent.choice = null;
+    other.choice = other.id;
+
+    resolveLynchVotes([abstainer, silent, other], { lynchAttempt: 1 });
+
+    expect(abstainer.abstainCount).toBe(1);
+    expect(abstainer.everMissedVote).toBe(false);
+    expect(silent.everMissedVote).toBe(true);
+    expect(silent.abstainCount).toBe(0);
+  });
+});

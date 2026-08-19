@@ -28,6 +28,7 @@ import {
   resolveLynchVotes,
   type LynchOptions,
   type LynchResult,
+  type VoteLogEntry,
 } from './lynch.js';
 import {
   evaluateWinCondition,
@@ -156,6 +157,10 @@ export class Game {
   archangelBulletsMap = new Map<bigint, number>();
   consecutiveVillageDeaths = 0;
   claimsMap = new Map<bigint, string>();
+  /** Every lynch vote cast across the whole game, day by day - accumulated from each
+   * `resolveLynch()` call, read back by `generateAiGazette()` for a vote-by-vote narrative
+   * (`generateGazette()`, the template fallback, doesn't need it). */
+  readonly voteLog: VoteLogEntry[] = [];
   /** Mirrors `_doubleLynch` as captured by `startLynch()`: how many lynch attempts this Lynch phase gets. */
   lynchAttemptsPlanned = 1;
   private doubleLynchPending = false;
@@ -422,6 +427,7 @@ export class Game {
       const win = this.checkWinCondition({ checkBitten: true });
       return {
         resolution: { outcome: 'PacifistPeace' },
+        voteLog: [],
         ...win,
       };
     }
@@ -431,9 +437,11 @@ export class Game {
       lynchAttempt: this.lynchAttempt,
       randomLynchOnTie: this.randomLynchOnTie,
       avengerTargetMap: this.avengerTargetMap,
+      dayNumber: this.dayNumber,
       ...options,
     };
     const lynchResult = resolveLynchVotes(this.players, lynchOptions);
+    this.voteLog.push(...lynchResult.voteLog);
     const archangelEvents = this.trackArchangelStreak(lynchResult.events);
 
     // The Berserker Wolf's rage: a Werewolf pack-mate actually lynched (not pardoned, not a
@@ -954,6 +962,15 @@ export class Game {
   }
 
   checkWinCondition(context: WinConditionContext = {}): WinConditionResult {
+    // Mission-mode tracking: stamp the day every newly-dead player died on. Idempotent by the
+    // `dayDied === null` guard, so it's safe to run on every single call regardless of the
+    // idempotency early-return right below - a death can come from any kill path (night, lynch,
+    // idle, a Hunter's dying shot, ...), and this is the one chokepoint all of them funnel through
+    // on their way to a win-condition check.
+    for (const p of this.players) {
+      if (p.isDead && p.dayDied === null) p.dayDied = this.dayNumber;
+    }
+
     // Idempotent once the game has actually ended: without this, a second call after a Hitman win
     // would skip the Hitman branch below (`!hitman.won` is now false, since the first call already
     // set it) and fall through to `evaluateWinCondition()`, which has no idea what a Hitman win even

@@ -14,6 +14,7 @@ export interface PlayerScoreResult {
     afkPenalty: number;
     rolePerformance: number;
     duelBonus: number;
+    missionBonus: number;
   };
 }
 
@@ -37,6 +38,7 @@ export function calculateGamePoints(
   earlyDeathIds?: Set<bigint>,
   rolePerformanceBonus?: ReadonlyMap<bigint, number>,
   duelBonus?: ReadonlyMap<bigint, number>,
+  missionBonus?: ReadonlyMap<bigint, number>,
 ): PlayerScoreResult[] {
   return players.map((player) => {
     let won = false;
@@ -47,6 +49,7 @@ export function calculateGamePoints(
     let afkPenalty = 0;
     const rolePerformance = rolePerformanceBonus?.get(player.id) ?? 0;
     const duel = duelBonus?.get(player.id) ?? 0;
+    const mission = missionBonus?.get(player.id) ?? 0;
 
     // Check if player was AFK in this game
     if (afkPlayerIds?.has(player.id)) {
@@ -94,7 +97,8 @@ export function calculateGamePoints(
       consolation +
       afkPenalty +
       rolePerformance +
-      duel;
+      duel +
+      mission;
 
     return {
       playerId: player.id,
@@ -108,6 +112,7 @@ export function calculateGamePoints(
         afkPenalty,
         rolePerformance,
         duelBonus: duel,
+        missionBonus: mission,
       },
     };
   });
