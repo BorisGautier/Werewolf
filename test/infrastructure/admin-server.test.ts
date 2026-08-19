@@ -83,6 +83,64 @@ describe('AdminServer REST API & Dashboard', () => {
     expect(Array.isArray(body.games)).toBe(true);
   });
 
+  it('lists the full leaderboard (empty/graceful without a DB configured)', async () => {
+    const token = authManager.generateToken('admin');
+    const res = await fetch('http://localhost:4099/api/admin/leaderboard', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.success).toBe(true);
+    expect(Array.isArray(body.players)).toBe(true);
+    expect(body.page).toBe(0);
+  });
+
+  it('lists finished-game history (empty/graceful without a DB configured)', async () => {
+    const token = authManager.generateToken('admin');
+    const res = await fetch('http://localhost:4099/api/admin/game-history', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.success).toBe(true);
+    expect(Array.isArray(body.games)).toBe(true);
+    expect(body.page).toBe(0);
+  });
+
+  it('404s a tournament detail lookup without a DB configured', async () => {
+    const token = authManager.generateToken('admin');
+    const res = await fetch('http://localhost:4099/api/admin/tournaments/1', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(res.status).toBe(404);
+    const body = (await res.json()) as any;
+    expect(body.success).toBe(false);
+  });
+
+  it('reports game analytics (empty/graceful without a DB configured)', async () => {
+    const token = authManager.generateToken('admin');
+    const res = await fetch('http://localhost:4099/api/admin/game-analytics', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.success).toBe(true);
+    expect(Array.isArray(body.gamesPerDay)).toBe(true);
+    expect(Array.isArray(body.winsByTeam)).toBe(true);
+  });
+
+  it('reports DB stats (empty/graceful without a DB configured)', async () => {
+    const token = authManager.generateToken('admin');
+    const res = await fetch('http://localhost:4099/api/admin/db-stats', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.success).toBe(true);
+    expect(Array.isArray(body.tables)).toBe(true);
+    expect(body.databaseSizeBytes).toBe(0);
+  });
+
   it('lists database backups', async () => {
     const token = authManager.generateToken('admin');
     const res = await fetch('http://localhost:4099/api/admin/backups', {

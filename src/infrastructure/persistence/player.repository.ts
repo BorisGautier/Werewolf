@@ -1,4 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
+import { SYNTHETIC_BOT_ID_CEILING, SYNTHETIC_BOT_ID_FLOOR } from '../../domain/game/player.js';
 import { getRankForPoints, type RankTier } from '../../domain/scoring/rank.js';
 import {
   dbErrors,
@@ -177,6 +178,25 @@ export class PlayerRepository {
     await this.prisma.player.update({ where: { telegramId }, data: { afkCount: 0 } });
   }
 
+  /** Toggles this player out of (or back into) every group's `/tagall` community-call pings.
+   * Returns the new state. */
+  async toggleTagOptOut(telegramId: bigint): Promise<boolean> {
+    const player = await this.upsert(telegramId);
+    const tagOptOut = !player.tagOptOut;
+    await this.prisma.player.update({ where: { telegramId }, data: { tagOptOut } });
+    return tagOptOut;
+  }
+
+  /** Which of these ids have opted out of `/tagall` pings. */
+  async getTagOptOutIds(telegramIds: readonly bigint[]): Promise<Set<bigint>> {
+    if (telegramIds.length === 0) return new Set();
+    const rows = await this.prisma.player.findMany({
+      where: { telegramId: { in: [...telegramIds] }, tagOptOut: true },
+      select: { telegramId: true },
+    });
+    return new Set(rows.map((r) => r.telegramId));
+  }
+
   /** Awards leaderboard points and records game stats. Returns promotion info if rank leveled up. */
   async awardPoints(
     telegramId: bigint,
@@ -222,17 +242,24 @@ export class PlayerRepository {
   /**
    * Returns top ranked players ordered by points descending.
    *
-   * Deliberately doesn't filter by `telegramId` to exclude bots - a real Telegram user id is a
-   * 64-bit number that today commonly runs into the hundreds of millions to low billions (accounts
-   * have grown well past the 32-bit range Telegram started with), so any small numeric ceiling
-   * meant to catch "synthetic-looking" ids would exclude the majority of real players' actual ids
-   * along with it. `awardPoints()` is the real, reliable guard - it's only ever called for players
-   * whose in-memory `Player.isBot` flag is false, so a bot can never end up with a DB row or points
-   * here in the first place; there's nothing left for a query-side filter to defend against.
+   * `awardPoints()` is the real, reliable guard against a bot earning points or a DB row in the
+   * first place - it's only ever called for players whose in-memory `Player.isBot` flag is false.
+   * The `telegramId` exclusion below is defense-in-depth on top of that, not a replacement for it:
+   * unlike the earlier, broken `telegramId < SYNTHETIC_BOT_ID_FLOOR` ceiling (which wrongly
+   * excluded most real players, whose 64-bit ids commonly run into the hundreds of millions to low
+   * billions), this only excludes the narrow synthetic-bot id band itself - see
+   * `isSyntheticBotId()`.
    */
-  async getTopPlayers(limit = 10) {
+  async getTopPlayers(limit = 10, offset = 0) {
     return this.prisma.player.findMany({
       take: limit,
+      skip: offset,
+      where: {
+        OR: [
+          { telegramId: { lte: SYNTHETIC_BOT_ID_FLOOR } },
+          { telegramId: { gt: SYNTHETIC_BOT_ID_CEILING } },
+        ],
+      },
       orderBy: [{ points: 'desc' }, { gamesWon: 'desc' }],
       select: {
         id: true,
@@ -244,6 +271,19 @@ export class PlayerRepository {
         gamesWon: true,
         donationLevel: true,
         equippedTitle: true,
+      },
+    });
+  }
+
+  /** Total number of players eligible for the leaderboard (mirrors `getTopPlayers()`'s bot
+   * exclusion), so callers can compute how many pages a paginated view needs. */
+  async countLeaderboardPlayers(): Promise<number> {
+    return this.prisma.player.count({
+      where: {
+        OR: [
+          { telegramId: { lte: SYNTHETIC_BOT_ID_FLOOR } },
+          { telegramId: { gt: SYNTHETIC_BOT_ID_CEILING } },
+        ],
       },
     });
   }
@@ -269,7 +309,9 @@ export class PlayerRepository {
     };
   }
 
-  /** Fetches players who have played at least one game in this specific group. */
+  /** Fetches players who have played at least one game in this specific group. Excludes the
+   * synthetic bot id band as defense-in-depth (see `getTopPlayers()`'s doc comment) - callers like
+   * `/tagall` shouldn't page a game's AI opponents. */
   async getGroupPlayers(telegramGroupId: bigint, limit = 50) {
     return this.prisma.player.findMany({
       where: {
@@ -282,6 +324,10 @@ export class PlayerRepository {
             },
           },
         },
+        OR: [
+          { telegramId: { lte: SYNTHETIC_BOT_ID_FLOOR } },
+          { telegramId: { gt: SYNTHETIC_BOT_ID_CEILING } },
+        ],
       },
       take: limit,
       select: {
@@ -289,6 +335,52 @@ export class PlayerRepository {
         telegramId: true,
         username: true,
         displayName: true,
+      },
+    });
+  }
+
+  /** Leaderboard scoped to players who've played at least one game in this specific group,
+   * ranked by their (global) points - unlike `getGroupPlayers()` this is ordered/paginated for
+   * `/groupleaderboard` display, not just a flat member list for `/tagall`. */
+  async getGroupLeaderboard(telegramGroupId: bigint, limit = 15, offset = 0) {
+    return this.prisma.player.findMany({
+      where: {
+        gamePlayers: {
+          some: { game: { group: { telegramId: telegramGroupId } } },
+        },
+        OR: [
+          { telegramId: { lte: SYNTHETIC_BOT_ID_FLOOR } },
+          { telegramId: { gt: SYNTHETIC_BOT_ID_CEILING } },
+        ],
+      },
+      take: limit,
+      skip: offset,
+      orderBy: [{ points: 'desc' }, { gamesWon: 'desc' }],
+      select: {
+        id: true,
+        telegramId: true,
+        username: true,
+        displayName: true,
+        points: true,
+        gamesPlayed: true,
+        gamesWon: true,
+        donationLevel: true,
+      },
+    });
+  }
+
+  /** Total number of players eligible for a specific group's `/groupleaderboard`, mirroring
+   * `getGroupLeaderboard()`'s filters - powers that view's pagination. */
+  async countGroupLeaderboardPlayers(telegramGroupId: bigint): Promise<number> {
+    return this.prisma.player.count({
+      where: {
+        gamePlayers: {
+          some: { game: { group: { telegramId: telegramGroupId } } },
+        },
+        OR: [
+          { telegramId: { lte: SYNTHETIC_BOT_ID_FLOOR } },
+          { telegramId: { gt: SYNTHETIC_BOT_ID_CEILING } },
+        ],
       },
     });
   }

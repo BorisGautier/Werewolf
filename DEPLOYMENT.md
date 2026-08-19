@@ -234,8 +234,17 @@ Pour accéder au Control Center Admin et à Grafana sous le même nom de domaine
        # Grafana Dashboards
        ProxyPass /grafana/ http://127.0.0.1:3000/
        ProxyPassReverse /grafana/ http://127.0.0.1:3000/
+
+       # Everything else (the public landing page) - must come last so the more specific
+       # ProxyPass rules above take priority over this catch-all.
+       ProxyPass / http://127.0.0.1:4000/
+       ProxyPassReverse / http://127.0.0.1:4000/
    </VirtualHost>
    ```
+
+   ⚠️ Certbot duplicates this block as-is into the generated `-le-ssl.conf` (port 443)
+   VirtualHost - the `ProxyPass /` line above must survive that duplication too, or the
+   landing page will 404/fall through to Apache's default page once HTTPS is enforced.
 3. Activer le site et générer le certificat SSL Let's Encrypt avec Certbot :
    ```bash
    sudo a2ensite epicwolf.borisgauty.com.conf
@@ -275,6 +284,13 @@ server {
 
     location /grafana/ {
         proxy_pass http://localhost:3000/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    # Everything else (the public landing page)
+    location / {
+        proxy_pass http://localhost:4000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
     }

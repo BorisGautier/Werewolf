@@ -215,6 +215,14 @@
 
     "PlayerFoundDead": ["{0} was found dead this morning."],
     "PlayerFoundDeadWithRole": ["{0} was found dead this morning. They were a {1}."],
+    "PlayerShotPublic": ["🔫 {0} ({1}) draws their weapon and shoots {2} down in broad daylight!"],
+    "PlayerShotPublicWithRole": [
+      "🔫 {0} ({1}) draws their weapon and shoots {2} down in broad daylight! They were {3}."
+    ],
+    "HunterShotDeathPublic": ["💥 {0} collapses, cut down by a hunting bullet."],
+    "HunterShotDeathPublicWithRole": [
+      "💥 {0} collapses, cut down by a hunting bullet. They were {1}."
+    ],
 
     "DetectiveEaten": [
       "The villagers gather in the morning, but do not see {0}. They wander over to the house, to find {0} disemboweled, an old badge shoved down their throat."

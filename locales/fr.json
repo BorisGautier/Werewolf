@@ -215,6 +215,14 @@
 
     "PlayerFoundDead": ["{0} a été retrouvé(e) mort(e) ce matin."],
     "PlayerFoundDeadWithRole": ["{0} a été retrouvé(e) mort(e) ce matin. C'était un(e) {1}."],
+    "PlayerShotPublic": ["🔫 {0} ({1}) sort son arme et abat {2} en plein jour !"],
+    "PlayerShotPublicWithRole": [
+      "🔫 {0} ({1}) sort son arme et abat {2} en plein jour ! C'était {3}."
+    ],
+    "HunterShotDeathPublic": ["💥 {0} s'effondre, fauché(e) par une balle de chasse."],
+    "HunterShotDeathPublicWithRole": [
+      "💥 {0} s'effondre, fauché(e) par une balle de chasse. C'était {1}."
+    ],
 
     "DetectiveEaten": [
       "Les villageois se réunissent à l'aube, mais personne ne voit {0}. Tous se rendent chez lui, et découvrent {0} démembré, ses entrailles déchiquetées, une insigne en travers de la gorge."

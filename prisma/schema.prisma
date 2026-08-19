@@ -197,6 +197,8 @@ model Player {
   gamesPlayed        Int      @default(0)
   gamesWon           Int      @default(0)
   equippedTitle      String?
+  /// Opted out of /tagall community-call pings, across every group - see PlayerRepository.setTagOptOut().
+  tagOptOut          Boolean  @default(false)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
@@ -524,8 +526,25 @@ model TournamentTeam {
 
   tournament   Tournament?            @relation(fields: [tournamentId], references: [id], onDelete: SetNull)
   members      TournamentTeamMember[]
+  pointLogs    TournamentPointLog[]
 
   @@map("tournament_teams")
+}
+
+/// One row per point award to a tournament team (see PlayerRepository.awardTournamentPoints) -
+/// an append-only log, never updated/deleted, so a team's point total over time can be
+/// reconstructed as a running sum. Powers the admin dashboard's per-tournament "evolution" view.
+model TournamentPointLog {
+  id        Int            @id @default(autoincrement())
+  teamId    Int
+  team      TournamentTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  playerId  BigInt
+  points    Int
+  won       Boolean
+  createdAt DateTime       @default(now())
+
+  @@index([teamId, createdAt])
+  @@map("tournament_point_logs")
 }
 
 model TournamentTeamMember {

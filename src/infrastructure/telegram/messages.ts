@@ -103,6 +103,43 @@ export function describeEvent(
         ];
       }
 
+      // A Gunner/Archangel/Spumpkin day-shot always outs its shooter - unlike a death's role
+      // reveal (gated by `showRolesOnDeath`), that's the very point of the ability (see
+      // `AboutGunner`: "tous les joueurs vous entendront, et connaîtront votre rôle") - so this
+      // runs unconditionally, before the `showRolesOnDeath` gate below.
+      if (event.method === 'Shoot') {
+        const shooterId = event.killerIds[0];
+        if (shooterId !== undefined) {
+          const key = showRolesOnDeath ? 'PlayerShotPublicWithRole' : 'PlayerShotPublic';
+          return [
+            {
+              audience: 'group',
+              key,
+              args: showRolesOnDeath
+                ? [name(shooterId), role(shooterId), name(event.playerId), role(event.playerId)]
+                : [name(shooterId), role(shooterId), name(event.playerId)],
+            },
+          ];
+        }
+      }
+
+      // A Hunter's bullet (dying shot, night counter-attack, or the Hunter-vs-Wolf standoff) is
+      // always a dramatic, active kill - the generic "found dead this morning" fallback below
+      // reads as a passive overnight death and doesn't fit, so this gets its own flavor text
+      // regardless of `showRolesOnDeath` too.
+      if (event.method === 'HunterShot') {
+        const key = showRolesOnDeath ? 'HunterShotDeathPublicWithRole' : 'HunterShotDeathPublic';
+        return [
+          {
+            audience: 'group',
+            key,
+            args: showRolesOnDeath
+              ? [name(event.playerId), role(event.playerId)]
+              : [name(event.playerId)],
+          },
+        ];
+      }
+
       if (showRolesOnDeath) {
         const victim = findById(players, event.playerId);
 
