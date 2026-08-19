@@ -15,13 +15,20 @@
  */
 
 import { randomInt } from 'node:crypto';
-import { balance, WOLF_ROLES, type BalanceOptions } from './game-balancing.js';
+import {
+  balance,
+  TEAM_DUEL_EXCLUDED_ROLE_FLAGS,
+  WOLF_ROLES,
+  type BalanceOptions,
+} from './game-balancing.js';
 import { killPlayer, type KillOptions } from './kill.js';
 import {
   resetLynchState,
+  resolveClumsyGuyVote as rollClumsyGuyFumble,
   resolveLynchVotes,
   type LynchOptions,
   type LynchResult,
+  type VoteLogEntry,
 } from './lynch.js';
 import {
   evaluateWinCondition,
@@ -64,7 +71,7 @@ import type { VisitContext } from './night-visit.js';
 import { checkRoleChanges, validateSpecialRoleChoices } from './role-changes.js';
 import { promoteToWolf } from './transform.js';
 import type { GameEvent } from './game-event.js';
-import type { GameMode } from './game-mode.js';
+import { TEAM_DUEL_MIN_PLAYERS, type GameMode } from './game-mode.js';
 import type { GamePhase } from './game-phase.js';
 import { ABSTAIN, alivePlayers, createPlayer, type Player } from './player.js';
 import { ROLE_BIT, roleName, type Role, type RoleFlags } from '../roles/role.js';
@@ -94,7 +101,8 @@ export class GameError extends Error {
       | 'GROUP_FULL'
       | 'NOT_ENOUGH_PLAYERS'
       | 'WRONG_PHASE'
-      | 'GAME_OVER',
+      | 'GAME_OVER'
+      | 'ODD_PLAYER_COUNT',
   ) {
     super(message);
     this.name = 'GameError';
@@ -149,6 +157,10 @@ export class Game {
   archangelBulletsMap = new Map<bigint, number>();
   consecutiveVillageDeaths = 0;
   claimsMap = new Map<bigint, string>();
+  /** Every lynch vote cast across the whole game, day by day - accumulated from each
+   * `resolveLynch()` call, read back by `generateAiGazette()` for a vote-by-vote narrative
+   * (`generateGazette()`, the template fallback, doesn't need it). */
+  readonly voteLog: VoteLogEntry[] = [];
   /** Mirrors `_doubleLynch` as captured by `startLynch()`: how many lynch attempts this Lynch phase gets. */
   lynchAttemptsPlanned = 1;
   private doubleLynchPending = false;
@@ -209,7 +221,11 @@ export class Game {
   }
 
   canStart(): boolean {
-    return this.phase === 'Joining' && this.players.length >= this.minPlayers;
+    if (this.phase !== 'Joining') return false;
+    if (this.mode === 'TeamDuel') {
+      return this.players.length >= TEAM_DUEL_MIN_PLAYERS && this.players.length % 2 === 0;
+    }
+    return this.players.length >= this.minPlayers;
   }
 
   /**
@@ -219,6 +235,24 @@ export class Game {
    */
   start(balanceOptions: Partial<Pick<BalanceOptions, 'chaos'>> = {}): GameEvent[] {
     if (this.phase !== 'Joining') throw new GameError('The game already started.', 'WRONG_PHASE');
+    // Checked before the generic `canStart()` below (which already folds both of these cases into
+    // one boolean) so a direct `start()` caller - not just the lobby, which has its own separate
+    // odd/too-few distinction for its own player-facing message - still gets the more specific of
+    // the two reasons rather than a one-size-fits-all "not enough players".
+    if (this.mode === 'TeamDuel') {
+      if (this.players.length < TEAM_DUEL_MIN_PLAYERS) {
+        throw new GameError(
+          `Team Duel needs at least ${TEAM_DUEL_MIN_PLAYERS} players (need an even split).`,
+          'NOT_ENOUGH_PLAYERS',
+        );
+      }
+      if (this.players.length % 2 !== 0) {
+        throw new GameError(
+          'Team Duel needs an even number of players to split into two equal squads.',
+          'ODD_PLAYER_COUNT',
+        );
+      }
+    }
     if (!this.canStart()) {
       throw new GameError(
         `Not enough players joined (need at least ${this.minPlayers}).`,
@@ -227,7 +261,10 @@ export class Game {
     }
 
     const { rolesToAssign, possibleRoles } = balance({
-      disabledRoleFlags: this.disabledRoleFlags,
+      disabledRoleFlags:
+        this.mode === 'TeamDuel'
+          ? this.disabledRoleFlags | TEAM_DUEL_EXCLUDED_ROLE_FLAGS
+          : this.disabledRoleFlags,
       playerCount: this.players.length,
       chaos: balanceOptions.chaos ?? this.mode === 'Chaos',
       burningOverkill: this.burningOverkill,
@@ -251,6 +288,18 @@ export class Game {
       botOnlyGamesStarted.inc();
     }
     this.possibleRoles = possibleRoles;
+
+    if (this.mode === 'TeamDuel') {
+      // `this.players` is already shuffled above, so a straight half/half split is already a fair
+      // random draft - no need to shuffle a second time. The captain is simply the first drafted
+      // member of each squad (a purely organizational marker, see `Player.isDuelCaptain`'s doc).
+      const half = this.players.length / 2;
+      this.players.forEach((player, index) => {
+        player.duelSquad = index < half ? 'A' : 'B';
+      });
+      this.players[0]!.isDuelCaptain = true;
+      this.players[half]!.isDuelCaptain = true;
+    }
 
     this.players.forEach((player) => {
       if (player.role === ROLE_BIT.Hitman) {
@@ -335,6 +384,17 @@ export class Game {
   }
 
   /**
+   * Called by the app layer right after a Clumsy Guy casts a live lynch vote: immediately rolls
+   * their 50% chance of fumbling onto a random living player instead of whoever they actually
+   * clicked (see `resolveClumsyGuyVote()`), so `player.choice` already holds the true target by
+   * the time the group's live "X voted to lynch Y" announcement reads it - no-op for anyone else.
+   */
+  resolveClumsyGuyVote(voterId: bigint): void {
+    const voter = this.players.find((p) => p.id === voterId);
+    if (voter) rollClumsyGuyFumble(voter, this.players);
+  }
+
+  /**
    * Tallies votes and resolves the lynch. Call again (after
    * `restartLynchVote()`) up to `lynchAttemptsPlanned` times.
    *
@@ -367,6 +427,7 @@ export class Game {
       const win = this.checkWinCondition({ checkBitten: true });
       return {
         resolution: { outcome: 'PacifistPeace' },
+        voteLog: [],
         ...win,
       };
     }
@@ -376,9 +437,11 @@ export class Game {
       lynchAttempt: this.lynchAttempt,
       randomLynchOnTie: this.randomLynchOnTie,
       avengerTargetMap: this.avengerTargetMap,
+      dayNumber: this.dayNumber,
       ...options,
     };
     const lynchResult = resolveLynchVotes(this.players, lynchOptions);
+    this.voteLog.push(...lynchResult.voteLog);
     const archangelEvents = this.trackArchangelStreak(lynchResult.events);
 
     // The Berserker Wolf's rage: a Werewolf pack-mate actually lynched (not pardoned, not a
@@ -860,7 +923,63 @@ export class Game {
     return events;
   }
 
+  /** `TeamDuel`'s win condition: the moment one squad has zero living members, the other squad
+   * wins outright - `null` while both squads still have at least one survivor (game continues).
+   * The narrow edge case of both squads hitting zero on the very same resolution (e.g. two
+   * players from opposing squads killing each other via a Hunter counter-attack) declares
+   * whichever squad has more survivors; a true simultaneous double-wipeout falls through as "not
+   * decided yet" (`null`) rather than picking a winner arbitrarily - vanishingly rare, and the
+   * classic win-condition checks after this one will still catch the game being over one way or
+   * another. */
+  private checkDuelWinCondition(): WinConditionResult | null {
+    const alive = alivePlayers(this.players);
+    const aliveA = alive.filter((p) => p.duelSquad === 'A').length;
+    const aliveB = alive.filter((p) => p.duelSquad === 'B').length;
+    if (aliveA > 0 && aliveB > 0) return null;
+    // Both squads hit 0 survivors on the very same resolution (a night kill and a lynch can both
+    // land in the same round) - genuinely nobody left to keep playing, so this must still end the
+    // game as a draw, not be treated as "still contested". Leaving this as a `return null` here
+    // (as an earlier version of this method did) meant the loop kept scheduling night after night
+    // forever with zero living players, since neither squad could ever satisfy the "one side wiped
+    // out, other still has survivors" condition below again - a real, confirmed stall bug.
+    if (aliveA === 0 && aliveB === 0) {
+      this.phase = 'Ended';
+      return { finished: true, events: [{ type: 'DuelMutualWipeout' }] };
+    }
+
+    const winningSquad: 'A' | 'B' = aliveA > aliveB ? 'A' : 'B';
+    const survivors = alive.filter((p) => p.duelSquad === winningSquad);
+    for (const p of this.players) {
+      if (p.duelSquad === winningSquad) p.won = true;
+    }
+    this.phase = 'Ended';
+    try {
+      teamWins.labels(`DuelSquad${winningSquad}`).inc();
+    } catch {
+      // ignore
+    }
+    return {
+      finished: true,
+      events: [
+        {
+          type: 'DuelSquadWon',
+          squad: winningSquad,
+          survivorIds: survivors.map((p) => p.id),
+        },
+      ],
+    };
+  }
+
   checkWinCondition(context: WinConditionContext = {}): WinConditionResult {
+    // Mission-mode tracking: stamp the day every newly-dead player died on. Idempotent by the
+    // `dayDied === null` guard, so it's safe to run on every single call regardless of the
+    // idempotency early-return right below - a death can come from any kill path (night, lynch,
+    // idle, a Hunter's dying shot, ...), and this is the one chokepoint all of them funnel through
+    // on their way to a win-condition check.
+    for (const p of this.players) {
+      if (p.isDead && p.dayDied === null) p.dayDied = this.dayNumber;
+    }
+
     // Idempotent once the game has actually ended: without this, a second call after a Hitman win
     // would skip the Hitman branch below (`!hitman.won` is now false, since the first call already
     // set it) and fall through to `evaluateWinCondition()`, which has no idea what a Hitman win even
@@ -872,6 +991,22 @@ export class Game {
         ...(this.winningTeam !== undefined && { winningTeam: this.winningTeam }),
         events: [],
       };
+    }
+
+    // TeamDuel: the mode's own win condition entirely replaces the classic Village/Wolf/... logic
+    // below, full stop - not just checked first, `evaluateWinCondition()` never runs at all while
+    // this mode is active. It has to be this way, not just "checked before": that classic logic
+    // ends the game the moment one *role*-based threat count hits zero (e.g. "no more living
+    // wolves" -> Village wins) with no notion of squads, so if it were still allowed to run, a
+    // Duel could end the instant every Wolf died even though both human squads still had living
+    // members. Deliberately doesn't set `this.winningTeam` to any classic `Team` value: no single
+    // classic team "won" a Duel (a squad is an arbitrary mix of roles), so leaving it unset and
+    // instead marking every survivor of the winning squad `won = true` directly (mirrors
+    // `markWinners()`'s own semantics) is both more honest and already exactly what
+    // `calculateGamePoints()` needs - it credits a win via `player.won` first, `winningTeam` only
+    // as a fallback.
+    if (this.mode === 'TeamDuel') {
+      return this.checkDuelWinCondition() ?? { finished: false, events: [] };
     }
 
     // Hitman: a secret personal win condition that can trigger off ANY kill source (night, lynch,

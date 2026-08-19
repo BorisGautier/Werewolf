@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { InputFile, type Bot } from 'grammy';
+import { GrammyError, InputFile, type Bot } from 'grammy';
 import { GameManager } from '../../src/application/game-manager.js';
 import { ROLE_BIT } from '../../src/domain/roles/role.js';
 import { getTeamForRole } from '../../src/domain/game/team.js';
@@ -192,6 +192,37 @@ describe('GameLoop', () => {
     expect(victim.isDead).toBe(true);
     expect(game.phase).toBe('Day');
     expect(sendMessage).toHaveBeenCalled();
+  });
+
+  it('shows a per-squad survivor breakdown in the night recap for TeamDuel games, instead of the flat alive/dead player list', async () => {
+    const { loop, gameManager, sendMessage } = createHarness();
+    const game = gameManager.create(1n, { mode: 'TeamDuel', minPlayers: 6 });
+    for (let i = 1; i <= 6; i++) game.addPlayer(BigInt(i), `Player${i}`);
+    game.start();
+    for (const p of game.players) {
+      p.role = ROLE_BIT.Villager;
+      p.team = 'Village';
+      p.changedRolesCount = 0;
+    }
+    const squadA = game.players.filter((p) => p.duelSquad === 'A');
+    const squadB = game.players.filter((p) => p.duelSquad === 'B');
+
+    loop.start(game, 42);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000); // night resolves, nobody acted
+
+    const recap = sendMessage.mock.calls.find(
+      (call) => typeof call[1] === 'string' && call[1].includes('Night 1 Recap'),
+    );
+    expect(recap).toBeDefined();
+    const text = recap![1] as string;
+    expect(text).toContain('Squad A');
+    expect(text).toContain(`${squadA.length}/${squadA.length} alive`);
+    expect(text).toContain('Squad B');
+    expect(text).toContain(`${squadB.length}/${squadB.length} alive`);
+    for (const p of [...squadA, ...squadB]) {
+      expect(text).toContain(mention(p.id, p.name));
+    }
   });
 
   it("sends the dying player's approved gif alongside the night-kill announcement, when a gif pack repository is wired in", async () => {
@@ -435,6 +466,115 @@ describe('GameLoop', () => {
     const summaryText = summaryCall![1] as string;
     for (const p of game.players) expect(summaryText).toContain(p.name);
     expect(summaryText).toContain('Game Length:');
+  });
+
+  it("sends a private mission-result DM at game end - success for a completed mission, failure for one that wasn't", async () => {
+    const { loop, gameManager, sendMessage } = createHarness();
+    const game = dealtGame(gameManager);
+    const wolf = game.players[0]!;
+    const villager = game.players[1]!;
+    // `champion`: alive + on the winning side - the wolf, about to sweep the village, will satisfy
+    // this. `resistant`: alive + on the *losing* side - impossible for a villager who's about to
+    // get lynched out, so this is set up to fail.
+    wolf.missionId = 'champion';
+    villager.missionId = 'resistant';
+
+    loop.start(game, 42);
+    await vi.advanceTimersByTimeAsync(0);
+
+    for (let i = 0; i < 20 && gameManager.get(game.chatId) !== undefined; i++) {
+      if (game.phase === 'Night') {
+        const target = game.players.find((p) => !p.isDead && p.id !== wolf.id);
+        if (target) await loop.handleCallback(wolf.id, wolf.id, `nt:${target.id.toString()}`);
+        await vi.advanceTimersByTimeAsync(5000);
+      } else if (game.phase === 'Day') {
+        await vi.advanceTimersByTimeAsync(5000);
+      } else if (game.phase === 'Lynch') {
+        const voteTarget = game.players.find((p) => !p.isDead && p.id !== wolf.id);
+        if (voteTarget) {
+          for (const voter of game.players.filter((p) => !p.isDead)) {
+            await loop.handleCallback(
+              voter.id,
+              game.chatId,
+              `vote:${game.dayNumber}:${voteTarget.id.toString()}`,
+            );
+          }
+        }
+        await vi.advanceTimersByTimeAsync(5000);
+      } else {
+        break;
+      }
+      await vi.advanceTimersByTimeAsync(0);
+    }
+
+    expect(game.winningTeam).toBe('Wolf');
+
+    const wolfDm = sendMessage.mock.calls.find(
+      (call) =>
+        call[0] === Number(wolf.id) && typeof call[1] === 'string' && call[1].includes('MISSION'),
+    );
+    expect(wolfDm).toBeDefined();
+    expect(wolfDm![1] as string).toContain('MISSION ACCOMPLISHED');
+
+    const villagerDm = sendMessage.mock.calls.find(
+      (call) =>
+        call[0] === Number(villager.id) &&
+        typeof call[1] === 'string' &&
+        call[1].includes('Mission failed'),
+    );
+    expect(villagerDm).toBeDefined();
+  });
+
+  it('logs a warning (instead of silently dropping it) when Telegram rejects the end-of-game Gazette message', async () => {
+    const { loop, gameManager, sendMessage, logger } = createHarness();
+    const game = dealtGame(gameManager);
+    const wolf = game.players[0]!;
+
+    sendMessage.mockImplementation(async (_chatId: number, text?: string) => {
+      if (typeof text === 'string' && text.includes('GAZETTE')) {
+        throw new GrammyError(
+          'Bad Request: message is too long',
+          { ok: false, error_code: 400, description: 'Bad Request: message is too long' },
+          'sendMessage',
+          {},
+        );
+      }
+      return { message_id: 1 };
+    });
+
+    loop.start(game, 42);
+    await vi.advanceTimersByTimeAsync(0);
+
+    for (let i = 0; i < 20 && gameManager.get(game.chatId) !== undefined; i++) {
+      if (game.phase === 'Night') {
+        const target = game.players.find((p) => !p.isDead && p.id !== wolf.id);
+        if (target) await loop.handleCallback(wolf.id, wolf.id, `nt:${target.id.toString()}`);
+        await vi.advanceTimersByTimeAsync(5000);
+      } else if (game.phase === 'Day') {
+        await vi.advanceTimersByTimeAsync(5000);
+      } else if (game.phase === 'Lynch') {
+        const voteTarget = game.players.find((p) => !p.isDead && p.id !== wolf.id);
+        if (voteTarget) {
+          for (const voter of game.players.filter((p) => !p.isDead)) {
+            await loop.handleCallback(
+              voter.id,
+              game.chatId,
+              `vote:${game.dayNumber}:${voteTarget.id.toString()}`,
+            );
+          }
+        }
+        await vi.advanceTimersByTimeAsync(5000);
+      } else {
+        break;
+      }
+      await vi.advanceTimersByTimeAsync(0);
+    }
+
+    expect(gameManager.has(game.chatId)).toBe(false); // the game still finished cleanly
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ chatId: game.chatId.toString() }),
+      'sendRaw: Telegram rejected the message',
+    );
   });
 
   it('never awards leaderboard points to AI/bot players, only real ones', async () => {
@@ -838,6 +978,48 @@ describe('GameLoop', () => {
     ).toBe(true);
   });
 
+  it('tracks mission-mode vote-change and last-second-vote signals via applyLynchVote', async () => {
+    const { loop, gameManager, group } = createHarness();
+    group.lynchTimerSeconds = 30; // long enough to distinguish an early vote from a closing one
+    const game = dealtGame(gameManager);
+    const wolf = game.players[0]!;
+    const villager3 = game.players[2]!;
+    const voter = game.players[1]!;
+
+    loop.start(game, 42);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000); // night resolves
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000); // day resolves, into a 30s Lynch window
+
+    await loop.handleCallback(
+      voter.id,
+      game.chatId,
+      `vote:${game.dayNumber}:${wolf.id.toString()}`,
+    );
+    expect(voter.voteChangedCount).toBe(0); // first vote this round, not a change
+    expect(voter.votedInLastSecondsOfPhase).toBe(false); // voted right at the start of a 30s window
+
+    await loop.handleCallback(
+      voter.id,
+      game.chatId,
+      `vote:${game.dayNumber}:${villager3.id.toString()}`,
+    );
+    expect(voter.voteChangedCount).toBe(1); // overwrote an already-cast vote this same round
+
+    // 25s into a 30s window leaves 5s remaining - inside the closing-10-seconds threshold.
+    await vi.advanceTimersByTimeAsync(25000);
+    const lastVoter = game.players[3]!;
+    await loop.handleCallback(
+      lastVoter.id,
+      game.chatId,
+      `vote:${game.dayNumber}:${villager3.id.toString()}`,
+    );
+    expect(lastVoter.votedInLastSecondsOfPhase).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(5000); // let the lynch round resolve
+  });
+
   it('under a secret lynch, announces only a running vote count, never the target', async () => {
     const { loop, gameManager, sendMessage, group } = createHarness();
     group.secretLynch = true;
@@ -867,6 +1049,165 @@ describe('GameLoop', () => {
         (call) => typeof call[1] === 'string' && call[1].includes('voted to lynch'),
       ),
     ).toBe(false);
+  });
+
+  it("immediately reveals a Clumsy Guy's real (possibly fumbled) target the instant they vote, not what they clicked", async () => {
+    const { loop, gameManager, sendMessage } = createHarness();
+    const game = dealtGame(gameManager);
+    const clumsy = game.players[1]!;
+    clumsy.role = ROLE_BIT.ClumsyGuy;
+    clumsy.team = getTeamForRole(ROLE_BIT.ClumsyGuy);
+    const clickedTarget = game.players[2]!; // Villager3
+    const fumbledTarget = game.players[4]!; // Villager5
+
+    loop.start(game, 42);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000); // night resolves
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000); // day resolves, into Lynch
+
+    // Force the 50% fumble to land on `fumbledTarget`: the fumble now rolls right at cast-time
+    // (see `Game.resolveClumsyGuyVote()`), not deferred until the lynch resolves - `random()` is
+    // called once for the fumble chance (< 0.5 fumbles) and once more to pick the new target out
+    // of `[wolf, Villager3, Villager4, Villager5]` (the voter themselves is excluded) - index 3.
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValueOnce(0.1).mockReturnValueOnce(0.9);
+    await loop.handleCallback(
+      clumsy.id,
+      game.chatId,
+      `vote:${game.dayNumber}:${clickedTarget.id.toString()}`,
+    );
+    randomSpy.mockRestore();
+
+    expect(clumsy.choice).toBe(fumbledTarget.id);
+    expect(
+      sendMessage.mock.calls.some(
+        (call) =>
+          typeof call[1] === 'string' &&
+          call[1] ===
+            `${mention(clumsy.id, clumsy.name)} voted to lynch ${mention(fumbledTarget.id, fumbledTarget.name)}.`,
+      ),
+    ).toBe(true);
+    expect(
+      sendMessage.mock.calls.some(
+        (call) =>
+          typeof call[1] === 'string' &&
+          call[1] ===
+            `${mention(clumsy.id, clumsy.name)} voted to lynch ${mention(clickedTarget.id, clickedTarget.name)}.`,
+      ),
+    ).toBe(false);
+  });
+
+  it('still announces an abstaining Clumsy Guy immediately, since the fumble mechanic never applies to abstains', async () => {
+    const { loop, gameManager, sendMessage } = createHarness();
+    const game = dealtGame(gameManager);
+    const clumsy = game.players[1]!;
+    clumsy.role = ROLE_BIT.ClumsyGuy;
+    clumsy.team = getTeamForRole(ROLE_BIT.ClumsyGuy);
+
+    loop.start(game, 42);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000);
+
+    await loop.handleCallback(clumsy.id, game.chatId, `vote:${game.dayNumber}:abstain`);
+
+    expect(
+      sendMessage.mock.calls.some(
+        (call) =>
+          typeof call[1] === 'string' &&
+          call[1] === `${mention(clumsy.id, clumsy.name)} voted to abstain.`,
+      ),
+    ).toBe(true);
+  });
+
+  it("suppresses a Clumsy Guy's vote reveal under a secret lynch, same as any other vote", async () => {
+    const { loop, gameManager, sendMessage, group } = createHarness();
+    group.secretLynch = true;
+    const game = dealtGame(gameManager);
+    const clumsy = game.players[1]!;
+    clumsy.role = ROLE_BIT.ClumsyGuy;
+    clumsy.team = getTeamForRole(ROLE_BIT.ClumsyGuy);
+    const target = game.players[2]!;
+
+    loop.start(game, 42);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000);
+
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValueOnce(0.9); // no fumble
+    await loop.handleCallback(
+      clumsy.id,
+      game.chatId,
+      `vote:${game.dayNumber}:${target.id.toString()}`,
+    );
+    randomSpy.mockRestore();
+
+    expect(
+      sendMessage.mock.calls.some(
+        (call) => typeof call[1] === 'string' && call[1].includes('voted to lynch'),
+      ),
+    ).toBe(false);
+  });
+
+  it("still resolves and announces a Clumsy Guy's own vote correctly even though they end up lynched that same round", async () => {
+    const { loop, gameManager, sendMessage } = createHarness();
+    const game = gameManager.create(1n, { mode: 'Normal', minPlayers: 6 });
+    game.addPlayer(1n, 'Wolfy');
+    game.addPlayer(2n, 'Clumsy');
+    game.addPlayer(3n, 'Villager3');
+    game.addPlayer(4n, 'Villager4');
+    game.addPlayer(5n, 'Villager5');
+    game.addPlayer(6n, 'Villager6');
+    game.start();
+    for (const p of game.players) {
+      p.role = ROLE_BIT.Villager;
+      p.team = 'Village';
+      p.changedRolesCount = 0;
+    }
+    game.players[0]!.role = ROLE_BIT.Wolf;
+    game.players[0]!.team = 'Wolf';
+    const clumsy = game.players[1]!;
+    clumsy.role = ROLE_BIT.ClumsyGuy;
+    clumsy.team = getTeamForRole(ROLE_BIT.ClumsyGuy);
+    const clumsyTarget = game.players[2]!;
+
+    loop.start(game, 42);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000); // night resolves
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000); // day resolves, into Lynch
+
+    // Everyone else piles onto the Clumsy Guy; the Clumsy Guy votes for someone else entirely -
+    // their own vote still resolves and announces normally, right at cast-time, regardless of
+    // what happens to them later this same round.
+    for (const voter of game.players.filter((p) => !p.isDead && p.id !== clumsy.id)) {
+      await loop.handleCallback(
+        voter.id,
+        game.chatId,
+        `vote:${game.dayNumber}:${clumsy.id.toString()}`,
+      );
+    }
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValueOnce(0.9); // no fumble - real target stays clumsyTarget
+    await loop.handleCallback(
+      clumsy.id,
+      game.chatId,
+      `vote:${game.dayNumber}:${clumsyTarget.id.toString()}`,
+    );
+    randomSpy.mockRestore();
+
+    expect(
+      sendMessage.mock.calls.some(
+        (call) =>
+          typeof call[1] === 'string' &&
+          call[1] ===
+            `${mention(clumsy.id, clumsy.name)} voted to lynch ${mention(clumsyTarget.id, clumsyTarget.name)}.`,
+      ),
+    ).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(5000); // lynch resolves - the Clumsy Guy is executed
+    expect(clumsy.isDead).toBe(true);
   });
 
   it('rejects a vote button left over from an earlier day, even while the game is in Lynch again today', async () => {

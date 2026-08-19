@@ -94,6 +94,14 @@ export interface Player {
 
   changedRolesCount: number;
 
+  /** `TeamDuel` mode only: which squad this player was drafted into - `null` in every other mode.
+   * Deliberately orthogonal to `role`/`team` (the classic Village/Wolf/... alignment): a squad can
+   * (and usually will) mix roles from both sides, that's the whole point of the mode. */
+  duelSquad: 'A' | 'B' | null;
+  /** `TeamDuel` mode only: a purely organizational/honorary marker (see the mode's design notes) -
+   * carries no mechanical power of its own. */
+  isDuelCaptain: boolean;
+
   /** Arsonist mechanic: doused tonight, will burn to death next time the Arsonist sparks. */
   doused: boolean;
   /** Arsonist mechanic: doused and set alight - dies to anyone who visits them, except the Serial Killer. */
@@ -164,6 +172,45 @@ export interface Player {
   hasStayedHome: boolean;
   /** Harlot mechanic: ever visited the same player more than once. */
   hasRepeatedVisit: boolean;
+
+  // --- Mission mode tracking (see `src/domain/game/missions.ts`) ---
+  /** The day number they died on (`Game.dayNumber` at the time), `null` while still alive.
+   * Stamped generically for every dead player at the top of `checkWinCondition()` - not tied to
+   * any one kill path, since missions need to know *when* someone died regardless of cause. */
+  dayDied: number | null;
+  /** A mission offered to this player this game, awaiting their accept/decline response. */
+  missionOfferedId: string | null;
+  /** The mission they actively accepted this game (`null` = none offered, declined, or never
+   * answered) - only an active mission here is eligible for the end-of-game bonus. */
+  missionId: string | null;
+  /** Ever cast a lynch vote whose target ended up being the one actually lynched that round. */
+  everVotedForLynchedVictim: boolean;
+  /** Ever cast a lynch vote for a Wolf-team player. */
+  everVotedForWolf: boolean;
+  /** Ever cast a lynch vote for a player outside their own team. */
+  everVotedOppositeCamp: boolean;
+  /** Cast a lynch vote for a player outside their own team, specifically on Day 1. */
+  votedOppositeCampDay1: boolean;
+  /** How many lynch rounds their vote matched whoever ended up with the most votes that round. */
+  majorityVoteCount: number;
+  /** How many lynch rounds their vote did NOT match whoever ended up with the most votes. */
+  minorityVoteCount: number;
+  /** How many times they explicitly abstained from a lynch vote. */
+  abstainCount: number;
+  /** Ids of every player who has ever voted for them, across every round of the whole game -
+   * unlike `votedBy` (cleared every round by `resetLynchState`), this accumulates. */
+  everVotedAgainstBy: Set<bigint>;
+  /** How many times they were among the top-voted player(s) in a lynch round and lived through
+   * it (a tie that wasn't randomly broken, a Prince/Judge save, or simply surviving the round). */
+  escapedTopVoteLynchCount: number;
+  /** Already had a live vote cast this same lynch round before casting a different one. */
+  voteChangedCount: number;
+  /** A lynch round ended with them never having cast a vote at all (not even an abstain). */
+  everMissedVote: boolean;
+  /** Cast a lynch vote within the closing seconds of the voting window. */
+  votedInLastSecondsOfPhase: boolean;
+  /** Was still alive through a Troublemaker-forced second lynch attempt the same day. */
+  survivedForcedSecondLynch: boolean;
 }
 
 export function createPlayer(
@@ -208,6 +255,8 @@ export function createPlayer(
     wasSavedLastNight: false,
     won: false,
     changedRolesCount: 0,
+    duelSquad: null,
+    isDuelCaptain: false,
     doused: false,
     burning: false,
     dugGravesLastNight: 0,
@@ -240,6 +289,22 @@ export function createPlayer(
     playersVisited: new Set(),
     hasStayedHome: false,
     hasRepeatedVisit: false,
+    dayDied: null,
+    missionOfferedId: null,
+    missionId: null,
+    everVotedForLynchedVictim: false,
+    everVotedForWolf: false,
+    everVotedOppositeCamp: false,
+    votedOppositeCampDay1: false,
+    majorityVoteCount: 0,
+    minorityVoteCount: 0,
+    abstainCount: 0,
+    everVotedAgainstBy: new Set(),
+    escapedTopVoteLynchCount: 0,
+    voteChangedCount: 0,
+    everMissedVote: false,
+    votedInLastSecondsOfPhase: false,
+    survivedForcedSecondLynch: false,
   };
 }
 

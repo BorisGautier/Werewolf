@@ -123,4 +123,6 @@ export type GameEvent =
   | { type: 'HowlerWolfHowled'; howlerId: bigint }
   | { type: 'BerserkerWolfEnraged'; berserkerId: bigint }
   | { type: 'AvengerRivalLynched'; avengerId: bigint; targetId: bigint }
-  | { type: 'CrownPrinceSucceeded'; playerId: bigint };
+  | { type: 'CrownPrinceSucceeded'; playerId: bigint }
+  | { type: 'DuelSquadWon'; squad: 'A' | 'B'; survivorIds: bigint[] }
+  | { type: 'DuelMutualWipeout' };

@@ -639,6 +639,20 @@ export function describeEvent(
       // out the new Mayor before they ever get to make that choice themselves. Only they learn
       // they've inherited the role; the village finds out only if/when they later use it.
       return [{ audience: event.playerId, key: 'CrownPrinceSucceededMsg', args: [] }];
+
+    case 'DuelSquadWon': {
+      const survivorNames = event.survivorIds.map((id) => name(id)).join(', ') || '—';
+      return [
+        {
+          audience: 'group',
+          key: 'DuelSquadWonMsg',
+          args: [event.squad, event.survivorIds.length, survivorNames],
+        },
+      ];
+    }
+
+    case 'DuelMutualWipeout':
+      return [{ audience: 'group', key: 'DuelMutualWipeoutMsg', args: [] }];
   }
 }
 

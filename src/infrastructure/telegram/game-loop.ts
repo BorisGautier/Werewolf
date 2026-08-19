@@ -27,6 +27,7 @@ import type { KillMethod } from '../../domain/game/kill-method.js';
 import type { Team } from '../../domain/game/team.js';
 import { WEATHER_DETAILS } from '../../domain/game/village-weather.js';
 import { generateGazette, type GazetteStory } from '../../domain/gazette/gazette-generator.js';
+import { generateAiGazette } from '../../domain/gazette/ai-gazette-generator.js';
 import {
   evaluateGameAchievements,
   firstLynchVictimId,
@@ -52,7 +53,9 @@ import {
   nightTargets,
 } from './role-menus.js';
 import { buildEndGameSummary } from './end-game-summary.js';
-import { calculateGamePoints } from '../../domain/scoring.js';
+import { calculateGamePoints, computeDuelBonus } from '../../domain/scoring.js';
+import { computeMissionBonus, findMissionDef } from '../../domain/game/missions.js';
+import type { MissionRepository } from '../persistence/mission.repository.js';
 import { calculateRolePerformanceBonus } from '../../domain/role-performance.js';
 import { previewLynchTally } from '../../domain/game/lynch.js';
 import {
@@ -119,6 +122,11 @@ export class GameLoop {
    * forever at the module level regardless of how many `GameLoop`s a test (or a future multi-bot
    * setup) creates. */
   private readonly lastGazettes = new Map<bigint, GazetteStory>();
+  /** Wall-clock deadline (`Date.now() + seconds*1000`) of the current lynch vote window, set
+   * right when the vote menu goes out - lets `applyLynchVote()` tell whether a vote landed in
+   * the closing seconds (see the `lastSecond` mission in `missions.ts`) without threading timing
+   * state through every call. */
+  private readonly lynchDeadlines = new Map<bigint, number>();
 
   constructor(
     private readonly bot: Bot,
@@ -132,6 +140,8 @@ export class GameLoop {
     private readonly gifPacks?: GifPackRepository,
     private readonly localGifPack: LocalGifPack = new LocalGifPack(),
     private readonly tournamentRepo?: TournamentRepository,
+    private readonly geminiApiKey?: string,
+    private readonly missionRepo?: MissionRepository,
   ) {}
 
   getGame(chatId: bigint): Game | undefined {
@@ -264,13 +274,38 @@ export class GameLoop {
    * where things stand before the day begins. */
   private async sendNightRecap(game: Game, group: GroupWithConfig): Promise<void> {
     const language = group.language;
-    const names = game.players
-      .map((p) => {
-        const status = this.t.translate(language, p.isDead ? 'Dead' : 'Alive');
-        return `${mentionOrPlain(p.id, p.name, p.isBot)} (${status})`;
-      })
-      .join('\n');
+    const names =
+      game.mode === 'TeamDuel'
+        ? this.buildDuelSquadRecap(game, language)
+        : game.players
+            .map((p) => {
+              const status = this.t.translate(language, p.isDead ? 'Dead' : 'Alive');
+              return `${mentionOrPlain(p.id, p.name, p.isBot)} (${status})`;
+            })
+            .join('\n');
     await this.send(game.chatId, language, 'NightRecap', game.dayNumber, names);
+  }
+
+  /** TeamDuel's own take on `sendNightRecap()`'s alive/dead list: grouped by squad, each with a
+   * live survivor count, so the village doesn't have to mentally sort the flat player list back
+   * into squads to see how the duel is actually shaping up. */
+  private buildDuelSquadRecap(game: Game, language: string): string {
+    const squadA = game.players.filter((p) => p.duelSquad === 'A');
+    const squadB = game.players.filter((p) => p.duelSquad === 'B');
+    const aliveCount = (squad: Player[]) => squad.filter((p) => !p.isDead).length;
+    const line = (p: Player) => {
+      const status = this.t.translate(language, p.isDead ? 'Dead' : 'Alive');
+      return `${mentionOrPlain(p.id, p.name, p.isBot)}${p.isDuelCaptain ? ' 👑' : ''} (${status})`;
+    };
+    const labelA =
+      language === 'fr'
+        ? `🅰️ <b>Équipe A</b> — ${aliveCount(squadA)}/${squadA.length} en vie`
+        : `🅰️ <b>Squad A</b> — ${aliveCount(squadA)}/${squadA.length} alive`;
+    const labelB =
+      language === 'fr'
+        ? `🅱️ <b>Équipe B</b> — ${aliveCount(squadB)}/${squadB.length} en vie`
+        : `🅱️ <b>Squad B</b> — ${aliveCount(squadB)}/${squadB.length} alive`;
+    return [labelA, ...squadA.map(line), '', labelB, ...squadB.map(line)].join('\n');
   }
 
   private nightSeconds(game: Game, group: GroupWithConfig): number {
@@ -588,8 +623,10 @@ export class GameLoop {
       }
 
       await this.sendLynchVoteMenu(game, group, seconds);
+      this.lynchDeadlines.set(game.chatId, Date.now() + seconds * 1000);
       void this.processBotLynchVotes(game);
       await this.phaseSleep(game.chatId, seconds * 1000);
+      this.lynchDeadlines.delete(game.chatId);
       if (this.consumeKilled(game.chatId)) return;
 
       let judgePardon = false;
@@ -640,6 +677,12 @@ export class GameLoop {
       const result = game.resolveLynch(
         judgePardon && judgeId !== undefined ? { judgePardon: true, judgeId } : undefined,
       );
+      // Mission-mode tracking: `doubleSurvivor` cares specifically about living through a
+      // Troublemaker-forced *second* attempt this same day - `attempt` here is that loop's own
+      // counter, already 1-indexed, so `> 1` is exactly "this wasn't the first vote today".
+      if (attempt > 1) {
+        for (const p of alivePlayers(game.players)) p.survivedForcedSecondLynch = true;
+      }
       await this.sendSecretLynchSummary(game, group);
       await this.broadcastLynchOutcome(game, group, result.resolution);
       await this.broadcast(game, group, result.events, 'Lynch');
@@ -863,6 +906,8 @@ export class GameLoop {
             players: game.players,
             eventBatches: batches,
           });
+          const duelBonus = computeDuelBonus(game.players, batches);
+          const missionBonus = computeMissionBonus(game.players, new Set(game.claimsMap.keys()));
           const scores = calculateGamePoints(
             realPlayers,
             game.winningTeam ?? null,
@@ -870,9 +915,25 @@ export class GameLoop {
             undefined,
             earlyDeathIds,
             rolePerformanceBonus,
+            duelBonus,
+            missionBonus,
           );
           const grp = await this.groups.getOrCreate(game.chatId, null, null);
           const lang = grp.language;
+          await this.notifyMissionResults(realPlayers, missionBonus, lang);
+          if (this.missionRepo) {
+            for (const p of realPlayers) {
+              if (!p.missionId) continue;
+              await this.missionRepo
+                .recordCompletion(p.id, p.missionId, missionBonus.has(p.id), gameId ?? null)
+                .catch((err: unknown) => {
+                  this.logger.warn(
+                    { err, playerId: p.id.toString() },
+                    'Failed to record mission completion',
+                  );
+                });
+            }
+          }
           for (const score of scores) {
             scoresMap.set(score.playerId, score.points);
             if (this.tournamentRepo) {
@@ -934,7 +995,13 @@ export class GameLoop {
       await this.sendRaw(game.chatId, summary);
 
       try {
-        const gazette = generateGazette(game, batches, group.language);
+        // The AI-narrated version reads exactly like an ordinary Gazette to players - see
+        // `generateAiGazette()`'s doc comment - so falling back here (no key configured, a
+        // network error, an empty response) is completely invisible: the template underneath is
+        // written in the same voice, just from fixed phrasing instead of freely-written prose.
+        const gazette =
+          (await generateAiGazette(game, batches, group.language, this.geminiApiKey)) ??
+          generateGazette(game, batches, group.language);
         this.lastGazettes.set(game.chatId, gazette);
         const gazetteMsg = `${gazette.title}\n\n${gazette.lines.join('\n')}`;
         await this.sendRaw(game.chatId, gazetteMsg);
@@ -954,6 +1021,29 @@ export class GameLoop {
 
     await this.unmuteAllDead(game.chatId);
     this.games.remove(game.chatId);
+  }
+
+  /** Private end-of-game DM to every real player who accepted a mission (see
+   * `GameLobbyManager.notifyMission()`), telling them whether they pulled it off - deliberately
+   * kept out of the group's own end-of-game summary (which only ever shows a bare point total,
+   * never a breakdown - see `buildEndGameSummary()`) so a mission stays exactly as secret as the
+   * player themselves chooses to keep it; sharing the result is their call, not the bot's. */
+  private async notifyMissionResults(
+    realPlayers: readonly Player[],
+    missionBonus: ReadonlyMap<bigint, number>,
+    language: string,
+  ): Promise<void> {
+    for (const player of realPlayers) {
+      if (!player.missionId) continue;
+      const def = findMissionDef(player.missionId);
+      if (!def) continue;
+      const title = this.t.translate(language, `Mission_${def.id}_Title`);
+      const key = missionBonus.has(player.id) ? 'MissionResultSuccess' : 'MissionResultFailure';
+      const msg = this.t.translate(language, key, title, def.points);
+      await this.bot.api
+        .sendMessage(chatNumber(player.id), msg, { parse_mode: 'HTML' })
+        .catch(() => null);
+    }
   }
 
   /**
@@ -1249,9 +1339,23 @@ export class GameLoop {
       (v) => v.victimId === playerId,
     );
     if (isHypnotized) return null;
+
+    // Mission-mode tracking (see `src/domain/game/missions.ts`) - read before `applyChoice()`
+    // overwrites `voter.choice` below, since both checks depend on its *previous* value/timing.
+    if (voter.choice !== null) voter.voteChangedCount++;
+    const deadline = this.lynchDeadlines.get(game.chatId);
+    if (deadline !== undefined && deadline - Date.now() <= 10000) {
+      voter.votedInLastSecondsOfPhase = true;
+    }
+
     const result = this.applyChoice(game, playerId, 'choice', rawTarget);
     if (result !== 'ChoiceRecorded') return result;
     game.registerLynchVoteCast(playerId);
+    // The Clumsy Guy's 50% chance of fumbling onto a random living player is rolled immediately,
+    // right here at cast-time (no-op for anyone else, or for an abstain) - so `voter.choice`
+    // already holds their real target by the time the announcement below reads it, instead of
+    // deferring the reveal until the lynch resolves.
+    game.resolveClumsyGuyVote(playerId);
 
     const group = await this.groups.getOrCreate(game.chatId, null, null);
     // A Howler Wolf's howl (see `Game.anonymousLynchVotes`) forces the same anonymity as the
@@ -1273,7 +1377,9 @@ export class GameLoop {
         mentionOrPlain(voter.id, voter.name, voter.isBot),
       );
     } else {
-      const target = game.players.find((p) => p.id === BigInt(rawTarget));
+      // Read back from `voter.choice` rather than `rawTarget` - for a Clumsy Guy whose fumble
+      // just landed, they now differ, and it's the real (resolved) target that must be announced.
+      const target = game.players.find((p) => p.id === voter.choice);
       if (target)
         await this.send(
           game.chatId,
@@ -1770,7 +1876,17 @@ export class GameLoop {
     try {
       await this.bot.api.sendMessage(chatNumber(chatId), text, { parse_mode: 'HTML' });
     } catch (err) {
-      if (err instanceof GrammyError) return;
+      if (err instanceof GrammyError) {
+        // A rejected send (message too long, unbalanced/unknown HTML tag, bot kicked, ...) used to
+        // vanish here with zero trace - the caller never learns the message never arrived. Still
+        // non-fatal (callers shouldn't crash the game loop over a failed group announcement), but
+        // now at least visible server-side instead of a silent no-op.
+        this.logger.warn(
+          { err, chatId: chatId.toString(), textLength: text.length },
+          'sendRaw: Telegram rejected the message',
+        );
+        return;
+      }
       throw err;
     }
   }

@@ -30,6 +30,8 @@ import {
   resolveGroupArg,
 } from './moderation-targets.js';
 import { ABOUT_ROLE_BY_TRIGGER, aboutLocaleKey, resolveRoleFromTrigger } from './role-info.js';
+import { MissionRepository } from '../persistence/mission.repository.js';
+import { findMissionDef } from '../../domain/game/missions.js';
 import { ROLE_META, roleName } from '../../domain/roles/role.js';
 import { ACHIEVEMENT_CODES, ACHIEVEMENTS } from '../../domain/achievements/catalog.js';
 import { SpamGuard } from './spam-guard.js';
@@ -86,6 +88,7 @@ export interface BotDependencies {
   gifPackRepository: GifPackRepository;
   reportRepository?: ReportRepository;
   tournamentRepository?: TournamentRepository;
+  missionRepository?: MissionRepository;
   prisma?: any;
   maintenance?: { on: boolean };
 }
@@ -158,6 +161,8 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
   const maintenance = deps.maintenance ?? { on: false };
   const tournamentRepo =
     deps.tournamentRepository ?? (deps.prisma ? new TournamentRepository(deps.prisma) : null);
+  const missionRepo =
+    deps.missionRepository ?? (deps.prisma ? new MissionRepository(deps.prisma) : undefined);
   const gameLoop = new GameLoop(
     bot,
     deps.gameManager,
@@ -170,6 +175,8 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     deps.gifPackRepository,
     undefined,
     tournamentRepo ?? undefined,
+    env.geminiApiKey,
+    missionRepo,
   );
   const lobby = new GameLobbyManager(
     bot,
@@ -181,6 +188,8 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     logger,
     gameLoop,
     deps.notifyGameRepository,
+    undefined,
+    missionRepo,
   );
 
   if (tournamentRepo) {
@@ -280,6 +289,95 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
   // call next()) so its own `stopwaiting:...` callback data actually gets a chance to match.
   registerWaitlistCommands(bot, deps);
   registerModesGuideCommands(bot, lobby);
+
+  // Mission mode's accept/decline buttons (see `GameLobbyManager.notifyMission()`, which sends
+  // them alongside the role-reveal PM) - also registered ahead of the generic callback catch-all
+  // for the same reason as the waitlist/modes handlers just above.
+  bot.callbackQuery(/^mission_accept:(.+)$/, async (ctx) => {
+    if (!ctx.from) return ctx.answerCallbackQuery();
+    const missionId = ctx.match![1]!;
+    const playerId = BigInt(ctx.from.id);
+    const game = deps.gameManager.findByPlayer(playerId);
+    const player = game?.players.find((p) => p.id === playerId);
+    if (!player || player.missionOfferedId !== missionId) {
+      await ctx.answerCallbackQuery();
+      return;
+    }
+    const language = (await deps.groupRepository.getOrCreate(game!.chatId, null, null)).language;
+    player.missionId = missionId;
+    player.missionOfferedId = null;
+    await ctx.answerCallbackQuery();
+    const def = findMissionDef(missionId);
+    const title = deps.translator.translate(language, `Mission_${missionId}_Title`);
+    const desc = deps.translator.translate(language, `Mission_${missionId}_Desc`);
+    // Keeps the full brief visible after accepting, not just the title - a player who forgets the
+    // exact condition mid-game would otherwise have no way to check it again (see also `/mamission`).
+    const confirmation = `${deps.translator.translate(language, 'MissionAccepted')}\n\n<b>${title}</b>\n${desc}${def ? `\n\n💰 +${def.points} pts` : ''}`;
+    await ctx.editMessageText(confirmation, { parse_mode: 'HTML' }).catch(async () => {
+      await ctx.reply(confirmation, { parse_mode: 'HTML' }).catch(() => null);
+    });
+  });
+
+  bot.callbackQuery('mission_decline', async (ctx) => {
+    if (!ctx.from) return ctx.answerCallbackQuery();
+    const playerId = BigInt(ctx.from.id);
+    const game = deps.gameManager.findByPlayer(playerId);
+    const player = game?.players.find((p) => p.id === playerId);
+    const language = game
+      ? (await deps.groupRepository.getOrCreate(game.chatId, null, null)).language
+      : 'en';
+    if (player) player.missionOfferedId = null;
+    await ctx.answerCallbackQuery();
+    const confirmation = deps.translator.translate(language, 'MissionDeclined');
+    await ctx.editMessageText(confirmation, { parse_mode: 'HTML' }).catch(async () => {
+      await ctx.reply(confirmation, { parse_mode: 'HTML' }).catch(() => null);
+    });
+  });
+
+  // Reminder command for anyone who accepted a mission and forgot the exact condition mid-game -
+  // always answered by PM (like the offer/accept flow itself), even when typed in the group, so
+  // the mission stays exactly as secret as it was meant to be.
+  bot.command(['mamission', 'mymission'], async (ctx) => {
+    if (!ctx.from) return;
+    const playerId = BigInt(ctx.from.id);
+    const isFr = ctx.from.language_code === 'fr';
+    const game = deps.gameManager.findByPlayer(playerId);
+    const player = game?.players.find((p) => p.id === playerId);
+    const language = game
+      ? (await deps.groupRepository.getOrCreate(game.chatId, null, null)).language
+      : ctx.from.language_code === 'en'
+        ? 'en'
+        : 'fr';
+
+    if (!player || !player.missionId) {
+      const msg = isFr
+        ? "🎯 Tu n'as aucune mission active pour le moment."
+        : "🎯 You don't have an active mission right now.";
+      if (ctx.chat.type === 'private') {
+        await ctx.reply(msg);
+      } else {
+        await ctx.reply(
+          isFr ? '📬 Réponse envoyée en message privé.' : '📬 Reply sent by private message.',
+        );
+        await ctx.api.sendMessage(ctx.from.id, msg).catch(() => null);
+      }
+      return;
+    }
+
+    const def = findMissionDef(player.missionId);
+    const title = deps.translator.translate(language, `Mission_${player.missionId}_Title`);
+    const desc = deps.translator.translate(language, `Mission_${player.missionId}_Desc`);
+    const reminder = `🎯 <b>${title}</b>\n${desc}${def ? `\n\n💰 +${def.points} pts` : ''}`;
+
+    if (ctx.chat.type === 'private') {
+      await ctx.reply(reminder, { parse_mode: 'HTML' });
+    } else {
+      await ctx.reply(
+        isFr ? '📬 Réponse envoyée en message privé.' : '📬 Reply sent by private message.',
+      );
+      await ctx.api.sendMessage(ctx.from.id, reminder, { parse_mode: 'HTML' }).catch(() => null);
+    }
+  });
 
   const groupChatListener = new GroupChatListener(env.geminiApiKey, deps.groupRepository);
   groupChatListener.register(bot, gameLoop);
@@ -731,6 +829,69 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     );
   });
 
+  bot.command(['equipe', 'team', 'teamchat'], async (ctx) => {
+    if (!ctx.from) return;
+    const userId = BigInt(ctx.from.id);
+    const isFr = ctx.from.language_code === 'fr';
+
+    const game = deps.gameManager.findByPlayer(userId);
+    const player = game?.players.find((p) => p.id === userId);
+
+    if (!game || !player || player.duelSquad === null) {
+      await ctx.reply(
+        isFr
+          ? "⚔️ Cette commande n'est disponible que pendant une partie en Mode Duel d'Équipes."
+          : '⚔️ This command is only available during a Team Duel game.',
+      );
+      return;
+    }
+    if (player.isDead) {
+      await ctx.reply(
+        isFr
+          ? '💀 Les morts ne peuvent plus communiquer avec leur équipe.'
+          : '💀 The dead can no longer talk to their team.',
+      );
+      return;
+    }
+
+    const message = (ctx.match as string | undefined)?.trim();
+    if (!message) {
+      await ctx.reply(
+        isFr
+          ? '⚔️ Utilisation : /equipe <message> — transmis en privé à tous vos coéquipiers vivants.'
+          : '⚔️ Usage: /equipe <message> - privately relayed to every living teammate.',
+      );
+      return;
+    }
+
+    const teammates = game.players.filter(
+      (p) => p.duelSquad === player.duelSquad && p.id !== player.id && !p.isDead,
+    );
+    const senderMention = mentionOrPlain(player.id, player.name, player.isBot);
+    const prefix = isFr
+      ? `🛡️ <b>[Équipe]</b> ${senderMention} :`
+      : `🛡️ <b>[Team]</b> ${senderMention}:`;
+    const safeMessage = escapeHtml(message);
+
+    await Promise.all(
+      teammates.map((mate) =>
+        ctx.api
+          .sendMessage(Number(mate.id), `${prefix} ${safeMessage}`, { parse_mode: 'HTML' })
+          .catch(() => null),
+      ),
+    );
+
+    await ctx.reply(
+      teammates.length > 0
+        ? isFr
+          ? `✅ Message transmis à ${teammates.length} coéquipier(s).`
+          : `✅ Message relayed to ${teammates.length} teammate(s).`
+        : isFr
+          ? 'ℹ️ Vous êtes le dernier survivant de votre équipe - personne pour recevoir le message.'
+          : "ℹ️ You're the last survivor of your squad - nobody to receive the message.",
+    );
+  });
+
   bot.command('claim', async (ctx) => {
     if (!ctx.from) return;
     const userId = BigInt(ctx.from.id);
@@ -1003,6 +1164,9 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
 
     startassassins: 'Assassins',
     start_assassins: 'Assassins',
+
+    startduel: 'TeamDuel',
+    start_duel: 'TeamDuel',
   };
 
   bot.command(
@@ -1032,6 +1196,8 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
       'start_holywar',
       'startassassins',
       'start_assassins',
+      'startduel',
+      'start_duel',
     ],
     async (ctx) => {
       if (!ctx.chat || !ctx.from) return;
@@ -2346,6 +2512,7 @@ function registerDonationCommands(bot: Bot, env: Env, deps: BotDependencies): vo
     { command: 'startanarchy', description: '💥 Mode Anarchie' },
     { command: 'startholywar', description: '⚔️ Mode Sainte Guerre' },
     { command: 'startassassins', description: '🎯 Mode Ombres & Assassins' },
+    { command: 'startduel', description: "⚔️ Mode Duel d'Équipes (2 camps, pair obligatoire)" },
     { command: 'modes', description: '📘 Consulter le guide des modes de jeu' },
     { command: 'join', description: '✋ Rejoindre la partie en attente' },
     { command: 'forcestart', description: '⚡ Lancer la partie sans attendre' },
@@ -2355,6 +2522,11 @@ function registerDonationCommands(bot: Bot, env: Env, deps: BotDependencies): vo
     { command: 'claims', description: '📜 Récapitulatif de tous les claims de la partie' },
     { command: 'players', description: '👥 Liste des joueurs vivants & morts' },
     { command: 'accuse', description: '👉 Accuser publiquement un joueur' },
+    {
+      command: 'equipe',
+      description: '⚔️ [Mode Duel] Parler en privé à ses coéquipiers vivants',
+    },
+    { command: 'mamission', description: '🎯 Revoir le détail de sa mission secrète en cours' },
     { command: 'rolelist', description: '📜 Guide et description de tous les rôles' },
     { command: 'leaderboard', description: '🏆 Classement mondial des meilleurs joueurs' },
     { command: 'groupleaderboard', description: '🏆 Classement des joueurs de ce groupe' },
@@ -2397,6 +2569,11 @@ function registerDonationCommands(bot: Bot, env: Env, deps: BotDependencies): vo
     { command: 'modes', description: '📘 Consulter le guide des modes de jeu' },
     { command: 'rolelist', description: '📜 Guide et description de tous les rôles' },
     { command: 'monequipe', description: '🚩 Consulter son équipe de tournoi' },
+    {
+      command: 'equipe',
+      description: '⚔️ [Mode Duel] Parler en privé à ses coéquipiers vivants',
+    },
+    { command: 'mamission', description: '🎯 Revoir le détail de sa mission secrète en cours' },
     { command: 'notag', description: '🔕 Se retirer/rejoindre la liste des tags de /tagall' },
     { command: 'setlang', description: '🌐 Changer la langue du bot (FR / EN)' },
     { command: 'help', description: "❓ Obtenir de l'aide et les règles" },
@@ -2418,6 +2595,7 @@ function registerDonationCommands(bot: Bot, env: Env, deps: BotDependencies): vo
     { command: 'startanarchy', description: '💥 Anarchy mode' },
     { command: 'startholywar', description: '⚔️ Holy War mode' },
     { command: 'startassassins', description: '🎯 Shadows & Assassins mode' },
+    { command: 'startduel', description: '⚔️ Team Duel mode (2 squads, even count required)' },
     { command: 'modes', description: '📘 Browse the game modes guide' },
     { command: 'join', description: '✋ Join the pending game' },
     { command: 'forcestart', description: '⚡ Start the game without waiting' },
@@ -2427,6 +2605,8 @@ function registerDonationCommands(bot: Bot, env: Env, deps: BotDependencies): vo
     { command: 'claims', description: '📜 Recap of every claim made this game' },
     { command: 'players', description: '👥 List of living & dead players' },
     { command: 'accuse', description: '👉 Publicly accuse a player' },
+    { command: 'equipe', description: '⚔️ [Team Duel] Privately message your living squadmates' },
+    { command: 'mamission', description: '🎯 Review your current secret mission again' },
     { command: 'rolelist', description: '📜 Guide and description of every role' },
     { command: 'leaderboard', description: '🏆 Global leaderboard of top players' },
     { command: 'groupleaderboard', description: "🏆 This group's player leaderboard" },
@@ -2469,6 +2649,8 @@ function registerDonationCommands(bot: Bot, env: Env, deps: BotDependencies): vo
     { command: 'modes', description: '📘 Browse the game modes guide' },
     { command: 'rolelist', description: '📜 Guide and description of every role' },
     { command: 'monequipe', description: '🚩 View your tournament team' },
+    { command: 'equipe', description: '⚔️ [Team Duel] Privately message your living squadmates' },
+    { command: 'mamission', description: '🎯 Review your current secret mission again' },
     { command: 'notag', description: '🔕 Opt out of / back into /tagall pings' },
     { command: 'setlang', description: '🌐 Change the bot language (FR / EN)' },
     { command: 'help', description: '❓ Get help and the rules' },

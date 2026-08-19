@@ -313,6 +313,93 @@ describe('GameLobbyManager', () => {
     expect(sendMessage.mock.calls.length).toBeGreaterThanOrEqual(6);
   });
 
+  it('offers every real player a mission PM with accept/decline buttons after force-starting, but never a bot', async () => {
+    vi.useFakeTimers();
+    const { lobby, sendMessage, gameManager } = createHarness(100);
+    const chatId = 115n;
+
+    await lobby.startGame(chatId, 'Group', { id: 1n, name: 'Starter' }, 'Normal');
+    for (let i = 2; i <= 5; i++) {
+      await lobby.join(chatId, user(i, `Player${i}`));
+    }
+    const game = gameManager.get(chatId)!;
+    await lobby.forceStart(chatId, true);
+    await vi.advanceTimersByTimeAsync(1000);
+
+    const missionOffers = sendMessage.mock.calls.filter(
+      (call) => typeof call[1] === 'string' && call[1].includes('SECRET MISSION AVAILABLE'),
+    );
+    // One offer per real player - none of the 5 here are bots.
+    expect(missionOffers).toHaveLength(5);
+
+    const [, , options] = missionOffers[0]!;
+    const buttons = (
+      options as { reply_markup: { inline_keyboard: { text: string; callback_data: string }[][] } }
+    ).reply_markup.inline_keyboard[0]!;
+    expect(buttons).toHaveLength(2);
+    expect(buttons[0]!.callback_data).toMatch(/^mission_accept:/);
+    expect(buttons[1]!.callback_data).toBe('mission_decline');
+
+    for (const p of game.players) {
+      expect(p.missionOfferedId).not.toBeNull();
+      expect(p.missionId).toBeNull(); // offered, not yet accepted
+    }
+  });
+
+  it('publicly announces the squad draft when a TeamDuel game starts, but not for a normal game', async () => {
+    vi.useFakeTimers();
+    const { lobby, sendMessage, gameManager, groupsStore } = createHarness(100);
+    const chatId = 106n;
+    // Group defaults to a forced 'NORMAL' mode preference in this harness (see fakeGroup) - a
+    // real group only lets /startgame vs /startchaos through via PLAYER_CHOICE, so TeamDuel needs
+    // that here too, or resolveGameMode() would silently downgrade it back to Normal.
+    groupsStore.set(
+      chatId.toString(),
+      fakeGroup(chatId, 'Group', { mode: 'PLAYER_CHOICE', language: 'fr' }),
+    );
+
+    await lobby.startGame(chatId, 'Group', { id: 1n, name: 'Starter' }, 'TeamDuel');
+    for (let i = 2; i <= 6; i++) {
+      await lobby.join(chatId, user(i, `Player${i}`));
+    }
+    expect(gameManager.get(chatId)!.players).toHaveLength(6);
+
+    await lobby.forceStart(chatId, true);
+    await vi.advanceTimersByTimeAsync(1000);
+
+    const squadMsg = sendMessage.mock.calls.find(
+      (call) => typeof call[1] === 'string' && call[1].includes('RÉPARTITION DES ÉQUIPES'),
+    );
+    expect(squadMsg).toBeDefined();
+    const text = squadMsg![1] as string;
+    expect(text).toContain('Équipe A');
+    expect(text).toContain('Équipe B');
+    // Every player's name appears somewhere in the announcement (split across the two squads).
+    for (let i = 1; i <= 6; i++) {
+      const name = i === 1 ? 'Starter' : `Player${i}`;
+      expect(text).toContain(name);
+    }
+  });
+
+  it('never announces a squad draft for a Normal game', async () => {
+    vi.useFakeTimers();
+    const { lobby, sendMessage } = createHarness(100);
+    const chatId = 107n;
+
+    await lobby.startGame(chatId, 'Group', { id: 1n, name: 'Starter' }, 'Normal');
+    for (let i = 2; i <= 5; i++) {
+      await lobby.join(chatId, user(i, `Player${i}`));
+    }
+    await lobby.forceStart(chatId, true);
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(
+      sendMessage.mock.calls.some(
+        (call) => typeof call[1] === 'string' && call[1].includes('RÉPARTITION DES ÉQUIPES'),
+      ),
+    ).toBe(false);
+  });
+
   it('tags community members one message at a time, skipping anyone opted out', async () => {
     vi.useFakeTimers();
     const { lobby, sendMessage, groups, players } = createHarness();

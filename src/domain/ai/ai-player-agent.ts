@@ -126,8 +126,15 @@ export class AiPlayerAgent {
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
             generationConfig: {
-              maxOutputTokens: 120,
+              maxOutputTokens: 150,
               temperature: 0.85,
+              // Without this, 2.5 Flash can spend part of maxOutputTokens on an internal
+              // "thinking" pass before ever writing the visible reply - with a budget this small,
+              // thinking alone can consume it entirely, leaving an empty response that silently
+              // falls through to the heuristic responder below on every single call (see the
+              // identical bug just found and fixed in the Gazette generator). A one-line chat
+              // reply doesn't need multi-step reasoning, so thinking is switched off outright.
+              thinkingConfig: { thinkingBudget: 0 },
             },
           }),
         });

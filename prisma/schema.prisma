@@ -572,3 +572,33 @@ model TournamentRound {
 
   @@map("tournament_rounds")
 }
+
+/// Mission ids an admin has globally turned off (see missions.ts's MISSION_DEFS for the full
+/// catalog) - a disabled mission is simply never offered to a player again, in any group. There's
+/// no per-group scoping (unlike GroupDisabledRole) since mission mode itself isn't a group-config
+/// concept today, just a game-start-time offer.
+model DisabledMission {
+  id         Int      @id @default(autoincrement())
+  missionId  String   @unique
+  disabledAt DateTime @default(now())
+
+  @@map("disabled_missions")
+}
+
+/// One row per mission a real player actually accepted and saw through to the end of a game -
+/// never for a declined or never-answered offer, since those never become scoreable (see
+/// computeMissionBonus). Append-only, powers the admin dashboard's "top mission performers" view.
+/// `playerId` is the raw Telegram id, same convention as TournamentPointLog.playerId - no FK
+/// relation to Player, since a completion should outlive a Player row being pruned.
+model MissionCompletion {
+  id        Int      @id @default(autoincrement())
+  playerId  BigInt
+  missionId String
+  succeeded Boolean
+  gameId    Int?
+  createdAt DateTime @default(now())
+
+  @@index([playerId])
+  @@index([missionId])
+  @@map("mission_completions")
+}
