@@ -72,29 +72,29 @@ function checkCrownPrince(players: Player[]): GameEvent[] {
 }
 
 function checkDoppelganger(players: Player[], checkBitten: boolean): GameEvent[] {
-  const dg = players.find((p) => p.role === ROLE_BIT.Doppelganger && !p.isDead);
-  if (!dg || (checkBitten && dg.bitten)) return [];
-
-  const roleModel = players.find((p) => p.id === dg.roleModel);
-  if (roleModel?.isDead) {
-    dg.role = roleModel.role;
-    dg.team = getTeamForRole(roleModel.role);
-    dg.changedRolesCount++;
-    dg.roleModel = roleModel.roleModel;
-    dg.hasUsedAbility = false;
-    if (roleModel.role === ROLE_BIT.Spumpkin || roleModel.role === ROLE_BIT.Gunner) {
-      dg.bullet = 2;
-    }
-    return [
-      {
+  const events: GameEvent[] = [];
+  const dgs = players.filter((p) => p.role === ROLE_BIT.Doppelganger && !p.isDead);
+  for (const dg of dgs) {
+    if (checkBitten && dg.bitten) continue;
+    const roleModel = players.find((p) => p.id === dg.roleModel);
+    if (roleModel?.isDead) {
+      dg.role = roleModel.role;
+      dg.team = getTeamForRole(roleModel.role);
+      dg.changedRolesCount++;
+      dg.roleModel = roleModel.roleModel;
+      dg.hasUsedAbility = false;
+      if (roleModel.role === ROLE_BIT.Spumpkin || roleModel.role === ROLE_BIT.Gunner) {
+        dg.bullet = 2;
+      }
+      events.push({
         type: 'DoppelgangerTransformed',
         playerId: dg.id,
         newRole: roleModel.role,
         roleModelId: roleModel.id,
-      },
-    ];
+      });
+    }
   }
-  return [];
+  return events;
 }
 
 export function checkRoleChanges(players: Player[], checkBitten = false): GameEvent[] {

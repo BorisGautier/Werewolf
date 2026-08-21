@@ -101,7 +101,7 @@ const REVEALED_VILLAGE_ROLES: readonly Role[] = [
 /** Roles whose kill/lynch-blocking ability can stall the game (mirrors the `killStoppingRoleCount` check). */
 const KILL_STOPPING_ROLES: readonly Role[] = [ROLE_BIT.Troublemaker, ROLE_BIT.Sandman];
 
-const MAX_BALANCE_ATTEMPTS = 500;
+const MAX_BALANCE_ATTEMPTS = 5000;
 
 /**
  * Which roles each cosmetic mode leans into (mirrors the "key roles" already advertised by

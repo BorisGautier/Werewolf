@@ -986,7 +986,13 @@ function resolveCultVictim(
     case ROLE_BIT.Wolf:
     case ROLE_BIT.AlphaWolf:
     case ROLE_BIT.WolfCub:
-    case ROLE_BIT.Lycan: {
+    case ROLE_BIT.Lycan:
+    case ROLE_BIT.TrapperWolf:
+    case ROLE_BIT.ChameleonWolf:
+    case ROLE_BIT.ViperWolf:
+    case ROLE_BIT.HowlerWolf:
+    case ROLE_BIT.HypnotistWolf:
+    case ROLE_BIT.BerserkerWolf: {
       const wolvesWentHunting = state.wolvesThatActed.some(
         (w) =>
           (w.choice !== null && w.choice !== ABSTAIN) ||

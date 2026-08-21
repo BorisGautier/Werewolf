@@ -385,6 +385,11 @@ async function runOneGame(
     // game never reached a phase with nothing left to schedule. Treat as a stall, not a crash.
     stalled = true;
     errors.push(err);
+    loop.killGame(chatId);
+  } finally {
+    if (game.phase !== 'Ended') {
+      loop.killGame(chatId);
+    }
   }
 
   translator.translate = originalTranslate;
@@ -436,11 +441,10 @@ function buildCampaigns(): Campaign[] {
     // night kills as the only source of progress. That can take an enormous number of night/day/
     // lynch cycles to converge by chance alone, occasionally exceeding vitest's fake-timer
     // loop-limit guard and getting misreported as a stall even though the game was never truly
-    // stuck - see the CI failure this was added to fix. Forcing a tiebreak here only affects this
-    // campaign; `split` below still exercises a genuine, non-auto-resolved `Tied` outcome.
+    // stuck - see the CI failure this was added to fix.
     { name: 'random', count: 30 * SCALE, bias: { kind: 'random' }, randomLynchOnTie: true },
     { name: 'concentrate', count: 10 * SCALE, bias: { kind: 'concentrate' } },
-    { name: 'split', count: 6 * SCALE, bias: { kind: 'split' } },
+    { name: 'split', count: 6 * SCALE, bias: { kind: 'split' }, randomLynchOnTie: true },
     { name: 'abstain', count: 4 * SCALE, bias: { kind: 'abstain' } },
     { name: 'target-tanner', count: 4 * SCALE, bias: { kind: 'targetRole', role: 'Tanner' } },
     { name: 'target-prince', count: 4 * SCALE, bias: { kind: 'targetRole', role: 'Prince' } },
@@ -550,8 +554,11 @@ describe('full game stress simulation', () => {
           return `  CRASH bias=${c.bias} size=${c.playerCount} chaos=${c.chaos} roles=[${c.roles.join(',')}]:\n${stack}`;
         }),
         ...stalls.map(
-          (c) =>
-            `  STALL bias=${c.bias} size=${c.playerCount} chaos=${c.chaos} mode=${c.mode} day=${c.dayNumber} phase=${c.finalPhase} alive=${c.aliveCount} roles=[${c.roles.join(',')}]`,
+          (c) => {
+            const errObj = (c.errors[0] as { err?: unknown })?.err ?? c.errors[0];
+            const stack = errObj instanceof Error ? errObj.stack : String(errObj);
+            return `  STALL bias=${c.bias} size=${c.playerCount} chaos=${c.chaos} mode=${c.mode} day=${c.dayNumber} phase=${c.finalPhase} alive=${c.aliveCount} roles=[${c.roles.join(',')}]:\n${stack}`;
+          },
         ),
         ...noWinner.map(
           (c) =>
