@@ -553,13 +553,11 @@ describe('full game stress simulation', () => {
           const stack = errObj instanceof Error ? errObj.stack : String(errObj);
           return `  CRASH bias=${c.bias} size=${c.playerCount} chaos=${c.chaos} roles=[${c.roles.join(',')}]:\n${stack}`;
         }),
-        ...stalls.map(
-          (c) => {
-            const errObj = (c.errors[0] as { err?: unknown })?.err ?? c.errors[0];
-            const stack = errObj instanceof Error ? errObj.stack : String(errObj);
-            return `  STALL bias=${c.bias} size=${c.playerCount} chaos=${c.chaos} mode=${c.mode} day=${c.dayNumber} phase=${c.finalPhase} alive=${c.aliveCount} roles=[${c.roles.join(',')}]:\n${stack}`;
-          },
-        ),
+        ...stalls.map((c) => {
+          const errObj = (c.errors[0] as { err?: unknown })?.err ?? c.errors[0];
+          const stack = errObj instanceof Error ? errObj.stack : String(errObj);
+          return `  STALL bias=${c.bias} size=${c.playerCount} chaos=${c.chaos} mode=${c.mode} day=${c.dayNumber} phase=${c.finalPhase} alive=${c.aliveCount} roles=[${c.roles.join(',')}]:\n${stack}`;
+        }),
         ...noWinner.map(
           (c) =>
             `  NO WINNER bias=${c.bias} size=${c.playerCount} chaos=${c.chaos} finalPhase=${c.finalPhase} alive=${c.aliveCount} day=${c.dayNumber} roles=[${c.roles.join(',')}]`,
