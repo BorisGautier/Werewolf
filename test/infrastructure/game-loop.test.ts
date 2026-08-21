@@ -835,6 +835,28 @@ describe('GameLoop', () => {
     expect(result).toBeNull();
   });
 
+  it("names the actor in their own confirmation toast for a self-reveal ability, instead of leaving a literal unsubstituted '{0}' placeholder", async () => {
+    // Regression test: `handleCallback()` used to translate the returned locale key with no
+    // args, which is harmless for an arg-free key like 'ChoiceRecorded' but left a raw "{0}" in
+    // the player's own toast for every ability whose confirmation names the actor (Mayor,
+    // Pacifist, Blacksmith, Sandman, Troublemaker) - even though the *group* announcement (sent
+    // separately, with the right arg) always looked correct.
+    const { loop, gameManager } = createHarness();
+    const game = dealtGame(gameManager);
+    loop.start(game, 42);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000);
+    await vi.advanceTimersByTimeAsync(0);
+
+    const mayor = game.players[1]!;
+    mayor.role = ROLE_BIT.Mayor;
+    const result = await loop.handleCallback(mayor.id, mayor.id, 'ability:Mayor');
+
+    expect(result).not.toBeNull();
+    expect(result).not.toContain('{0}');
+    expect(result).toContain(mention(mayor.id, mayor.name));
+  });
+
   it('a lynched Hunter still gets their final shot, even though applyChoice() would normally reject a dead actor', async () => {
     const { loop, gameManager } = createHarness();
     const game = gameManager.create(1n, { mode: 'Normal', minPlayers: 6 });
@@ -1383,6 +1405,48 @@ describe('GameLoop', () => {
         (call) => typeof call[1] === 'string' && call[1].includes('voted to lynch'),
       ),
     ).toBe(false);
+  });
+
+  it("PMs a Wild Child/Doppelganger's manual role-model pick back to them by name, not just a generic toast", async () => {
+    const { loop, gameManager, sendMessage } = createHarness();
+    const game = gameManager.create(1n, { mode: 'Normal', minPlayers: 5 });
+    game.addPlayer(1n, 'Wolfy');
+    game.addPlayer(2n, 'WildChild');
+    game.addPlayer(3n, 'Model');
+    game.addPlayer(4n, 'Villager4');
+    game.addPlayer(5n, 'Villager5');
+    game.start();
+    for (const p of game.players) {
+      p.role = ROLE_BIT.Villager;
+      p.team = 'Village';
+      p.changedRolesCount = 0;
+    }
+    game.players[0]!.role = ROLE_BIT.Wolf;
+    game.players[0]!.team = 'Wolf';
+    const wildChild = game.players[1]!;
+    wildChild.role = ROLE_BIT.WildChild;
+    const model = game.players[2]!;
+
+    loop.start(game, 42);
+    await vi.advanceTimersByTimeAsync(0);
+    sendMessage.mockClear();
+
+    const result = await loop.handleCallback(
+      wildChild.id,
+      wildChild.id,
+      `nrm:${model.id.toString()}`,
+    );
+
+    expect(result).toBeTruthy();
+    expect(wildChild.roleModel).toBe(model.id);
+    expect(
+      sendMessage.mock.calls.some(
+        (call) =>
+          call[0] === Number(wildChild.id) &&
+          typeof call[1] === 'string' &&
+          call[1].includes(mention(model.id, model.name)),
+      ),
+    ).toBe(true);
   });
 
   it("locks a Hypnotist Wolf's victim into their forced vote, rejecting any attempt to change it", async () => {

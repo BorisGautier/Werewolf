@@ -17,6 +17,7 @@ import { GameAlreadyRunningError, GameManager } from '../../application/game-man
 import { Game, GameError } from '../../domain/game/game.aggregate.js';
 import { TEAM_DUEL_MIN_PLAYERS, type GameMode } from '../../domain/game/game-mode.js';
 import { ROLE_BIT, ROLE_META, roleName } from '../../domain/roles/role.js';
+import { getTeamForRole } from '../../domain/game/team.js';
 import { SYNTHETIC_BOT_ID_FLOOR, type Player } from '../../domain/game/player.js';
 import { WOLF_ROLES } from '../../domain/game/game-balancing.js';
 import { pickMissionForPlayer, type MissionDef } from '../../domain/game/missions.js';
@@ -696,10 +697,11 @@ export class GameLobbyManager {
     const disabledMissionIds = (await this.missionRepo?.getDisabledMissionIds()) ?? new Set();
     for (const p of session.game.players) {
       if (p.isBot) continue;
-      const def = pickMissionForPlayer(session.game.players, disabledMissionIds);
-      if (!def) continue;
-      p.missionOfferedId = def.id;
-      await this.notifyMission(p, def, session.language);
+      const offer = pickMissionForPlayer(p.id, session.game.players, disabledMissionIds);
+      if (!offer) continue;
+      p.missionOfferedId = offer.def.id;
+      p.missionOfferedTargetId = offer.targetId;
+      await this.notifyMission(p, offer.def, offer.targetId, session.game, session.language);
     }
 
     // The night/day loop sends its own richer "Night N falls, you have X seconds" message right
@@ -740,6 +742,22 @@ export class GameLobbyManager {
     const localized = this.t.translate(language, `Role_${name}`);
     const displayName = localized.startsWith('Role_') ? name : localized;
     const emoji = ROLE_META[name].emoji;
+
+    // Stated explicitly, separately from the ability description below - several roles' `About*`
+    // text only implies their win condition in prose (or not at all), which left some players
+    // genuinely unsure which side they were even rooting for until the end-game recap. Skipped in
+    // TeamDuel: that mode's `duelInfo` block below already states the real win condition (most
+    // squad survivors), and this classic Village/Wolf/... team is actively the wrong thing to
+    // root for there - a squad mixes both sides on purpose.
+    let campLine = '';
+    if (game.mode !== 'TeamDuel') {
+      const team = getTeamForRole(role);
+      const teamLabel = this.t.translate(language, `${team}TeamEnd`);
+      campLine =
+        language === 'fr'
+          ? `\n\n🏳️ <b>Camp :</b> ${teamLabel} — c'est ce camp qu'il faut aider à faire gagner !`
+          : `\n\n🏳️ <b>Side:</b> ${teamLabel} — that's the side you need to help win!`;
+    }
 
     let description = '';
     try {
@@ -842,7 +860,7 @@ export class GameLobbyManager {
           : `\n\n⚔️ <b>You're on Squad ${player.duelSquad}!</b>${captainNote}\nSquadmates:\n• ${names}\nUse /equipe followed by your message to talk to them privately. Whichever squad has the most survivors at the end wins!`;
     }
 
-    const roleMsg = `${this.t.translate(language, 'YourRoleIs', `${emoji} ${displayName}`)}${description}${teamInfo}${duelInfo}`;
+    const roleMsg = `${this.t.translate(language, 'YourRoleIs', `${emoji} ${displayName}`)}${campLine}${description}${teamInfo}${duelInfo}`;
 
     try {
       await this.bot.api.sendMessage(chatNumber(telegramId), roleMsg, { parse_mode: 'HTML' });
@@ -863,10 +881,14 @@ export class GameLobbyManager {
   private async notifyMission(
     player: { id: bigint; name: string },
     def: MissionDef,
+    targetId: bigint | null,
+    game: Game,
     language: string,
   ): Promise<void> {
-    const title = this.t.translate(language, `Mission_${def.id}_Title`);
-    const desc = this.t.translate(language, `Mission_${def.id}_Desc`);
+    const target = targetId !== null ? game.players.find((p) => p.id === targetId) : undefined;
+    const targetName = target ? mentionOrPlain(target.id, target.name, target.isBot) : '';
+    const title = this.t.translate(language, `Mission_${def.id}_Title`, targetName);
+    const desc = this.t.translate(language, `Mission_${def.id}_Desc`, targetName);
     const text = this.t.translate(language, 'MissionOffer', title, desc, def.points);
     const keyboard = new InlineKeyboard()
       .text(this.t.translate(language, 'MissionAcceptButton'), `mission_accept:${def.id}`)

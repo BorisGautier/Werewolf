@@ -305,11 +305,17 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     }
     const language = (await deps.groupRepository.getOrCreate(game!.chatId, null, null)).language;
     player.missionId = missionId;
+    player.missionTargetId = player.missionOfferedTargetId;
     player.missionOfferedId = null;
+    player.missionOfferedTargetId = null;
     await ctx.answerCallbackQuery();
     const def = findMissionDef(missionId);
-    const title = deps.translator.translate(language, `Mission_${missionId}_Title`);
-    const desc = deps.translator.translate(language, `Mission_${missionId}_Desc`);
+    const target = player.missionTargetId
+      ? game!.players.find((p) => p.id === player.missionTargetId)
+      : undefined;
+    const targetName = target ? mentionOrPlain(target.id, target.name, target.isBot) : '';
+    const title = deps.translator.translate(language, `Mission_${missionId}_Title`, targetName);
+    const desc = deps.translator.translate(language, `Mission_${missionId}_Desc`, targetName);
     // Keeps the full brief visible after accepting, not just the title - a player who forgets the
     // exact condition mid-game would otherwise have no way to check it again (see also `/mamission`).
     const confirmation = `${deps.translator.translate(language, 'MissionAccepted')}\n\n<b>${title}</b>\n${desc}${def ? `\n\n💰 +${def.points} pts` : ''}`;
@@ -326,7 +332,10 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     const language = game
       ? (await deps.groupRepository.getOrCreate(game.chatId, null, null)).language
       : 'en';
-    if (player) player.missionOfferedId = null;
+    if (player) {
+      player.missionOfferedId = null;
+      player.missionOfferedTargetId = null;
+    }
     await ctx.answerCallbackQuery();
     const confirmation = deps.translator.translate(language, 'MissionDeclined');
     await ctx.editMessageText(confirmation, { parse_mode: 'HTML' }).catch(async () => {
@@ -365,8 +374,20 @@ export function createBot(env: Env, logger: Logger, deps: BotDependencies): Bot 
     }
 
     const def = findMissionDef(player.missionId);
-    const title = deps.translator.translate(language, `Mission_${player.missionId}_Title`);
-    const desc = deps.translator.translate(language, `Mission_${player.missionId}_Desc`);
+    const target = player.missionTargetId
+      ? game!.players.find((p) => p.id === player.missionTargetId)
+      : undefined;
+    const targetName = target ? mentionOrPlain(target.id, target.name, target.isBot) : '';
+    const title = deps.translator.translate(
+      language,
+      `Mission_${player.missionId}_Title`,
+      targetName,
+    );
+    const desc = deps.translator.translate(
+      language,
+      `Mission_${player.missionId}_Desc`,
+      targetName,
+    );
     const reminder = `🎯 <b>${title}</b>\n${desc}${def ? `\n\n💰 +${def.points} pts` : ''}`;
 
     if (ctx.chat.type === 'private') {

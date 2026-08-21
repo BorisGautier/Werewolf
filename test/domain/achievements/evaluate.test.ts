@@ -289,7 +289,7 @@ describe('evaluateGameAchievements', () => {
     const events: GameEvent[][] = [
       [
         { type: 'SerialKillerRandomKill', originalTargetId: 9n, newTargetId: 5n },
-        { type: 'GuardianAngelBlockedSerialKiller', targetId: 5n },
+        { type: 'GuardianAngelBlockedSerialKiller', targetId: 5n, serialKillerId: sk.id },
       ],
     ];
     const result = evaluateGameAchievements(ctx([sk], { eventBatches: events }));
@@ -300,7 +300,7 @@ describe('evaluateGameAchievements', () => {
     const sk = createPlayer(1n, 'SK', ROLE_BIT.SerialKiller, 'SerialKiller');
     const events: GameEvent[][] = [
       [{ type: 'SerialKillerRandomKill', originalTargetId: 9n, newTargetId: 5n }],
-      [{ type: 'GuardianAngelBlockedSerialKiller', targetId: 5n }],
+      [{ type: 'GuardianAngelBlockedSerialKiller', targetId: 5n, serialKillerId: sk.id }],
     ];
     const result = evaluateGameAchievements(ctx([sk], { eventBatches: events }));
     expect(unlocksFor(result, 1n)).not.toContain('ReallyBadLuck');
@@ -311,7 +311,7 @@ describe('evaluateGameAchievements', () => {
     const events: GameEvent[][] = [
       [
         { type: 'SerialKillerRandomKill', originalTargetId: 9n, newTargetId: 5n },
-        { type: 'GuardianAngelBlockedSerialKiller', targetId: 7n },
+        { type: 'GuardianAngelBlockedSerialKiller', targetId: 7n, serialKillerId: sk.id },
       ],
     ];
     const result = evaluateGameAchievements(ctx([sk], { eventBatches: events }));
@@ -544,7 +544,7 @@ describe('evaluateGameAchievements', () => {
   it('grants AtLeastYouTried when a GA-saved player later dies to Chemist poison', () => {
     const ga = createPlayer(1n, 'GA', ROLE_BIT.GuardianAngel, 'Village');
     const events: GameEvent[][] = [
-      [{ type: 'GuardianAngelBlockedWolfAttack', targetId: 2n }],
+      [{ type: 'GuardianAngelBlockedWolfAttack', targetId: 2n, wolfIds: [9n] }],
       [{ type: 'PlayerDied', playerId: 2n, method: 'Chemistry', killerIds: [3n], isNight: true }],
     ];
     const result = evaluateGameAchievements(ctx([ga], { eventBatches: events }));
@@ -554,7 +554,9 @@ describe('evaluateGameAchievements', () => {
   it('grants InTheMiddleOfTheTrouble to the living Guardian Angel who blocked a wolf attack', () => {
     const ga = createPlayer(1n, 'GA', ROLE_BIT.GuardianAngel, 'Village');
     const wolf = createPlayer(2n, 'W', ROLE_BIT.Wolf, 'Wolf');
-    const events: GameEvent[][] = [[{ type: 'GuardianAngelBlockedWolfAttack', targetId: 2n }]];
+    const events: GameEvent[][] = [
+      [{ type: 'GuardianAngelBlockedWolfAttack', targetId: 2n, wolfIds: [wolf.id] }],
+    ];
     const result = evaluateGameAchievements(ctx([ga, wolf], { eventBatches: events }));
     expect(unlocksFor(result, 1n)).toContain('InTheMiddleOfTheTrouble');
   });

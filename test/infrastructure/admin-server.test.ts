@@ -125,7 +125,7 @@ describe('AdminServer REST API & Dashboard', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
     expect(body.success).toBe(true);
-    expect(body.missions).toHaveLength(30);
+    expect(body.missions).toHaveLength(60);
     expect(body.missions.every((m: any) => m.enabled === true)).toBe(true);
     expect(body.missions.every((m: any) => m.attempts === 0 && m.successRate === null)).toBe(true);
   });
