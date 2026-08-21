@@ -289,14 +289,35 @@ export function describeEvent(
       return [{ audience: event.playerId, key: 'TraitorBecameWolfMsg', args: [] }];
 
     case 'CultistAutoConverted':
-    case 'PlayerConvertedToCult':
       return [{ audience: event.playerId, key: 'ConvertedToCult', args: [] }];
 
-    case 'LoversCreated':
+    case 'PlayerConvertedToCult':
+      // The recruiting Cultist previously never learned whether their pick actually joined -
+      // only the target's own "you're a cultist now" PM fired.
       return [
+        { audience: event.playerId, key: 'ConvertedToCult', args: [] },
+        { audience: event.newbieId, key: 'CultConversionSucceeded', args: [name(event.playerId)] },
+      ];
+
+    case 'LoversCreated': {
+      const messages: OutgoingMessage[] = [
         { audience: event.lover1Id, key: 'YouAreInLove', args: [name(event.lover2Id)] },
         { audience: event.lover2Id, key: 'YouAreInLove', args: [name(event.lover1Id)] },
       ];
+      // Cupid's own pairing was previously unconfirmed - the toast their choice-menu click
+      // produced was the same generic "ChoiceRecorded" every other night action gets, naming
+      // nobody. Told here instead (rather than at click-time in game-loop.ts) since a random
+      // fallback pairing (see `createLovers()`) can happen without Cupid ever picking at all.
+      const cupid = players.find((p) => p.role === ROLE_BIT.Cupid && !p.isDead);
+      if (cupid && cupid.id !== event.lover1Id && cupid.id !== event.lover2Id) {
+        messages.push({
+          audience: cupid.id,
+          key: 'CupidPairingConfirmed',
+          args: [name(event.lover1Id), name(event.lover2Id)],
+        });
+      }
+      return messages;
+    }
 
     case 'PlayerFrozen':
       return [
@@ -316,12 +337,34 @@ export function describeEvent(
         { audience: event.snowWolfId, key: 'GuardBlockedSnowWolf', args: [name(event.targetId)] },
       ];
 
-    // Purely state-flagging (sets `wasSavedLastNight`) in the original too - no message fires here,
-    // only later from the GA's own night-resolution block (see above).
+    // The original left the attacker(s) entirely in the dark here - only the GA's own
+    // night-resolution block (above) ever got a message. That silence is exactly what players
+    // reported as confusing (a kill vote that just vanishes, no confirmation it was even blocked
+    // rather than simply not resolving yet), so each attacker now gets their own private word.
     case 'GuardianAngelBlockedWolfAttack':
+      return event.wolfIds.map((wolfId) => ({
+        audience: wolfId,
+        key: 'WolfAttackBlockedByGuardian',
+        args: [name(event.targetId)],
+      }));
+
     case 'GuardianAngelBlockedSerialKiller':
+      return [
+        {
+          audience: event.serialKillerId,
+          key: 'SerialKillerBlockedByGuardian',
+          args: [name(event.targetId)],
+        },
+      ];
+
     case 'GuardianAngelSavedFromBurning':
-      return [];
+      return [
+        {
+          audience: event.arsonistId,
+          key: 'ArsonistTargetSavedByGuardian',
+          args: [name(event.playerId)],
+        },
+      ];
 
     case 'GuardianAngelSaved':
       return [
@@ -425,15 +468,35 @@ export function describeEvent(
 
     // Internal bookkeeping / achievement-only in the original - no player-visible text.
     case 'WolfCubKilled':
-    case 'CultConversionFailed':
     case 'SerialKillerRandomKill':
-    case 'RoleModelChosen':
     case 'WolfPackAteTwice':
     case 'AlphaWolfLuckyDay':
-    case 'HarlotVisited':
     case 'WolfPackHasDrunkMembers':
     case 'HunterMustShoot': // handled separately by the game loop (triggers the final-shot menu)
       return [];
+
+    // The recruiting Cultist previously never learned a failed pick even happened - total silence
+    // where a wasted night indistinguishable from "nothing happened yet" left them unsure whether
+    // to try again.
+    case 'CultConversionFailed':
+      return [
+        { audience: event.newbieId, key: 'CultConversionFailedMsg', args: [name(event.targetId)] },
+      ];
+
+    // The Wild Child/Doppelganger's role-model pick - manual or the day-1 forced-random fallback
+    // (see `role-changes.ts`) - previously only ever produced the generic "Choix enregistré !"
+    // toast at click-time, naming nobody.
+    case 'RoleModelChosen':
+      return [
+        { audience: event.playerId, key: 'RoleModelChosenMsg', args: [name(event.roleModelId)] },
+      ];
+
+    // Confirms the Harlot's pick landed, regardless of what happens to them next (a later event
+    // this same night covers their own death, if the visit turned out to be fatal).
+    case 'HarlotVisited':
+      return [
+        { audience: event.harlotId, key: 'HarlotVisitConfirmed', args: [name(event.targetId)] },
+      ];
 
     case 'SeerVision':
       return [
@@ -519,6 +582,9 @@ export function describeEvent(
           args: [name(event.playerId)],
         },
       ];
+
+    case 'NecromancerResurrectFailed':
+      return [{ audience: event.necromancerId, key: 'NecromancerResurrectFailedMsg', args: [] }];
 
     case 'WatchmanReport':
       return [

@@ -251,6 +251,7 @@ export function resolveLynchVotes(players: Player[], options: LynchOptions): Lyn
         if (killer) killer.everVotedForLynchedVictim = true;
       }
       events.push(...killPlayer(players, lynched.id, 'Lynch', { killerIds, isNight: false }));
+      lynched.diedByLynch = true;
 
       // Jester lynch victory
       if (lynched.role === ROLE_BIT.Jester) {

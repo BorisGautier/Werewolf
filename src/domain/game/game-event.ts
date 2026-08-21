@@ -58,17 +58,17 @@ export type GameEvent =
     }
   | { type: 'GuardianAngelBlockedFreeze'; targetId: bigint; snowWolfId: bigint }
   | { type: 'PlayerDoused'; playerId: bigint; arsonistId: bigint }
-  | { type: 'GuardianAngelSavedFromBurning'; playerId: bigint }
+  | { type: 'GuardianAngelSavedFromBurning'; playerId: bigint; arsonistId: bigint }
   | { type: 'PlayerBitten'; playerId: bigint; alphaId: bigint | null }
-  | { type: 'GuardianAngelBlockedWolfAttack'; targetId: bigint }
+  | { type: 'GuardianAngelBlockedWolfAttack'; targetId: bigint; wolfIds: bigint[] }
   | { type: 'WolvesGotDrunk'; wolfIds: bigint[]; drunkVictimId: bigint }
   | { type: 'WiseElderSurvivedFirstAttack'; playerId: bigint }
   | { type: 'HunterCounterAttack'; hunterId: bigint; shotWolfId: bigint; hunterAlsoDied: boolean }
   | { type: 'CursedTurnedWolf'; playerId: bigint }
   | { type: 'SerialKillerRandomKill'; originalTargetId: bigint; newTargetId: bigint }
-  | { type: 'GuardianAngelBlockedSerialKiller'; targetId: bigint }
-  | { type: 'PlayerConvertedToCult'; playerId: bigint }
-  | { type: 'CultConversionFailed'; targetId: bigint }
+  | { type: 'GuardianAngelBlockedSerialKiller'; targetId: bigint; serialKillerId: bigint }
+  | { type: 'PlayerConvertedToCult'; playerId: bigint; newbieId: bigint }
+  | { type: 'CultConversionFailed'; targetId: bigint; newbieId: bigint }
   | { type: 'GuardianAngelCleanedDouse'; gaId: bigint; playerId: bigint }
   | { type: 'GuardianAngelSaved'; gaId: bigint; targetId: bigint }
   | { type: 'GuardianAngelSavedTargetFromFire'; gaId: bigint; targetId: bigint }
@@ -108,6 +108,7 @@ export type GameEvent =
   | { type: 'CrowCursed'; crowId: bigint; targetId: bigint }
   | { type: 'HitmanTargetEliminated'; hitmanId: bigint; targetId: bigint }
   | { type: 'PlayerResurrected'; necromancerId: bigint; playerId: bigint }
+  | { type: 'NecromancerResurrectFailed'; necromancerId: bigint }
   | { type: 'WatchmanReport'; watchmanId: bigint; targetId: bigint; visitorCount: number }
   | { type: 'TrackerReport'; trackerId: bigint; targetId: bigint; leftHome: boolean }
   | { type: 'PriestessBlessingSaved'; priestessId: bigint; targetId: bigint }
