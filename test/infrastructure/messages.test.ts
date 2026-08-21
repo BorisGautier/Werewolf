@@ -245,16 +245,33 @@ describe('describeEvent - Guardian Angel PMs', () => {
     ).toEqual([{ audience: 1n, key: 'GAFell', args: [mention(4n, 'GD')] }]);
   });
 
-  it('the four attacker-side "blocked" flag events carry no message of their own (silent state-flagging)', () => {
+  it('tells each blocked attacker privately that their target was saved by a Guardian Angel', () => {
+    const target = createPlayer(2n, 'T', ROLE_BIT.Villager, 'Village');
+
     expect(
-      describeEvent({ type: 'GuardianAngelBlockedWolfAttack', targetId: 2n }, [], true),
-    ).toEqual([]);
+      describeEvent(
+        { type: 'GuardianAngelBlockedWolfAttack', targetId: 2n, wolfIds: [10n, 11n] },
+        [target],
+        true,
+      ),
+    ).toEqual([
+      { audience: 10n, key: 'WolfAttackBlockedByGuardian', args: [mention(2n, 'T')] },
+      { audience: 11n, key: 'WolfAttackBlockedByGuardian', args: [mention(2n, 'T')] },
+    ]);
     expect(
-      describeEvent({ type: 'GuardianAngelBlockedSerialKiller', targetId: 2n }, [], true),
-    ).toEqual([]);
+      describeEvent(
+        { type: 'GuardianAngelBlockedSerialKiller', targetId: 2n, serialKillerId: 20n },
+        [target],
+        true,
+      ),
+    ).toEqual([{ audience: 20n, key: 'SerialKillerBlockedByGuardian', args: [mention(2n, 'T')] }]);
     expect(
-      describeEvent({ type: 'GuardianAngelSavedFromBurning', playerId: 2n }, [], true),
-    ).toEqual([]);
+      describeEvent(
+        { type: 'GuardianAngelSavedFromBurning', playerId: 2n, arsonistId: 30n },
+        [target],
+        true,
+      ),
+    ).toEqual([{ audience: 30n, key: 'ArsonistTargetSavedByGuardian', args: [mention(2n, 'T')] }]);
   });
 });
 
@@ -330,5 +347,80 @@ describe('describeEvent - freeze flavor and Chemist PMs', () => {
       { audience: 1n, key: 'ChemistSK', args: [mention(3n, 'SK')] },
       { audience: 3n, key: 'ChemistVisitYouSK', args: [mention(1n, 'Ch')] },
     ]);
+  });
+});
+
+describe('describeEvent - previously-silent action feedback', () => {
+  it("tells Cupid privately who they paired, on top of the lovers' own PMs", () => {
+    const cupid = createPlayer(1n, 'Cupid', ROLE_BIT.Cupid, 'Village');
+    const a = createPlayer(2n, 'A', ROLE_BIT.Villager, 'Village');
+    const b = createPlayer(3n, 'B', ROLE_BIT.Villager, 'Village');
+
+    expect(
+      describeEvent({ type: 'LoversCreated', lover1Id: 2n, lover2Id: 3n }, [cupid, a, b], true),
+    ).toEqual([
+      { audience: 2n, key: 'YouAreInLove', args: [mention(3n, 'B')] },
+      { audience: 3n, key: 'YouAreInLove', args: [mention(2n, 'A')] },
+      { audience: 1n, key: 'CupidPairingConfirmed', args: [mention(2n, 'A'), mention(3n, 'B')] },
+    ]);
+  });
+
+  it('never double-messages Cupid if the random fallback happens to pair Cupid themselves', () => {
+    const cupid = createPlayer(1n, 'Cupid', ROLE_BIT.Cupid, 'Village');
+    const other = createPlayer(2n, 'Other', ROLE_BIT.Villager, 'Village');
+
+    expect(
+      describeEvent({ type: 'LoversCreated', lover1Id: 1n, lover2Id: 2n }, [cupid, other], true),
+    ).toEqual([
+      { audience: 1n, key: 'YouAreInLove', args: [mention(2n, 'Other')] },
+      { audience: 2n, key: 'YouAreInLove', args: [mention(1n, 'Cupid')] },
+    ]);
+  });
+
+  it('tells the recruiting Cultist both a successful and a failed conversion attempt', () => {
+    expect(
+      describeEvent(
+        { type: 'PlayerConvertedToCult', playerId: 2n, newbieId: 1n },
+        [
+          createPlayer(1n, 'Newbie', ROLE_BIT.Cultist, 'Cult'),
+          createPlayer(2n, 'T', ROLE_BIT.Cultist, 'Cult'),
+        ],
+        true,
+      ),
+    ).toEqual([
+      { audience: 2n, key: 'ConvertedToCult', args: [] },
+      { audience: 1n, key: 'CultConversionSucceeded', args: [mention(2n, 'T')] },
+    ]);
+
+    expect(
+      describeEvent(
+        { type: 'CultConversionFailed', targetId: 2n, newbieId: 1n },
+        [
+          createPlayer(1n, 'Newbie', ROLE_BIT.Cultist, 'Cult'),
+          createPlayer(2n, 'T', ROLE_BIT.Villager, 'Village'),
+        ],
+        true,
+      ),
+    ).toEqual([{ audience: 1n, key: 'CultConversionFailedMsg', args: [mention(2n, 'T')] }]);
+  });
+
+  it('tells the Necromancer their resurrection ritual failed', () => {
+    expect(
+      describeEvent({ type: 'NecromancerResurrectFailed', necromancerId: 1n }, [], true),
+    ).toEqual([{ audience: 1n, key: 'NecromancerResurrectFailedMsg', args: [] }]);
+  });
+
+  it('confirms the Harlot which player they visited', () => {
+    const target = createPlayer(2n, 'T', ROLE_BIT.Villager, 'Village');
+    expect(
+      describeEvent({ type: 'HarlotVisited', harlotId: 1n, targetId: 2n }, [target], true),
+    ).toEqual([{ audience: 1n, key: 'HarlotVisitConfirmed', args: [mention(2n, 'T')] }]);
+  });
+
+  it('confirms the Wild Child/Doppelganger their role model, for the day-1 forced-random fallback', () => {
+    const model = createPlayer(2n, 'M', ROLE_BIT.Villager, 'Village');
+    expect(
+      describeEvent({ type: 'RoleModelChosen', playerId: 1n, roleModelId: 2n }, [model], true),
+    ).toEqual([{ audience: 1n, key: 'RoleModelChosenMsg', args: [mention(2n, 'M')] }]);
   });
 });
