@@ -461,7 +461,11 @@ export function resolveWolfNight(
       if (state.guardianAngel?.choice === target.id) {
         target.wasSavedLastNight = true;
         wolfAttacksBlocked.labels('GuardianAngel').inc();
-        events.push({ type: 'GuardianAngelBlockedWolfAttack', targetId: target.id });
+        events.push({
+          type: 'GuardianAngelBlockedWolfAttack',
+          targetId: target.id,
+          wolfIds: voteWolves.map((w) => w.id),
+        });
       } else if (state.priestessBlessed?.targetId === target.id) {
         target.wasSavedLastNight = true;
         wolfAttacksBlocked.labels('Priestess').inc();
@@ -535,7 +539,11 @@ export function resolveArsonistNight(
     for (const victim of burning) {
       if (state.guardianAngel?.choice === victim.id) {
         victim.wasSavedLastNight = true;
-        events.push({ type: 'GuardianAngelSavedFromBurning', playerId: victim.id });
+        events.push({
+          type: 'GuardianAngelSavedFromBurning',
+          playerId: victim.id,
+          arsonistId: arsonist.id,
+        });
       } else {
         events.push(
           ...killPlayer(players, victim.id, 'Burn', {
@@ -602,7 +610,11 @@ export function resolveSerialKillerNight(
     if (state.guardianAngel?.choice === skilled.id && skilled.role !== ROLE_BIT.Harlot) {
       skilled.wasSavedLastNight = true;
       serialKillerBlocked.inc();
-      events.push({ type: 'GuardianAngelBlockedSerialKiller', targetId: skilled.id });
+      events.push({
+        type: 'GuardianAngelBlockedSerialKiller',
+        targetId: skilled.id,
+        serialKillerId: sk.id,
+      });
     } else {
       serialKillerStrikes.inc();
       events.push(...killPlayer(players, skilled.id, 'SerialKilled', { killerIds: [sk.id] }));
@@ -859,7 +871,10 @@ export function resolveNecromancerNight(players: Player[]): GameEvent[] {
   if (necromancer.choice === null || necromancer.choice === ABSTAIN) return events;
 
   const target = players.find((p) => p.id === necromancer.choice && p.isDead);
-  if (!target) return events;
+  if (!target) {
+    events.push({ type: 'NecromancerResurrectFailed', necromancerId: necromancer.id });
+    return events;
+  }
 
   necromancer.hasUsedAbility = true;
 
@@ -922,13 +937,14 @@ function convertToCult(
   chance: number,
   dayNumber: number,
   random: () => number,
+  newbieId: bigint,
 ): GameEvent[] {
   if (Math.floor(random() * 100) < chance) {
     promoteToCultist(target, dayNumber);
     cultConversions.inc();
-    return [{ type: 'PlayerConvertedToCult', playerId: target.id }];
+    return [{ type: 'PlayerConvertedToCult', playerId: target.id, newbieId }];
   }
-  return [{ type: 'CultConversionFailed', targetId: target.id }];
+  return [{ type: 'CultConversionFailed', targetId: target.id, newbieId }];
 }
 
 /**
@@ -949,7 +965,7 @@ function resolveCultVictim(
       if (Math.floor(random() * 100) < 50) {
         // Settings.HunterConversionChance
         promoteToCultist(target, dayNumber);
-        return [{ type: 'PlayerConvertedToCult', playerId: target.id }];
+        return [{ type: 'PlayerConvertedToCult', playerId: target.id, newbieId: newbie.id }];
       }
       if (Math.floor(random() * 100) < 50) {
         // Settings.HunterKillCultChance
@@ -958,7 +974,7 @@ function resolveCultVictim(
           diedByVisitingKiller: true,
         });
       }
-      return [{ type: 'CultConversionFailed', targetId: target.id }];
+      return [{ type: 'CultConversionFailed', targetId: target.id, newbieId: newbie.id }];
     }
 
     case ROLE_BIT.CultistHunter:
@@ -996,13 +1012,13 @@ function resolveCultVictim(
 
     case ROLE_BIT.Arsonist:
       if (target.choice === ABSTAIN || target.frozen) {
-        return convertToCult(target, 0, dayNumber, random); // guaranteed to fail - matches the original's forced chance:0
+        return convertToCult(target, 0, dayNumber, random, newbie.id); // guaranteed to fail - matches the original's forced chance:0
       }
       return [];
 
     default: {
       const chance = CULT_CONVERSION_CHANCE.get(target.role) ?? 100;
-      return convertToCult(target, chance, dayNumber, random);
+      return convertToCult(target, chance, dayNumber, random, newbie.id);
     }
   }
 }

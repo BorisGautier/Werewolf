@@ -32,12 +32,14 @@ describe('resolveNecromancerNight', () => {
     expect(resolveNecromancerNight([abstained, deadPlayer])).toEqual([]);
   });
 
-  it('does nothing when the chosen target is still alive', () => {
+  it('tells the Necromancer their ritual failed (and leaves the ability unconsumed) when the chosen target is still alive', () => {
     const necro = createPlayer(1n, 'Necro', ROLE_BIT.Necromancer, 'Neutral');
     const alive = createPlayer(2n, 'Alive', ROLE_BIT.Villager, 'Village');
     necro.choice = alive.id;
 
-    expect(resolveNecromancerNight([necro, alive])).toEqual([]);
+    expect(resolveNecromancerNight([necro, alive])).toEqual([
+      { type: 'NecromancerResurrectFailed', necromancerId: necro.id },
+    ]);
     expect(necro.hasUsedAbility).toBe(false);
   });
 

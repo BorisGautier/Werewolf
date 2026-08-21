@@ -64,6 +64,12 @@ export function killPlayer(
 
   // A death-by-love is folded into the lover's own kill call, not tracked as a fresh "night death".
   victim.diedLastNight = isNight && method !== 'LoverDied';
+  // Unlike `diedLastNight` above (transient - reset every phase, see `Game.enterNight()`/
+  // `startDay()` - it only means "died since the most recent night began"), this is a permanent
+  // record of *when this player's one death* happened, for mission-mode's targeted "died at
+  // night" condition (see `missions.ts`) to read back reliably at game end regardless of how many
+  // phases have passed since.
+  victim.diedAtNight = isNight;
   victim.timeDied = new Date();
 
   const killedByRole =

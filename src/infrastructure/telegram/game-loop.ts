@@ -103,6 +103,13 @@ const GA_SAVE_EVENT_TYPES: ReadonlySet<GameEvent['type']> = new Set([
   'GuardianAngelSavedFromBurning',
 ]);
 
+/** A locale key plus whatever positional args it needs - the confirmation toast/message
+ * `handleCallback()` shows the clicking player. Carrying `args` alongside the key (rather than
+ * returning a bare key string, translated with no args at the very end) is what lets a
+ * confirmation that names the actor - e.g. "{0} a révélé le rôle de Maire !" - actually resolve
+ * `{0}` instead of leaving it as a literal, un-substituted placeholder in what the player sees. */
+type DispatchResult = { key: string; args: unknown[] } | null;
+
 export class GameLoop {
   private readonly gameIds = new Map<bigint, number>();
   /** Every night/day/lynch resolution's events, one batch per call to `broadcast()` - the
@@ -907,7 +914,11 @@ export class GameLoop {
             eventBatches: batches,
           });
           const duelBonus = computeDuelBonus(game.players, batches);
-          const missionBonus = computeMissionBonus(game.players, new Set(game.claimsMap.keys()));
+          const missionBonus = computeMissionBonus(game.players, {
+            claimedIds: new Set(game.claimsMap.keys()),
+            voteLog: game.voteLog,
+            finalDay: game.dayNumber,
+          });
           const scores = calculateGamePoints(
             realPlayers,
             game.winningTeam ?? null,
@@ -920,7 +931,7 @@ export class GameLoop {
           );
           const grp = await this.groups.getOrCreate(game.chatId, null, null);
           const lang = grp.language;
-          await this.notifyMissionResults(realPlayers, missionBonus, lang);
+          await this.notifyMissionResults(realPlayers, game.players, missionBonus, lang);
           if (this.missionRepo) {
             for (const p of realPlayers) {
               if (!p.missionId) continue;
@@ -1030,6 +1041,7 @@ export class GameLoop {
    * player themselves chooses to keep it; sharing the result is their call, not the bot's. */
   private async notifyMissionResults(
     realPlayers: readonly Player[],
+    allPlayers: readonly Player[],
     missionBonus: ReadonlyMap<bigint, number>,
     language: string,
   ): Promise<void> {
@@ -1037,7 +1049,11 @@ export class GameLoop {
       if (!player.missionId) continue;
       const def = findMissionDef(player.missionId);
       if (!def) continue;
-      const title = this.t.translate(language, `Mission_${def.id}_Title`);
+      const target = player.missionTargetId
+        ? allPlayers.find((p) => p.id === player.missionTargetId)
+        : undefined;
+      const targetName = target ? mentionOrPlain(target.id, target.name, target.isBot) : '';
+      const title = this.t.translate(language, `Mission_${def.id}_Title`, targetName);
       const key = missionBonus.has(player.id) ? 'MissionResultSuccess' : 'MissionResultFailure';
       const msg = this.t.translate(language, key, title, def.points);
       await this.bot.api
@@ -1145,8 +1161,12 @@ export class GameLoop {
     if (!game) return null;
 
     const language = (await this.groups.getOrCreate(game.chatId, null, null)).language;
-    const key = await this.dispatchCallback(game, playerId, language, action!, rest);
-    return key ? this.t.translate(language, key) : null;
+    const result = await this.dispatchCallback(game, playerId, language, action!, rest);
+    // `result.args` matters here - translating `key` alone (no args) used to leave a raw "{0}"
+    // placeholder in the toast for every confirmation that names the actor (Mayor/Pacifist/
+    // Blacksmith/Sandman/Troublemaker's reveal messages), even though the *group* announcement
+    // (sent separately, with its own args) always looked correct.
+    return result ? this.t.translate(language, result.key, ...result.args) : null;
   }
 
   private async dispatchCallback(
@@ -1155,7 +1175,7 @@ export class GameLoop {
     language: string,
     action: string,
     rest: string[],
-  ): Promise<string | null> {
+  ): Promise<DispatchResult> {
     switch (action) {
       case 'vote': {
         if (game.phase !== 'Lynch') return null;
@@ -1177,7 +1197,7 @@ export class GameLoop {
         );
         if (!judge) return null;
         judge.judgePardonChoice = action === 'judge_pardon';
-        return 'ChoiceRecorded';
+        return { key: 'ChoiceRecorded', args: [] };
       }
       case 'nt':
         if (game.phase !== 'Night') return null;
@@ -1199,14 +1219,14 @@ export class GameLoop {
         );
         if (!hunter) return null;
         hunter.choice = rest[0] === 'abstain' ? ABSTAIN : BigInt(rest[0]!);
-        return 'ChoiceRecorded';
+        return { key: 'ChoiceRecorded', args: [] };
       }
       case 'spark': {
         if (game.phase !== 'Night') return null;
         const actor = game.players.find((p) => p.id === playerId && p.role === ROLE_BIT.Arsonist);
         if (!actor) return null;
         actor.choice = SPARK;
-        return 'ChoiceRecorded';
+        return { key: 'ChoiceRecorded', args: [] };
       }
       case 'nrm': {
         if (game.phase !== 'Night') return null;
@@ -1214,7 +1234,22 @@ export class GameLoop {
         if (!actor || (actor.role !== ROLE_BIT.WildChild && actor.role !== ROLE_BIT.Doppelganger))
           return null;
         actor.roleModel = BigInt(rest[0]!);
-        return 'ChoiceRecorded';
+        // Like Cupid's/the Hypnotist Wolf's own two-step picks, this is set directly here with no
+        // later `resolveNightActions()` pass to derive a confirmation from - the generic "Choix
+        // enregistré !" toast alone never named who got picked, only `RoleModelChosen`'s day-1
+        // forced-random fallback (see `role-changes.ts`) did.
+        const model = game.players.find((p) => p.id === actor.roleModel);
+        if (model) {
+          await this.sendPmRaw(
+            actor.id,
+            this.t.translate(
+              language,
+              'RoleModelChosenMsg',
+              mentionOrPlain(model.id, model.name, model.isBot),
+            ),
+          );
+        }
+        return { key: 'ChoiceRecorded', args: [] };
       }
       case 'ability':
         if (game.phase !== 'Day') return null;
@@ -1234,7 +1269,7 @@ export class GameLoop {
             targetKeyboard(targets, `cupid2:${lover1.id.toString()}`, language, this.t, false),
           );
         }
-        return 'ChoiceRecorded';
+        return { key: 'ChoiceRecorded', args: [] };
       }
       case 'cupid2': {
         if (game.phase !== 'Night') return null;
@@ -1247,7 +1282,7 @@ export class GameLoop {
         lover2.inLove = true;
         lover1.loverId = lover2.id;
         lover2.loverId = lover1.id;
-        return 'ChoiceRecorded';
+        return { key: 'ChoiceRecorded', args: [] };
       }
       case 'hyp1': {
         if (game.phase !== 'Night') return null;
@@ -1266,7 +1301,7 @@ export class GameLoop {
             targetKeyboard(targets, `hyp2:${victim.id.toString()}`, language, this.t, false),
           );
         }
-        return 'ChoiceRecorded';
+        return { key: 'ChoiceRecorded', args: [] };
       }
       case 'hyp2': {
         if (game.phase !== 'Night') return null;
@@ -1300,7 +1335,7 @@ export class GameLoop {
         // `secretAudience` handling for the same reasoning on the other wolf subtypes).
         const group = await this.groups.getOrCreate(game.chatId, null, null);
         void this.sendGifCategory(hypnotist.id, group, 'HypnotistWolfMindControl');
-        return 'ChoiceRecorded';
+        return { key: 'ChoiceRecorded', args: [] };
       }
       default:
         return null;
@@ -1312,11 +1347,11 @@ export class GameLoop {
     playerId: bigint,
     field: 'choice' | 'choice2' | 'choice3',
     rawTarget: string,
-  ): string | null {
+  ): DispatchResult {
     const actor = game.players.find((p) => p.id === playerId);
     if (!actor || actor.isDead) return null;
     actor[field] = rawTarget === 'abstain' ? ABSTAIN : BigInt(rawTarget);
-    return 'ChoiceRecorded';
+    return { key: 'ChoiceRecorded', args: [] };
   }
 
   /**
@@ -1330,7 +1365,7 @@ export class GameLoop {
     game: Game,
     playerId: bigint,
     rawTarget: string,
-  ): Promise<string | null> {
+  ): Promise<DispatchResult> {
     const voter = game.players.find((p) => p.id === playerId);
     if (!voter || voter.isDead) return null;
     // A Hypnotist Wolf's forced vote (see `Game.startLynch()`, which pre-fills it) can't be
@@ -1349,7 +1384,7 @@ export class GameLoop {
     }
 
     const result = this.applyChoice(game, playerId, 'choice', rawTarget);
-    if (result !== 'ChoiceRecorded') return result;
+    if (result?.key !== 'ChoiceRecorded') return result;
     game.registerLynchVoteCast(playerId);
     // The Clumsy Guy's 50% chance of fumbling onto a random living player is rolled immediately,
     // right here at cast-time (no-op for anyone else, or for an abstain) - so `voter.choice`
@@ -1428,47 +1463,52 @@ export class GameLoop {
     await this.send(game.chatId, group.language, 'SecretLynchResultFull', lines.join('\n'));
   }
 
-  private async applyAbility(game: Game, playerId: bigint, role: RoleName): Promise<string | null> {
+  private async applyAbility(
+    game: Game,
+    playerId: bigint,
+    role: RoleName,
+  ): Promise<DispatchResult> {
     const player = game.players.find((p) => p.id === playerId && !p.isDead);
     if (!player || roleName(player.role) !== role) return null;
     const group = await this.groups.getOrCreate(game.chatId, null, null);
 
     const playerMention = mentionOrPlain(player.id, player.name, player.isBot);
+    const alreadyUsed: DispatchResult = { key: 'AbilityAlreadyUsed', args: [] };
 
     switch (role) {
       case 'Mayor': {
-        if (!game.useMayorReveal(playerId)) return 'AbilityAlreadyUsed';
+        if (!game.useMayorReveal(playerId)) return alreadyUsed;
         await this.send(game.chatId, group.language, 'MayorRevealedMsg', playerMention);
         void this.sendGifCategory(game.chatId, group, 'MayorReveal');
-        return 'MayorRevealedMsg';
+        return { key: 'MayorRevealedMsg', args: [playerMention] };
       }
       case 'Pacifist': {
-        if (!game.usePacifistPeace(playerId)) return 'AbilityAlreadyUsed';
+        if (!game.usePacifistPeace(playerId)) return alreadyUsed;
         await this.send(game.chatId, group.language, 'PacifistDeclaredMsg', playerMention);
         void this.sendGifCategory(game.chatId, group, 'PacifistPeace');
-        return 'PacifistDeclaredMsg';
+        return { key: 'PacifistDeclaredMsg', args: [playerMention] };
       }
       case 'Blacksmith': {
         const events = game.useBlacksmithSpreadSilver(playerId);
-        if (events.length === 0) return 'AbilityAlreadyUsed';
+        if (events.length === 0) return alreadyUsed;
         this.logEvents(game.chatId, events);
         await this.send(game.chatId, group.language, 'BlacksmithSpreadMsg', playerMention);
         void this.sendGifCategory(game.chatId, group, 'BlacksmithSilver');
-        return 'BlacksmithSpreadMsg';
+        return { key: 'BlacksmithSpreadMsg', args: [playerMention] };
       }
       case 'Sandman': {
         const events = game.useSandmanSleep(playerId);
-        if (events.length === 0) return 'AbilityAlreadyUsed';
+        if (events.length === 0) return alreadyUsed;
         this.logEvents(game.chatId, events);
         await this.send(game.chatId, group.language, 'SandmanUsedMsg', playerMention);
         void this.sendGifCategory(game.chatId, group, 'SandmanSleep');
-        return 'SandmanUsedMsg';
+        return { key: 'SandmanUsedMsg', args: [playerMention] };
       }
       case 'Troublemaker': {
-        if (!game.useTroublemakerDoubleLynch(playerId)) return 'AbilityAlreadyUsed';
+        if (!game.useTroublemakerDoubleLynch(playerId)) return alreadyUsed;
         await this.send(game.chatId, group.language, 'TroubleDoubleLynchNow', playerMention);
         void this.sendGifCategory(game.chatId, group, 'TroublemakerBrawl');
-        return 'TroubleDoubleLynchNow';
+        return { key: 'TroubleDoubleLynchNow', args: [playerMention] };
       }
       default:
         return null;

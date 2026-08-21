@@ -313,6 +313,45 @@ describe('GameLobbyManager', () => {
     expect(sendMessage.mock.calls.length).toBeGreaterThanOrEqual(6);
   });
 
+  it("states the player's camp explicitly in the role-reveal PM for a classic mode", async () => {
+    vi.useFakeTimers();
+    const { lobby, sendMessage } = createHarness(100);
+    const chatId = 116n;
+
+    await lobby.startGame(chatId, 'Group', { id: 1n, name: 'Starter' }, 'Normal');
+    for (let i = 2; i <= 5; i++) {
+      await lobby.join(chatId, user(i, `Player${i}`));
+    }
+    await lobby.forceStart(chatId, true);
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(
+      sendMessage.mock.calls.some((call) => typeof call[1] === 'string' && call[1].includes('🏳️')),
+    ).toBe(true);
+  });
+
+  it('never states a classic camp for TeamDuel (its own squad-based win condition is stated separately)', async () => {
+    vi.useFakeTimers();
+    const { lobby, sendMessage, gameManager, groupsStore } = createHarness(100);
+    const chatId = 117n;
+    // The harness's default group forces a 'NORMAL' mode preference (see `fakeGroup`) - a real
+    // group only lets /startgame vs /startchaos through via PLAYER_CHOICE, so TeamDuel needs that
+    // here too, or `resolveGameMode()` would silently downgrade the request back to Normal.
+    groupsStore.set(chatId.toString(), fakeGroup(chatId, 'Group', { mode: 'PLAYER_CHOICE' }));
+
+    await lobby.startGame(chatId, 'Group', { id: 1n, name: 'Starter' }, 'TeamDuel');
+    for (let i = 2; i <= 6; i++) {
+      await lobby.join(chatId, user(i, `Duelist${i}`));
+    }
+    expect(gameManager.get(chatId)!.players).toHaveLength(6);
+    await lobby.forceStart(chatId, true);
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(
+      sendMessage.mock.calls.some((call) => typeof call[1] === 'string' && call[1].includes('🏳️')),
+    ).toBe(false);
+  });
+
   it('offers every real player a mission PM with accept/decline buttons after force-starting, but never a bot', async () => {
     vi.useFakeTimers();
     const { lobby, sendMessage, gameManager } = createHarness(100);

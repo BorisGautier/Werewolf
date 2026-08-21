@@ -53,6 +53,13 @@ export interface Player {
 
   isDead: boolean;
   diedLastNight: boolean;
+  /** Permanent record of whether this player's one death happened at night - see
+   * `killPlayer()`'s doc comment for how this differs from the transient `diedLastNight` above. */
+  diedAtNight: boolean;
+  /** Permanent record of whether this player's death was specifically a village lynch (mirrors
+   * the `resolveLynchVotes()` branch that actually calls `killPlayer(..., 'Lynch', ...)`) - a
+   * Prince/Judge-saved or tied round never sets this, only an actual execution does. */
+  diedByLynch: boolean;
   timeDied: Date | null;
   killedByRole: Role | null;
   diedByVisitingKiller: boolean;
@@ -183,6 +190,14 @@ export interface Player {
   /** The mission they actively accepted this game (`null` = none offered, declined, or never
    * answered) - only an active mission here is eligible for the end-of-game bonus. */
   missionId: string | null;
+  /** The other player `missionOfferedId` refers to, for a player-targeted mission (see
+   * `MissionDef.requiresTarget` in `missions.ts`) - `null` for a generic (untargeted) mission, or
+   * when nothing has been offered yet. Promoted to `missionTargetId` on accept, same as
+   * `missionOfferedId` -> `missionId`. */
+  missionOfferedTargetId: bigint | null;
+  /** The active target of the accepted mission, mirroring `missionId` - `null` for a generic
+   * mission, or when nothing's been accepted. */
+  missionTargetId: bigint | null;
   /** Ever cast a lynch vote whose target ended up being the one actually lynched that round. */
   everVotedForLynchedVictim: boolean;
   /** Ever cast a lynch vote for a Wolf-team player. */
@@ -229,6 +244,8 @@ export function createPlayer(
     isBot,
     isDead: false,
     diedLastNight: false,
+    diedAtNight: false,
+    diedByLynch: false,
     timeDied: null,
     killedByRole: null,
     diedByVisitingKiller: false,
@@ -292,6 +309,8 @@ export function createPlayer(
     dayDied: null,
     missionOfferedId: null,
     missionId: null,
+    missionOfferedTargetId: null,
+    missionTargetId: null,
     everVotedForLynchedVictim: false,
     everVotedForWolf: false,
     everVotedOppositeCamp: false,

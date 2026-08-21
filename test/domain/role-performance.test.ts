@@ -71,7 +71,9 @@ describe('calculateRolePerformanceBonus', () => {
 
   it('rewards the Guardian Angel for a real save and penalizes guarding an unattacked wolf', () => {
     const ga = createPlayer(1n, 'GA', ROLE_BIT.GuardianAngel, 'Village');
-    const events: GameEvent[] = [{ type: 'GuardianAngelBlockedWolfAttack', targetId: 99n }];
+    const events: GameEvent[] = [
+      { type: 'GuardianAngelBlockedWolfAttack', targetId: 99n, wolfIds: [50n] },
+    ];
     const saveResult = calculateRolePerformanceBonus(ctx([ga], [events]));
     expect(saveResult.get(1n)).toBe(5);
 
