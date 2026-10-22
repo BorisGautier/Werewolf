@@ -68,7 +68,9 @@ services:
       MAILGUN_API_KEY: ${MAILGUN_API_KEY:-}
       MAILGUN_DOMAIN: ${MAILGUN_DOMAIN:-}
       MAILGUN_TO_EMAIL: ${MAILGUN_TO_EMAIL:-}
-      LOKI_HOST: http://loki:3100
+      # Monitoring : pile centrale du VPS (/opt/observability). Les logs stdout sont
+      # collectes par Vector -> Graylog (logs.borisgauty.com) ; /metrics est collecte
+      # par le Prometheus central ; tableaux de bord sur grafana.borisgauty.com.
     ports:
       - "5900:4000"
     deploy:
@@ -80,95 +82,5 @@ services:
           cpus: '0.50'
           memory: 512M
 
-  prometheus:
-    image: prom/prometheus:v2.51.0
-    restart: unless-stopped
-    volumes:
-      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-      - ./monitoring/prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml
-      - prometheus-data:/prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--storage.tsdb.retention.time=15d'
-      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
-      - '--web.console.templates=/usr/share/prometheus/consoles'
-    ports:
-      - "5902:9090"
-    deploy:
-      resources:
-        limits:
-          cpus: '0.50'
-          memory: 512M
-        reservations:
-          cpus: '0.10'
-          memory: 128M
-
-  alertmanager:
-    image: prom/alertmanager:v0.27.0
-    restart: unless-stopped
-    volumes:
-      - ./monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml
-    command:
-      - '--config.file=/etc/alertmanager/alertmanager.yml'
-      - '--storage.path=/alertmanager'
-    ports:
-      - "5904:9093"
-    deploy:
-      resources:
-        limits:
-          cpus: '0.25'
-          memory: 256M
-        reservations:
-          cpus: '0.05'
-          memory: 64M
-
-  loki:
-    image: grafana/loki:3.0.0
-    restart: unless-stopped
-    volumes:
-      - ./monitoring/loki/loki-config.yml:/etc/loki/local-config.yaml
-      - loki-data:/tmp/loki
-    command: -config.file=/etc/loki/local-config.yaml
-    ports:
-      - "5903:3100"
-    deploy:
-      resources:
-        limits:
-          cpus: '0.50'
-          memory: 512M
-        reservations:
-          cpus: '0.10'
-          memory: 128M
-
-  grafana:
-    image: grafana/grafana:10.4.0
-    restart: unless-stopped
-    environment:
-      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
-      - GF_USERS_ALLOW_SIGN_UP=false
-      - GF_SERVER_DOMAIN=epicwolf.borisgauty.com
-      - GF_SERVER_ROOT_URL=https://epicwolf.borisgauty.com/grafana/
-      - GF_SERVER_SERVED_FROM_SUBPATH=true
-    volumes:
-      - ./monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
-      - ./monitoring/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
-      - ./monitoring/grafana/dashboards:/etc/grafana/dashboards
-      - grafana-data:/var/lib/grafana
-    ports:
-      - "5901:3000"
-    deploy:
-      resources:
-        limits:
-          cpus: '0.50'
-          memory: 512M
-        reservations:
-          cpus: '0.10'
-          memory: 128M
-
 volumes:
   werewolf-db-data:
-  prometheus-data:
-  loki-data:
-  grafana-data:
