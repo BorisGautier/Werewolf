@@ -16,6 +16,7 @@ import winston from 'winston';
 import DailyRotateFile from 'winston-daily-rotate-file';
 import LokiTransport from 'winston-loki';
 import path from 'node:path';
+import { redactDeep, redactSecrets } from './redact.js';
 const LOG_DIR = process.env.LOG_DIR
   ? path.resolve(process.env.LOG_DIR)
   : path.resolve(process.cwd(), 'logs');
@@ -35,6 +36,15 @@ function safeStringify(obj: unknown): string {
 // ─────────────────────────────────────────────────────────────────────────────
 // Custom log formats
 // ─────────────────────────────────────────────────────────────────────────────
+
+/** Masks secrets (Telegram bot token, URL credentials) before any transport sees the entry. */
+export const redactFormat = winston.format((info) => {
+  for (const key of Object.keys(info)) {
+    const value = info[key];
+    info[key] = typeof value === 'string' ? redactSecrets(value) : redactDeep(value);
+  }
+  return info;
+});
 
 /** Colorized human-readable format for the console */
 const consoleFormat = winston.format.combine(
@@ -220,6 +230,7 @@ export function createWinstonLogger(options: WinstonLoggerOptions = {}): PinoCom
 
   const winstonLogger = winston.createLogger({
     level: level === 'trace' ? 'silly' : level,
+    format: redactFormat(),
     defaultMeta: {
       service: 'werewolf-bot',
       pid: process.pid,

@@ -1,6 +1,7 @@
 import type { Bot } from 'grammy';
 import type { Env } from '../config/env.js';
 import type { Logger } from '../logging/logger.js';
+import { redactSecrets } from '../logging/redact.js';
 import { adminAlertsSent, botErrors, transientNetworkErrors } from './metrics.js';
 
 export class AlertService {
@@ -39,7 +40,8 @@ export class AlertService {
     this.lastAlertTime.set(errorKey, now);
 
     const timeStr = new Date().toLocaleString('fr-FR', { timeZone: 'UTC' });
-    const rawDetails = details.length > 3000 ? details.slice(0, 3000) + '...' : details;
+    const safeDetails = redactSecrets(details);
+    const rawDetails = safeDetails.length > 3000 ? safeDetails.slice(0, 3000) + '...' : safeDetails;
     const cleanDetails = rawDetails
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')

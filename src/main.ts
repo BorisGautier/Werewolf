@@ -5,6 +5,7 @@ import { loadEnv } from './infrastructure/config/env.js';
 import { getDefaultLocale, loadLocales } from './infrastructure/i18n/locale-loader.js';
 import { Translator } from './infrastructure/i18n/translator.js';
 import { createLogger } from './infrastructure/logging/logger.js';
+import { installConsoleRedaction } from './infrastructure/logging/redact.js';
 import { AchievementRepository } from './infrastructure/persistence/achievement.repository.js';
 import { AdminRepository } from './infrastructure/persistence/admin.repository.js';
 import { GameRepository } from './infrastructure/persistence/game.repository.js';
@@ -28,6 +29,9 @@ import {
 import { AdminServer } from './infrastructure/web/admin-server.js';
 
 async function main(): Promise<void> {
+  // Third-party libraries (grammY runner, node-fetch) print errors containing the
+  // Telegram API URL — and therefore the bot token — straight to the console.
+  installConsoleRedaction();
   const env = loadEnv();
   const logger = createLogger(env);
 
