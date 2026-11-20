@@ -77,7 +77,7 @@ describe('installConsoleRedaction', () => {
       '[grammY runner] Error while fetching updates:',
       new Error(`https://api.telegram.org/bot${TOKEN}/getUpdates`),
     );
-    const written = String(sink.mock.calls[0][0]);
+    const written = String(sink.mock.calls[0]?.[0]);
     expect(written).toContain('[grammY runner] Error while fetching updates:');
     expect(written).not.toContain('AAHabc');
   });
