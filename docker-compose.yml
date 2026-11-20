@@ -26,7 +26,8 @@ services:
       timeout: 5s
       retries: 10
     ports:
-      - "5905:5432"
+      # Postgres joignable uniquement depuis le VPS (Docker contourne ufw)
+      - "127.0.0.1:5905:5432"
     deploy:
       resources:
         limits:
@@ -72,7 +73,8 @@ services:
       # collectes par Vector -> Graylog (logs.borisgauty.com) ; /metrics est collecte
       # par le Prometheus central ; tableaux de bord sur grafana.borisgauty.com.
     ports:
-      - "5900:4000"
+      # Uniquement via Apache (epicwolf.borisgauty.com -> 127.0.0.1:5900)
+      - "127.0.0.1:5900:4000"
     deploy:
       resources:
         limits:
